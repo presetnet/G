@@ -308,3 +308,22 @@ own blog the whole time:
 Correction note: the desk called this ledger "fiction or early" before finding this page.
 Truth: it is an unlaunched settlement layer's booking sheet. The economy is still unwritten —
 but now we know which pen awaits it.
+
+### Appendix B.1 · Pond0x settlement rail confirmed (operator tip + homepage receipt)
+
+Operator testimony: mining claims and trading rewards have been PAID OUT via pond0x.com —
+"40+ million already." Verified against pond0x.com live SSR payload:
+
+- usd_total = $43,093,617.85 (Total Rewards Distributed)
+- usd_eth_rewards = $28,315,409 · sol(mine) rewards = $6,909,369 · claims = $6,698,324
+  · ref rewards = $1,170,515 · num_swaps = 51,833,538
+
+Desk correction: "economy unwritten" retracted. Two-ledger model adopted:
+pond0x rail SETTLES ($43.09M and counting), geoff metaproof layer BOOKS ($692.5M face).
+New tracked source: pond0x.stats (homepage stats block, escaped-quote normalized).
+New signal: booked-vs-settled spread = $692.5M vs $43.1M; pond0x payout deltas now fire
+treasury-lane spikes. wPOND mining dashboard tripwired separately (claims facet + band).
+
+Note: earlier Wayback CDX queries for stacknet.magma-rpc.com / geoff.ai/api returned zero
+captures — pre-us ledger history remains unrecoverable from archives; accumulation tape
+starts at desk-first-sight.

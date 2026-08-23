@@ -892,6 +892,26 @@ export function translate(previous, current) {
     );
   }
 
+  // Pond0x settlement pulse — the sibling rail that actually pays out.
+  const prevPond = prev["pond0x.stats"];
+  const currPond = curr["pond0x.stats"];
+  if (prevPond?.ok && currPond?.ok && prevPond.fingerprint !== currPond.fingerprint) {
+    const delta =
+      Number(currPond.usdTotal ?? 0) - Number(prevPond.usdTotal ?? 0);
+    events.push(
+      event({
+        kind: "treasury",
+        rank: delta > 1000 ? "spike" : "note",
+        title:
+          delta > 0
+            ? `Pond0x paid out ▲$${Math.round(delta).toLocaleString("en-US")}`
+            : "Pond0x stats moved",
+        summary: `total distributed $${Math.round(Number(currPond.usdTotal)).toLocaleString("en-US")} · ${Number(currPond.numSwaps).toLocaleString("en-US")} swaps`,
+        details: { was: prevPond, now: currPond },
+      }),
+    );
+  }
+
   // Mining surface — the pay-to-mine front end coming alive or changing.
   const prevMine = prev["surface.mining"];
   const currMine = curr["surface.mining"];
