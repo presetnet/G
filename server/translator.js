@@ -892,6 +892,44 @@ export function translate(previous, current) {
     );
   }
 
+  // Zen error-shape probe — fingerprint watch on opencode's 404/error plumbing.
+  const prevZe = prev["opencode.zenerr"];
+  const currZe = curr["opencode.zenerr"];
+  if (currZe?.ok) {
+    if (!prevZe && !currZe.cached) {
+      events.push(
+        event({
+          kind: "zen",
+          rank: "note",
+          title: "Zen error shape baselined",
+          summary: `${currZe.shape} · leak-keywords: ${currZe.leakHit ? "HIT" : "none"}`,
+          details: currZe,
+        }),
+      );
+    } else if (prevZe?.ok && prevZe.fingerprint !== currZe.fingerprint) {
+      events.push(
+        event({
+          kind: "zen",
+          rank: "move",
+          title: "ZEN ERROR SHAPE CHANGED",
+          summary: `${prevZe.shape} → ${currZe.shape}`,
+          details: { was: prevZe, now: currZe },
+        }),
+      );
+    }
+    if (currZe.leakHit && !(prevZe?.leakHit)) {
+      events.push(
+        event({
+          kind: "zen",
+          rank: "spike",
+          title: "ZEN ERROR LEAKS STACKNET FINGERPRINTS",
+          summary: (currZe.snippet || "").slice(0, 160),
+          details: currZe,
+        }),
+      );
+    }
+  }
+
   // Pond0x ecosystem stats — SEPARATE project from Geoff/StackNet (confirmed by operator +
   // pond0x TOS scope). Tracked as independent ecosystem context, never as Geoff settlement.
   const prevPond = prev["pond0x.stats"];

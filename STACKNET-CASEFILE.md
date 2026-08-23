@@ -428,3 +428,22 @@ Impact on Appendix C verdict:
 - Standing catalog fact unchanged: big-pickle and x-preview-f-free remain TWO DIFFERENT
   zen slots; any "pickle IS alpha" claim is false at registry level. The open question is
   whether BOTH slots share an upstream supplier.
+
+### Appendix C.2 · Operator hard stop adopted (2026-08-23)
+
+Operator position, adopted as PRIMARY WORKING HYPOTHESIS: "alpha0x could very easily be
+a spun-up tool from Geoff. Hard stop." Burden flipped: desk watches for DISPROOF.
+
+TOS-compatibility note: this hypothesis does NOT contradict Geoff Terms. The third-party-
+models clause governs models hosted ON the network; a separately spun-up wrapper product
+sourcing capacity is exactly the MetaVault/MetaModels playbook hwonder documents
+("portable MetaModels wrapped into Super Prompts", subscription-metered SKUs).
+
+Confirmation class: knowledge field surfaces matching a Geoff card; quota/spec moves
+synced to StackNet bumps; zen error payloads leaking StackNet fingerprints (magma /
+stacknet / metaproof / code 6008); founder engagement with opencode surface.
+Refutation class: registry ties slot to named lab; opencode publishes upstream
+attribution; sustained activity with zero triggers over time.
+
+Probe shipped: opencode.zenerr — hourly-cached GET to nonexistent model path capturing
+status + response-shape hash + leak-keyword scan; baseline/change/leak lanes live.

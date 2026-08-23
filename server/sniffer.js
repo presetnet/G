@@ -670,6 +670,48 @@ export async function sniffOpencodeReleases() {
   }
 }
 
+let zenErrCache = { at: 0, value: null };
+
+export async function sniffZenErrorShape() {
+  const started = Date.now();
+  if (zenErrCache.value && Date.now() - zenErrCache.at < 60 * 60 * 1000) {
+    return { ...zenErrCache.value, cached: true, ms: Date.now() - started };
+  }
+  try {
+    const res = await fetchJson("https://opencode.ai/zen/v1/models/__gt_probe_nonexistent__", {
+      timeoutMs: 9_000,
+    });
+    const body = res.text || "";
+    const keys = Object.keys(res.json || {}).sort().join(",");
+    const shape = res.json ? `json:${keys}` : `html:${body.length}`;
+    const leakHit = /magma|stacknet|metaproof|6008/i.test(body);
+    const value = {
+      source: "opencode.zenerr",
+      ok: true,
+      status: res.status,
+      ms: Date.now() - started,
+      shape,
+      leakHit,
+      snippet: body.slice(0, 200),
+      fingerprint: simpleHash(shape),
+      reason: null,
+    };
+    zenErrCache = { at: Date.now(), value };
+    return value;
+  } catch (error) {
+    return {
+      source: "opencode.zenerr",
+      ok: false,
+      status: 0,
+      ms: Date.now() - started,
+      shape: null,
+      leakHit: false,
+      fingerprint: null,
+      reason: error?.message || String(error),
+    };
+  }
+}
+
 const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
 const DEFAULT_TREASURY_ADDRESS = "2W5gxAio1Bz76P58EaDtGC71MuyH4ZAdXHu3qqmeGy7g";
 const SIG_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -1350,6 +1392,7 @@ export async function runSniff() {
     sniffOpencodeGo(),
     sniffMiningSurface(),
     sniffPond0xStats(),
+    sniffZenErrorShape(),
   ]);
 
   const sources = settled.map((result, index) => {
@@ -1492,6 +1535,8 @@ export async function runSniff() {
       pondUsdTotal: bySource["pond0x.stats"]?.usdTotal ?? null,
       pondUsdClaims: bySource["pond0x.stats"]?.usdClaims ?? null,
       pondNumSwaps: bySource["pond0x.stats"]?.numSwaps ?? null,
+      zenErrShape: bySource["opencode.zenerr"]?.shape ?? null,
+      zenErrLeakHit: Boolean(bySource["opencode.zenerr"]?.leakHit),
       catalogModels: bySource["geoff.catalog"]?.models?.length ?? null,
       catalogSkipped: Boolean(bySource["geoff.catalog"]?.skipped),
       catalogSkipReason: bySource["geoff.catalog"]?.reason ?? null,
