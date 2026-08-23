@@ -892,6 +892,63 @@ export function translate(previous, current) {
     );
   }
 
+  // Mining surface — the pay-to-mine front end coming alive or changing.
+  const prevMine = prev["surface.mining"];
+  const currMine = curr["surface.mining"];
+  if (prevMine && currMine) {
+    if (!prevMine.ok && currMine.ok) {
+      events.push(
+        event({
+          kind: "zen",
+          rank: "spike",
+          title: "Mining surface came alive",
+          summary: `mining.aisp.live now answers HTTP ${currMine.status}${currMine.title ? ` · "${currMine.title}"` : ""}`,
+          details: { was: prevMine, now: currMine },
+        }),
+      );
+    } else if (prevMine.claimsOn === false && currMine.claimsOn === true) {
+      events.push(
+        event({
+          kind: "zen",
+          rank: "spike",
+          title: "wPOND CLAIMS OPEN",
+          summary: `claim facet flipped ON${currMine.band ? ` · ${currMine.band}` : ""}`,
+          details: { was: prevMine, now: currMine },
+        }),
+      );
+    } else if (prevMine.claimsOn === true && currMine.claimsOn === false) {
+      events.push(
+        event({
+          kind: "zen",
+          rank: "move",
+          title: "wPOND claims closed",
+          summary: "claim facet back to OFF",
+          details: { was: prevMine, now: currMine },
+        }),
+      );
+    } else if (prevMine.ok && currMine.ok && prevMine.fingerprint !== currMine.fingerprint) {
+      events.push(
+        event({
+          kind: "zen",
+          rank: "note",
+          title: "Mining surface changed",
+          summary: `HTTP ${currMine.status} · ${currMine.bytes ?? "?"}B${currMine.title ? ` · "${currMine.title}"` : ""}`,
+          details: { was: prevMine, now: currMine },
+        }),
+      );
+    } else if (prevMine.ok && !currMine.ok) {
+      events.push(
+        event({
+          kind: "zen",
+          rank: "move",
+          title: "Mining surface went dark",
+          summary: currMine.reason || "handshake failing",
+          details: { was: prevMine, now: currMine },
+        }),
+      );
+    }
+  }
+
   // Token press — the minting authority's coins (PAPER, CCU, CUSD...).
   const prevTok = prev["solana.tokens"];
   const currTok = curr["solana.tokens"];

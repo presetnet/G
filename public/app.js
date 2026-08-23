@@ -207,6 +207,8 @@ const els = {
   mcpContract: document.getElementById("mcpContract"),
   paperworkUsd: document.getElementById("paperworkUsd"),
   paperworkMeta: document.getElementById("paperworkMeta"),
+  miningClaims: document.getElementById("miningClaims"),
+  miningBand: document.getElementById("miningBand"),
   ghostCount: document.getElementById("ghostCount"),
   ghostMeta: document.getElementById("ghostMeta"),
   fleetCount: document.getElementById("fleetCount"),
@@ -638,6 +640,14 @@ const PROOFS = {
     fields: ["exploreCount", "exploreAuthors"],
     curls: ["curl -s https://www.geoff.ai/api/explore/feed"],
   },
+  miningClaims: {
+    title: "wPOND claims",
+    explain:
+      "Live parse of the wPOND Mining Rewards desk: claim-facet ON/OFF state and the miner band text. When the facet flips open, this fires an event on the tape.",
+    sources: ["surface.mining"],
+    fields: ["miningClaimsOn", "miningFacetState", "miningBand", "miningSurfaceTitle"],
+    curls: ["curl -s https://wpond-mining-dashboard.vercel.app/ | grep -E 'claims-|facetState|subtitle'"],
+  },
 };
 
 const CARD_PROOF_ORDER = [
@@ -650,6 +660,7 @@ const CARD_PROOF_ORDER = [
   "paperworkUsd",
   "ghostCount",
   "fleetCount",
+  "miningClaims",
   "exploreCount",
 ];
 
@@ -844,6 +855,22 @@ function renderMetrics(latest) {
     els.fleetLinesText.textContent = lines.length
       ? lines.slice(0, 5).join("·")
       : "—";
+  }
+  if (els.miningClaims) {
+    if (s.miningClaimsOn == null) {
+      els.miningClaims.textContent = "—";
+      els.miningClaims.style.color = "";
+    } else {
+      els.miningClaims.textContent = s.miningClaimsOn ? "OPEN" : "CLOSED";
+      els.miningClaims.style.color = s.miningClaimsOn
+        ? "var(--heat-bright)"
+        : "var(--muted)";
+    }
+    const facet = s.miningFacetState ? ` · ${s.miningFacetState}` : "";
+    els.miningClaims.title = `wPOND Mining Rewards desk · facet ${facet}\nClick for proof.`;
+  }
+  if (els.miningBand) {
+    els.miningBand.textContent = s.miningBand || "watching the miner desk";
   }
   if (els.exploreCount) {
     els.exploreCount.textContent = s.exploreCount != null ? String(s.exploreCount) : "—";

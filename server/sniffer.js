@@ -375,6 +375,47 @@ export async function sniffOpencodeZen() {
 }
 
 const OPENCODE_REGISTRY_URL = "https://models.dev/api.json";
+const MINING_SURFACE_URL =
+  process.env.MINING_SURFACE_URL || "https://wpond-mining-dashboard.vercel.app/";
+
+export async function sniffMiningSurface() {
+  try {
+    const res = await fetchJson(MINING_SURFACE_URL, { timeoutMs: 9_000 });
+    const text = res.text || "";
+    const title = (text.match(/<title>([^<]{0,120})<\/title>/i) || [])[1] || null;
+    const claimsClass = (text.match(/body class="[^"]*claims-(on|off)/i) || [])[1] || null;
+    const facet =
+      (text.match(/id="facetState"[^>]*>\s*([^<]{0,60})</i) || [])[1]?.trim() || null;
+    const band = (text.match(/class="subtitle"[^>]*>\s*([^<]{0,160})</i) || [])[1]?.trim() || null;
+    return {
+      source: "surface.mining",
+      ok: true,
+      status: res.status,
+      ms: res.ms,
+      bytes: text.length,
+      title,
+      claimsOn: claimsClass ? claimsClass.toLowerCase() === "on" : null,
+      facetState: facet,
+      band,
+      fingerprint: simpleHash(`${res.status}:${text.length}:${title}:${claimsClass}:${facet}`),
+      reason: null,
+    };
+  } catch (error) {
+    return {
+      source: "surface.mining",
+      ok: false,
+      status: 0,
+      ms: null,
+      bytes: 0,
+      title: null,
+      claimsOn: null,
+      facetState: null,
+      band: null,
+      fingerprint: null,
+      reason: error?.message || String(error),
+    };
+  }
+}
 const OPENCODE_RELEASES_URL =
   "https://api.github.com/repos/anomalyco/opencode/releases?per_page=5";
 const OPENCODE_GO_URL = "https://opencode.ai/go";
@@ -1267,6 +1308,7 @@ export async function runSniff() {
     sniffOpencodeRegistry(),
     sniffOpencodeReleases(),
     sniffOpencodeGo(),
+    sniffMiningSurface(),
   ]);
 
   const sources = settled.map((result, index) => {
@@ -1400,6 +1442,12 @@ export async function runSniff() {
       goEquiv5hUsd: bySource["opencode.go"]?.equiv5hUsd ?? null,
       goEquivWeekUsd: bySource["opencode.go"]?.equivWeekUsd ?? null,
       goEquivMonthUsd: bySource["opencode.go"]?.equivMonthUsd ?? null,
+      miningSurfaceOk: Boolean(bySource["surface.mining"]?.ok),
+      miningSurfaceStatus: bySource["surface.mining"]?.status ?? null,
+      miningSurfaceTitle: bySource["surface.mining"]?.title ?? null,
+      miningClaimsOn: bySource["surface.mining"]?.claimsOn ?? null,
+      miningFacetState: bySource["surface.mining"]?.facetState ?? null,
+      miningBand: bySource["surface.mining"]?.band ?? null,
       catalogModels: bySource["geoff.catalog"]?.models?.length ?? null,
       catalogSkipped: Boolean(bySource["geoff.catalog"]?.skipped),
       catalogSkipReason: bySource["geoff.catalog"]?.reason ?? null,
