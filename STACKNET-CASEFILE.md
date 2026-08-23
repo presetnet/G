@@ -327,3 +327,23 @@ treasury-lane spikes. wPOND mining dashboard tripwired separately (claims facet 
 Note: earlier Wayback CDX queries for stacknet.magma-rpc.com / geoff.ai/api returned zero
 captures — pre-us ledger history remains unrecoverable from archives; accumulation tape
 starts at desk-first-sight.
+
+### Appendix B.2 · CORRECTION: Geoff and Pond are separate projects
+
+Operator clarification: GEOFF and POND are SEPARATE. Appendix B.1's "sibling rail /
+two-ledger one-economy" framing is RETRACTED.
+
+TOS homework (2026-08-23):
+- pond0x.com Terms (docs.pond0x.com/terms): self-contained DEX economy — "decentralized
+  exchange, mining rigs, and token locks for yield"; Rewards disclaimed as estimates;
+  U.S. Persons excluded; AS-IS. ZERO mentions of Geoff / StackNet / metaproofs / PAPER.
+- geoff.ai: NO public Terms — /tos and /legal return 404 shells; no legal links in the
+  homepage or docs footers.
+
+Standing accurate position:
+- Geoff metaproof ledger: $692.5M booked / $0 paid / treasury wallet untouched.
+  No visible settlement rail anywhere public. Mechanism per hwonder's MetaProofs post.
+- pond0x: separate ecosystem ($43.09M rewards distributed per its homepage). Tracked as
+  independent context via pond0x.stats source; payout spikes labeled as POND0X news only.
+- Any future linkage claims require primary-source evidence (shared contracts, shared
+  mint authorities, or explicit statements from either team).

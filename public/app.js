@@ -906,8 +906,6 @@ function renderMetrics(latest) {
       ? s.tokenPress.filter((t) => t.symbol && !["USDC", "mSOL"].includes(t.symbol))
       : [];
     if (press.length) bits.push(`press ${press.map((p) => p.symbol).join("·")}`);
-    if (s.pondUsdTotal != null)
-      bits.push(`settled(pond0x) ${fmtCompactUsd(Number(s.pondUsdTotal))}`);
     const d24 = paperworkVelocity(pwHistoryCache.series, 24 * 3600e3);
     if (d24 != null && Math.abs(d24) > 0.5)
       bits.push(`${d24 >= 0 ? "▲" : "▼"}${fmtCompactUsd(Math.abs(d24))}/24h`);

@@ -892,7 +892,8 @@ export function translate(previous, current) {
     );
   }
 
-  // Pond0x settlement pulse — the sibling rail that actually pays out.
+  // Pond0x ecosystem stats — SEPARATE project from Geoff/StackNet (confirmed by operator +
+  // pond0x TOS scope). Tracked as independent ecosystem context, never as Geoff settlement.
   const prevPond = prev["pond0x.stats"];
   const currPond = curr["pond0x.stats"];
   if (prevPond?.ok && currPond?.ok && prevPond.fingerprint !== currPond.fingerprint) {
