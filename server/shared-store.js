@@ -45,7 +45,7 @@ export function sharedStoreConfig() {
     writable: redis || Boolean(githubToken()),
     redis: redis,
     redisKey: REDIS_KEY,
-    rawUrl: `https://raw.githubusercontent.com/${repo()}/${branch()}/${filePath()}`,
+    rawUrl: `https://api.github.com/repos/${repo()}/contents/${filePath()}?ref=${branch()}`,
   };
 }
 
@@ -138,17 +138,20 @@ async function saveToRedis(bundle) {
 }
 
 async function loadFromGithub() {
-  const url = `https://raw.githubusercontent.com/${repo()}/${branch()}/${filePath()}?t=${Date.now()}`;
+  // Contents API (not raw.githubusercontent) so the store survives private repos.
+  const token = githubToken();
+  const api = `https://api.github.com/repos/${repo()}/contents/${filePath()}?ref=${branch()}`;
   try {
-    const res = await fetch(url, {
+    const res = await fetch(api, {
       cache: "no-store",
       headers: {
-        Accept: "application/json",
+        Accept: "application/vnd.github.raw",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         "User-Agent": "GeoffThermometer/shared-store",
       },
     });
     if (res.status === 404) return emptyBundle();
-    if (!res.ok) throw new Error(`github raw HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`github contents HTTP ${res.status}`);
     return normalizeBundle(await res.json());
   } catch {
     return emptyBundle();
