@@ -1294,3 +1294,67 @@ html, body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- market snapshot ---- */
+.market-snapshot {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.snap-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 1.1rem 1.2rem;
+  border-radius: var(--radius-sm, 12px);
+  border: 1px solid var(--line, #d7e3ee);
+  background: var(--white, #fff);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.snap-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,70,120,0.1);
+}
+
+.snap-carrier {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted, #5b6b7c);
+}
+
+.snap-card strong {
+  font-family: var(--display, "Nunito", sans-serif);
+  font-size: 0.95rem;
+  color: var(--ink, #1a2b3c);
+}
+
+.snap-price {
+  font-family: var(--display, "Nunito", sans-serif);
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.geoff-snap .snap-price { color: var(--good, #0b8f5a); }
+.oc-snap .snap-price { color: var(--blue, #0077c8); }
+.grok-snap .snap-price { color: var(--ink, #1a2b3c); }
+.openai-snap .snap-price { color: var(--ink, #1a2b3c); }
+.copilot-snap .snap-price { color: var(--blue-deep, #005a9e); }
+
+.snap-detail {
+  font-size: 0.78rem;
+  color: var(--muted, #5b6b7c);
+  line-height: 1.5;
+}
+
+.snap-note {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--muted, #5b6b7c);
+  font-style: italic;
+}
