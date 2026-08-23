@@ -32,6 +32,17 @@ Both sides have money stories that don't add up, and they're worth putting side 
 
 If anyone ever catches the mystery model's traffic touching Geoff's servers, or finds both systems sharing identical weird quirks, or sees Geoff's internal model names pop up somewhere they shouldn't — then yes, same beast, case closed. Until then: two separate shops running the same magic trick, and the magician won't show his face in either one.
 
+## Do these masks last forever? History says no
+
+Two recent cases where "anonymous" models got unmasked — both officially confirmed:
+
+- **gpt2-chatbot → GPT-4o (April–May 2024).** A mystery model topped the public chatbot arena under a joke name. Researchers found its system prompt claimed OpenAI origins, then a leaked error message showed it running on OpenAI's own infrastructure. Days later OpenAI confirmed it themselves: it was GPT-4o being tested in disguise before launch.
+- **Quasar Alpha / Optimus Alpha → GPT-4.1 (April 2025).** Two free cloaked models on a popular router. The community identified them within days without any insider info — the responses leaked OpenAI-format IDs, the tokenizer had OpenAI's exact known bug on Chinese characters, and tiny API spec details matched. The router then confirmed both were GPT-4.1 test slots.
+
+The pattern: raw access to a model leaks metadata, tokenizers carry fingerprints like handwriting, and labs eventually reveal what they shipped. Anonymity held for about ten days in both cases — it's a launch stunt, not permanent cover.
+
+The honest caveat for Geoff specifically: their engine layers sit behind a controlled interface that strips out the AI's reasoning and gates everything behind a wallet, so there's much less raw surface for fingerprint hunters than those two cases had. Harder to unmask — but the same physics applies. If any of their unnamed engines ever ships publicly under a real name somewhere else, the mask comes off retroactively. That's a tripwire worth watching, not an assumption to sleep on.
+
 ## How to land it
 
 Don't end on "case closed." End on the elephant: the interesting thing isn't whether these two specific masks hide the same face — it's that an entire industry learned it can sell AI without telling anyone what's under the hood. And it works because almost nobody asks.
