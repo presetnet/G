@@ -855,6 +855,36 @@ export function translate(previous, current) {
     }
   }
 
+  // opencode Go price sheet — my own house's meter.
+  const prevGo = prev["opencode.go"];
+  const currGo = curr["opencode.go"];
+  if (prevGo?.ok && currGo?.ok && prevGo.fingerprint !== currGo.fingerprint) {
+    const priceMoved =
+      prevGo.priceIntroUsd !== currGo.priceIntroUsd ||
+      prevGo.priceMonthlyUsd !== currGo.priceMonthlyUsd;
+    const leftLineup = (prevGo.lineupNames || []).filter(
+      (n) => !(currGo.lineupNames || []).includes(n),
+    );
+    events.push(
+      event({
+        kind: "zen",
+        rank: priceMoved ? "spike" : "move",
+        title: priceMoved
+          ? `opencode Go pricing moved: $${prevGo.priceIntroUsd ?? "?"}/$${prevGo.priceMonthlyUsd ?? "??"} → $${currGo.priceIntroUsd ?? "?"}/$${currGo.priceMonthlyUsd ?? "??"}`
+          : "opencode Go sheet changed",
+        summary: [
+          `$${currGo.priceIntroUsd ?? "?"} first month · $${currGo.priceMonthlyUsd ?? "?"}/mo`,
+          `${currGo.lineupCount ?? 0} named models`,
+          leftLineup.length ? `dropped from lineup: ${leftLineup.join(", ")}` : null,
+          currGo.oxAlphaPromo ? "Ox Alpha Free promo live" : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        details: { was: prevGo, now: currGo },
+      }),
+    );
+  }
+
   // Token press — the minting authority's coins (PAPER, CCU, CUSD...).
   const prevTok = prev["solana.tokens"];
   const currTok = curr["solana.tokens"];

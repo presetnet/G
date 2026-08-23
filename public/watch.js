@@ -98,7 +98,7 @@ function render(summary, events) {
       recent ? `last ${recent} tags tracked` : null,
     ]
       .filter(Boolean)
-      .join(" · ") || "github.com/sst/opencode";
+      .join(" · ") || "github.com/anomalyco/opencode";
   }
 
   if (els.hpGeoff) {

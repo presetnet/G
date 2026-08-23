@@ -376,7 +376,23 @@ export async function sniffOpencodeZen() {
 
 const OPENCODE_REGISTRY_URL = "https://models.dev/api.json";
 const OPENCODE_RELEASES_URL =
-  "https://api.github.com/repos/sst/opencode/releases?per_page=5";
+  "https://api.github.com/repos/anomalyco/opencode/releases?per_page=5";
+const OPENCODE_GO_URL = "https://opencode.ai/go";
+const GO_LINEUP_NAMES = [
+  "Kimi K3",
+  "Grok 4.5",
+  "Qwen3.8 Max",
+  "GLM-5.2",
+  "DeepSeek V4 Pro",
+  "GPT 5.6 Luna",
+  "MiniMax M3",
+  "Qwen3.7 Plus",
+  "DeepSeek V4 Flash",
+  "MiMo-V2.5",
+  "Hy3",
+  "Muse Spark 1.2 Contributor",
+  "Ox Alpha Free",
+];
 const RELEASES_CACHE_TTL_MS = 15 * 60 * 1000;
 let releasesCache = { at: 0, value: null };
 
@@ -451,6 +467,35 @@ export async function sniffOpencodeRegistry() {
         ? null
         : "models.dev payload empty"
       : `HTTP ${res.status || 0} from models.dev`,
+  };
+}
+
+export async function sniffOpencodeGo() {
+  const res = await fetchJson(OPENCODE_GO_URL);
+  const html = res.text || "";
+  const introMatch = html.match(/\$(\d+)\s*(?:for your first month|first month)/i);
+  const monthlyMatches = [...html.matchAll(/\$(\d+)\s*\/\s*month/g)].map((m) => Number(m[1]));
+  const lineup = GO_LINEUP_NAMES.filter((n) => html.includes(n));
+  const bits = [
+    introMatch?.[1] ?? "-",
+    monthlyMatches[0] != null ? String(monthlyMatches[0]) : "-",
+    String(lineup.length),
+    lineup.join(","),
+    html.includes("available on Go for a limited time") ? "promo" : "nopromo",
+  ];
+  return {
+    source: "opencode.go",
+    ok: res.ok && html.length > 200,
+    status: res.status,
+    ms: res.ms,
+    priceIntroUsd: introMatch ? Number(introMatch[1]) : null,
+    priceMonthlyUsd: monthlyMatches[0] ?? null,
+    lineupCount: lineup.length,
+    lineupNames: lineup,
+    oxAlphaPromo: html.includes("available on Go for a limited time"),
+    gptLunaListed: html.includes("GPT 5.6 Luna"),
+    fingerprint: simpleHash(bits.join("|")),
+    reason: res.ok ? null : `HTTP ${res.status || 0} from opencode.ai/go`,
   };
 }
 
@@ -1179,6 +1224,7 @@ export async function runSniff() {
     sniffOpencodeZen(),
     sniffOpencodeRegistry(),
     sniffOpencodeReleases(),
+    sniffOpencodeGo(),
   ]);
 
   const sources = settled.map((result, index) => {
@@ -1300,6 +1346,12 @@ export async function runSniff() {
       ocReleaseName: bySource["opencode.releases"]?.latestName ?? null,
       ocReleaseAt: bySource["opencode.releases"]?.latestAt ?? null,
       ocReleaseRecentTags: bySource["opencode.releases"]?.recentTags ?? [],
+      goPriceIntroUsd: bySource["opencode.go"]?.priceIntroUsd ?? null,
+      goPriceMonthlyUsd: bySource["opencode.go"]?.priceMonthlyUsd ?? null,
+      goLineupCount: bySource["opencode.go"]?.lineupCount ?? null,
+      goOxAlphaPromo: Boolean(bySource["opencode.go"]?.oxAlphaPromo),
+      goGptLunaListed: Boolean(bySource["opencode.go"]?.gptLunaListed),
+      goFingerprint: bySource["opencode.go"]?.fingerprint ?? null,
       catalogModels: bySource["geoff.catalog"]?.models?.length ?? null,
       catalogSkipped: Boolean(bySource["geoff.catalog"]?.skipped),
       catalogSkipReason: bySource["geoff.catalog"]?.reason ?? null,
