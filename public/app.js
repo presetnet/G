@@ -209,6 +209,12 @@ const els = {
   paperworkMeta: document.getElementById("paperworkMeta"),
   miningClaims: document.getElementById("miningClaims"),
   miningBand: document.getElementById("miningBand"),
+  oxAlphaSpec: document.getElementById("oxAlphaSpec"),
+  oxAlphaMeta: document.getElementById("oxAlphaMeta"),
+  syncStatus: document.getElementById("syncStatus"),
+  syncMeta: document.getElementById("syncMeta"),
+  zenErrStatus: document.getElementById("zenErrStatus"),
+  zenErrMeta: document.getElementById("zenErrMeta"),
   ghostCount: document.getElementById("ghostCount"),
   ghostMeta: document.getElementById("ghostMeta"),
   fleetCount: document.getElementById("fleetCount"),
@@ -512,6 +518,34 @@ function escapeHtml(value) {
 function setConnection(state, label) {
   els.connection.className = `pill ${state}`;
   els.connection.textContent = label;
+  updateHypothesisBadge();
+}
+
+function updateHypothesisBadge() {
+  const badge = document.getElementById("hypothesisBadge");
+  if (!badge) return;
+  // Determine status from latest data
+  const s = lastLatest?.summary ?? {};
+  const ze = s.zenErrLeakHit;
+  const oxSpec = s.oxAlphaSpec || s.goLadder?.find?.(r => r.name === "Ox Alpha Free" || r.name === "x-preview-f-free");
+  const syncActive = s.syncStatus === "SYNC";
+
+  let text = "HYPOTHESIS: Ox Alpha = Geoff-spun Z.ai wrapper";
+  let status = "ACTIVE";
+
+  if (ze?.leakHit) {
+    status = "LEAK DETECTED";
+    text += " | LEAK DETECTED";
+  } else if (syncActive) {
+    status = "SYNC DETECTED";
+    text += " | SYNC DETECTED";
+  } else if (oxSpec?.knowledge) {
+    status = "SPEC CHANGE";
+    text += " | SPEC CHANGE";
+  }
+
+  badge.textContent = `${text} | ${status}`;
+  badge.hidden = false;
 }
 
 function setTrust(payload) {
@@ -963,6 +997,81 @@ function renderMetrics(latest) {
   if (els.miningBand) {
     els.miningBand.textContent = s.miningBand || "watching the miner desk";
   }
+  if (els.miningBand) {
+    els.miningBand.textContent = s.miningBand || "watching the miner desk";
+  }
+  if (els.oxAlphaSpec) {
+    const ladder = Array.isArray(s.goLadder) ? s.goLadder : [];
+    const ox = ladder.find((r) => r.name === "Ox Alpha Free" || r.name === "x-preview-f-free");
+    if (ox) {
+      const quota =
+        ox.quota === "unlimited"
+          ? "∞"
+          : ox.quota != null
+            ? Number(ox.quota).toLocaleString("en-US")
+            : "?";
+      els.oxAlphaSpec.textContent = quota;
+      const parts = [];
+      if (ox.contextLimit != null) parts.push(`ctx ${Number(ox.contextLimit).toLocaleString()}`);
+      if (ox.inputLimit != null) parts.push(`in ${Number(ox.inputLimit).toLocaleString()}`);
+      if (ox.outputLimit != null) parts.push(`out ${Number(ox.outputLimit).toLocaleString()}`);
+      if (ox.knowledge) parts.push(`cutoff ${ox.knowledge}`);
+      if (ox.releaseDate) parts.push(`rel ${ox.releaseDate}`);
+      if (ox.status) parts.push(ox.status);
+      els.oxAlphaMeta.textContent = parts.length ? parts.join(" · ") : "x-preview-f-free";
+      els.oxAlphaSpec.style.color = "";
+    } else {
+      els.oxAlphaSpec.textContent = "—";
+      els.oxAlphaMeta.textContent = "not on ladder";
+    }
+  }
+}
+  // Sync detector: opencode surface + StackNet version moving together
+  if (els.syncStatus) {
+    const snVer = s.stacknetVersion;
+    const ocZenFp = s.zenFingerprint;
+    const ocGoFp = s.goFingerprint;
+    const ocRegFp = s.ocRegistryFingerprint;
+    const zenMoved = ocZenFp && s.prevZenFingerprint && ocZenFp !== s.prevZenFingerprint;
+    const goMoved = ocGoFp && s.prevGoFingerprint && ocGoFp !== s.prevGoFingerprint;
+    const regMoved = ocRegFp && s.prevOcRegistryFingerprint && ocRegFp !== s.prevOcRegistryFingerprint;
+    const snChanged = snVer && s.prevStacknetVersion && snVer !== s.prevStacknetVersion;
+
+    if (snChanged && (zenMoved || goMoved || regMoved)) {
+      els.syncStatus.textContent = "SYNC";
+      els.syncStatus.style.color = "var(--accent)";
+      els.syncMeta.textContent = `StackNet ${s.prevStacknetVersion} → ${snVer} + opencode surface moved`;
+      els.syncStatus.title = `StackNet version bump coincided with opencode surface change`;
+    } else if (snChanged) {
+      els.syncStatus.textContent = "SN MOVED";
+      els.syncStatus.style.color = "var(--muted)";
+      els.syncMeta.textContent = `StackNet ${s.prevStacknetVersion} → ${snVer} (opencode quiet)`;
+    } else {
+      els.syncStatus.textContent = "—";
+      els.syncMeta.textContent = snVer ? `StackNet ${snVer}` : "waiting…";
+    }
+  }
+
+  // Zen error probe status
+  if (els.zenErrStatus) {
+    const ze = s.zenErrShape;
+    if (ze) {
+      if (s.zenErrLeakHit) {
+        els.zenErrStatus.textContent = "LEAK";
+        els.zenErrStatus.style.color = "var(--danger)";
+        els.zenErrMeta.textContent = `LEAK: ${ze} · ${s.zenErrSnippet ? s.zenErrSnippet.slice(0, 80) : "stacknet fingerprint detected"}`;
+        els.zenErrStatus.title = "StackNet fingerprint detected in zen error payload";
+      } else if (s.zenErrCached) {
+        els.zenErrStatus.textContent = "cached";
+        els.zenErrMeta.textContent = `shape: ${ze}`;
+      } else {
+        els.zenErrStatus.textContent = "baselined";
+        els.zenErrMeta.textContent = `shape: ${ze}`;
+      }
+    } else {
+      els.zenErrStatus.textContent = "—";
+      els.zenErrMeta.textContent = "waiting for probe…";
+    }
   if (els.exploreCount) {
     els.exploreCount.textContent = s.exploreCount != null ? String(s.exploreCount) : "—";
   }

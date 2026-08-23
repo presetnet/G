@@ -3173,3 +3173,28 @@ details[open] > .fold-summary::after {
 }
 .spark-stats i { color: var(--muted); font-style: normal; margin-right: 0.3rem; }
 .spark-note { color: var(--muted); font-size: 0.82rem; }
+
+/* ---- hypothesis badge ---- */
+.pill.hypothesis {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.6rem;
+  white-space: nowrap;
+}
+
+/* ---- sync status ---- */
+.metric .sync-status { color: var(--accent); }
+.metric .sn-moved { color: var(--muted); }
+.metric .sync-status.sync { color: var(--accent); }
+.metric .sync-status.sn-moved { color: var(--muted); }
+
+/* ---- zen error probe ---- */
+.metric .zen-err-status.leak { color: var(--danger); }
+.metric .zen-err-status.baselined { color: var(--accent); }
+.metric .zen-err-status.cached { color: var(--muted); }
+.metric .zen-err-status.leak { color: var(--danger); }
