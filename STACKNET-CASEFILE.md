@@ -402,3 +402,29 @@ TRIPWIRES ARMED (translator):
 - Sync-watch lane fires when zen/registry/go fingerprints move in the same cycle as a
   Stacknet version bump.
 - TODO probe: zen error-shape baseline + fingerprint-keyword watch (magma|stacknet|6008).
+
+### Appendix C.1 · ESCALATION: Pauly burner engages "Ox Alpha" by name (2026-08-23)
+
+Tweet (verbatim, operator-supplied):
+  PAULY @Wonka0x - 3m - [Parody account]
+  "Everything you read online about AI is bullshit. Its written by people who know
+  nothing about the subject. Because it is objectively the most important topic in the
+  world right now. Everyone LARPs for likes. Ox Alpha. I wonder who made it?
+  Because it certainly was not me."
+
+Verified facts:
+- Snowflake decode: posted 2026-08-23T17:11:59Z (same day as this investigation cycle).
+- Account attribution: @Wonka0x declared a Pauly backup account BY PAULY (@JackDorsey0x):
+  "follow the backup accounts @wonka0x & @Cena0x".
+- Deniability stack present: burner + Parody label + rhetorical self-question + explicit
+  denial ("certainly was not me") = unfalsifiable. Matches yougetnothing playbook:
+  inject brand, deny involvement, let discourse market it.
+
+Impact on Appendix C verdict:
+- FOR column gains primary-source engagement: the exact slot display name, spoken by the
+  founders confirmed burner, same-day, unprompted (publicly).
+- Does NOT prove supply linkage. DOES destroy the assumption that the name is unrelated
+  to him. Temperature: warm -> HOT.
+- Standing catalog fact unchanged: big-pickle and x-preview-f-free remain TWO DIFFERENT
+  zen slots; any "pickle IS alpha" claim is false at registry level. The open question is
+  whether BOTH slots share an upstream supplier.
