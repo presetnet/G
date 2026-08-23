@@ -1,0 +1,33 @@
+# Copy to .github/workflows/live-sniff.yml after `gh auth refresh -s workflow`
+# (OAuth tokens without the workflow scope cannot push workflow files.)
+
+name: Live shared desk
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: live-shared-desk
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Live tick
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GT_SHARED_REPO: ${{ github.repository }}
+          GT_SHARED_BRANCH: gt-live
+          GT_SHARED_PATH: shared.json
+        run: node scripts/live-tick.js

@@ -1,0 +1,219 @@
+# The StackNet Case File
+### Is `big-pickle` secretly routed through geoff.ai / StackNet?
+*Investigation log — August 22–23, 2026 — all evidence gathered from public sources*
+
+---
+
+## TL;DR VERDICT
+
+| Theory | Status | Key evidence |
+|---|---|---|
+| **Strong:** big-pickle IS a StackNet/geoff model | ❌ **DISQUALIFIED** | Not in StackNet's catalog; zero traffic contact; timeline impossible |
+| **Weak:** geoff/StackNet is an aggregator that relabels upstream capacity | ✅ **STRUCTURALLY CONFIRMED** (but not applied to big-pickle) | Their own architecture + bundle code proves relabeling is the product |
+| **"2.5 years of quiet dev"** | ✅ **CORROBORATED** | `magma-rpc.com` registered 2024-03-01 |
+
+---
+
+## 1. The Question
+
+Community speculation (pond0x ecosystem): is opencode's free mystery reasoning model
+`big-pickle` actually a relabeled wrapper of geoff.ai's StackNet infrastructure,
+operated by Pauly0x and Hwonder?
+
+---
+
+## 2. Client-Side Evidence (my own traffic)
+
+**Provider audit:**
+- opencode config (`~/.config/opencode/opencode.jsonc`): empty, no custom providers
+- models.dev registry: baseURL = `https://opencode.ai/zen/v1`, SDK = `@ai-sdk/openai-compatible`
+- big-pickle registry entry: closed weights, 200K ctx, knowledge cutoff `2025-01`, release `2025-10-17`, cost $0/$0
+
+**Live connection tracing during active LLM sessions:**
+- DNS cache + TCP table for all OpenCode processes: only `opencode.ai` (Cloudflare) + one GitHub Pages IP
+- **Zero packets ever touched geoff.ai or stacknet**
+
+**Error-shape forensics:**
+- Zen gateway errors: `{"type":"error","error":{"type":"error","message":"..."}}` → Anthropic-style dialect, served from Cloudflare Workers (`Cf-Placement: remote-ORD`)
+- geoff.ai runs on Vercel; StackNet docs advertise `{data, trace_id, extra_info}` envelopes
+- Different hosts, different stacks, different API dialects
+
+---
+
+## 3. Geoff Infrastructure Recon
+
+**Certificate transparency (Cert Spotter, full history):**
+
+| Date | Hostname |
+|---|---|
+| 2026-06-21 | docs.geoff.ai |
+| 2026-07-08 | mcp.geoff.ai |
+| 2026-07-17 | geoff.ai, www.geoff.ai |
+
+- No wildcard cert → list is near-complete: **4 hostnames total**, no staging leaks, no api subdomain
+- Frontend: Vercel · Docs: Mintlify · Auth: StackAuth · Storage: IPFS "racks"
+
+**GitHub:**
+- `Geoff-ai` org created **2024-08-12** (id ~178M), dormant shell, 3 trivial repos
+- One repo (`script`) pushed **2026-02-07** — activity 4.5 months before first cert
+- `Pauly0x`: GH account Nov 2022, zero public repos
+- `hwonder`: GH account 2016
+
+**Live route mapping (unauthenticated probes):**
+
+| Route | Status | Dialect |
+|---|---|---|
+| `POST /api/v1/text/chat` | 401 `{"error":{"code":"unauthorized",...}}` | Documented developer API |
+| `POST /api/chat/completions`, `/api/models`, `/api/messages` | 401 `{"code":"unauthorized:auth",...}` | **StackAuth session gate** (different layer) |
+
+Both gates reject *before* validation — no upstream leakage without credentials.
+
+---
+
+## 4. The Bundle Mining (where it broke open)
+
+geoff.ai's Next.js client bundles contain no secrets by law of JS — extracted:
+
+**Hardcoded infrastructure:**
+```
+https://stacknet.magma-rpc.com        ← StackNet's real address
+https://node-ipfs.magma-rpc.com       ← IPFS node
+https://comfy.magma-rpc.com           ← ComfyUI image backend
+https://stacknet.magma-rpc.com/auth/bridge
+```
+
+**Internal route map:** `/api/stackauth/web3`, `/api/stackauth/otp`, `/api/stackauth/sign`,
+`/api/connect/pair/claim` — crypto-native auth flow confirmed.
+
+**The smoking regex** (output post-processing):
+```js
+/<\/think>\s*/g   // strips visible chain-of-thought markers from model output
+```
+Upstream models emit raw `<think>...</think>` reasoning blocks; they are cosmetically
+laundered before users see them.
+
+**MCP server misconfiguration leak** (live 500 on mcp.geoff.ai/mcp):
+```json
+{"error":{"code":-32603,"message":"MCP server misconfigured: GEOFF_API_KEY is required when GEOFF_API_URL is not a local address..."}}
+```
+
+---
+
+## 5. StackNet Itself (magma-rpc.com)
+
+**Domain registration (RDAP):**
+- **Registered: 2024-03-01** via Cloudflare — five months BEFORE the Geoff-ai org
+- Corroborates community claims of ~2.5 years of quiet development
+- Sibling subdomains: `blockstream.` and `explorer.` (Bitcoin heritage), `stacknet-grpc.` (gRPC service)
+- Certs issued as recently as **today** — active development
+- Root endpoint returns versioned JSON: `{"v":"3.14.24"}`
+
+**Chat gate message:** *"Provide API key or sign in with wallet"* — wallet-auth'd inference.
+
+**PUBLIC MODEL CATALOG** (`GET https://stacknet.magma-rpc.com/v1/models` — no auth):
+
+| Model | Owner | Capabilities |
+|---|---|---|
+| stack-embed | stacknet | embeddings |
+| preview | stacknet-layer | chat, code, image, reasoning, **think**, tool-calling |
+| magma | stacknet-layer | + crypto, music, video, vision, agent |
+| pyro | stacknet-layer | chat, code, image, reasoning, **think**, tool-calling, vision |
+| pyro:max | stacknet-layer | same as pyro |
+
+Every layer is `owned_by: stacknet-layer` with upstream identities anonymized.
+No third-party model names anywhere. **big-pickle does not appear.**
+
+---
+
+## 6. Final Ledger
+
+1. **Strong theory dead three ways:** big-pickle absent from StackNet's catalog;
+   opencode traffic never contacts them; big-pickle's release date (2025-10-17) predates
+   every geoff cert by 8 months.
+2. **Relabeling mechanism confirmed real:** anonymous `stacknet-layer` branding over
+   unnamed upstreams + client-side `<think>` stripping + MoM routing per their docs.
+   This is an aggregator wearing a lab coat — by design, not by conspiracy.
+3. **Open mystery:** WHO supplies the actual brains behind preview/magma/pyro?
+   The `<think>` capability suggests R1-distill/QwQ-family routes for at least some
+   layers. Unnamed by design. That's the next hunt.
+4. **Epistemological note:** platform timestamps (CT logs, RDAP, snowflakes, GitHub)
+   cannot be backdated — everything above is reproducible. What operators control is
+   only *when they act*. Every measured action was internally consistent with deliberate,
+   patient stealth — of a launch, not of a hidden model behind opencode.
+
+---
+
+## 7. The Horsepower Question — What Does "Free" Cost?
+
+*Back-of-envelope, assumptions labeled. Two cost regimes exist and they differ by 50×.*
+
+### Regime 1: Self-hosted open-weights (the cheap world)
+~70B-class model on rented H100s (~$2–3/hr), batched serving → **$0.10–0.30 per 1M blended tokens**
+
+| Scale | Weekly tokens | GPUs needed | Weekly burn |
+|---|---|---|---|
+| Beta (500 DAU) | ~7B | 4–8× H100 | **$1–3K** |
+| Real tier (5K DAU) | ~70B | 40–80× H100 | **$15–45K** |
+| Opencode-scale (25K+ DAU) | ~350B | 150–300× H100 | **$70–250K** |
+
+### Regime 2: Resold frontier capacity (the expensive world)
+API-rate upstreams ($3–15/M output) → **multiply everything by 20–50×**.
+Same mid tier: **$350K–1M+/week**. Nobody runs that free without a strategic reason
+(growth subsidy or data acquisition — see Final Ledger).
+
+### The hidden multiplier: concurrency, not throughput
+A 200K-context reasoning model doesn't bill by tokens alone — every *active session*
+parks a KV-cache in scarce HBM. Long-context sessions are residency-bound:
+roughly 2–8 live streams per H100 even when idle-ish. Ballpark: **$0.50–1.00 per
+concurrent-session-hour**. 500 always-on sessions ≈ 125+ cards ≈ **$50K+/week**
+before a single token is generated. Free long-context tiers are GPU-rental businesses
+whether they admit it or not.
+
+### Catalog fingerprint
+StackNet's profile (wallet-gated chat layers + embed model + ComfyUI sidecar +
+versioned server v3.14.24) matches **Regime 1** — self-hosted open-weights.
+That's the only version two people rationally run for fun. Regime 2 requires
+a treasury burning ~$1M+/month and a reason.
+
+---
+
+## Appendix A: Reproduce It Yourself
+
+```bash
+# StackNet public catalog (no key needed)
+curl https://stacknet.magma-rpc.com/v1/models
+
+# StackNet server version
+curl https://stacknet.magma-rpc.com/
+
+# Cert history
+curl "https://api.certspotter.com/v1/issuances?domain=magma-rpc.com&include_subdomains=true&expand=dns_names"
+
+# Domain registration
+curl -H "Accept: application/rdap+json" https://rdap.org/domain/magma-rpc.com
+
+# Geoff route probing (expect two different 401 dialects)
+curl -s -X POST https://geoff.ai/api/v1/text/chat      -H "Content-Type: application/json" -d '{}'
+curl -s -X POST https://geoff.ai/api/chat/completions  -H "Content-Type: application/json" -d '{}'
+```
+
+## Appendix B: Tests That Remain Blocked
+
+The following would conclusively settle the remaining gap ("no evidence of X" → "X is false").
+**Status: blocked — not a call to action.** Working API keys are confirmed to exist for
+only a handful of people; whether any remain active is unknown, and whether self-serve
+signup (`geoff.ai/settings/api-keys`) actually issues keys is unverified. Do not treat
+keyholders as an available resource.
+
+1. **Tokenizer fingerprint** — identical strings through a geoff layer vs big-pickle,
+   compare exact token counts *(requires active credentials)*
+2. **Temperature-0 output matching** on obscure prompts *(requires active credentials)*
+3. **Latency distribution comparison** *(requires active credentials)*
+
+If credentials ever surface organically, these three collapse the final gap.
+Until then: the case stands as written — strong theory disqualified on public evidence,
+weak theory structurally real but unapplied. That is the honest terminal state.
+
+---
+*All probes were unauthenticated reads of public endpoints. No auth bypassed,
+no private data accessed. Chain of custody: this session's logs.*

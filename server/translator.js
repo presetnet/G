@@ -261,6 +261,42 @@ export function translate(previous, current) {
     ];
   }
 
+  // Stale-baseline guard: if the previous snapshot predates the poll cadence,
+  // every drift accumulated during the blind window would fire as "news"
+  // stamped right now. Collapse it into one catch-up event instead.
+  const STALE_BASELINE_MS = 6 * 60 * 60 * 1000;
+  const prevAtMs = Date.parse(previous.takenAt || "");
+  const currAtMs = Date.parse(current.takenAt || "") || Date.now();
+  if (Number.isFinite(prevAtMs) && currAtMs - prevAtMs > STALE_BASELINE_MS) {
+    const gapH = Math.round((currAtMs - prevAtMs) / 3_600_000);
+    const vPrev =
+      previous.sources?.["stacknet.health"]?.version ||
+      previous.sources?.["stacknet.root"]?.version;
+    const vCurr =
+      current.sources?.["stacknet.health"]?.version ||
+      current.sources?.["stacknet.root"]?.version;
+    const verNote =
+      vPrev && vCurr && vPrev !== vCurr
+        ? ` Stacknet read ${vPrev} before the gap and ${vCurr} now — any move happened inside the blind window, not just now.`
+        : "";
+    return [
+      event({
+        kind: "baseline",
+        rank: "note",
+        title: `Catch-up: desk was dark ~${gapH}h`,
+        summary: `Last reading ${previous.takenAt}, this sniff ${current.takenAt}. Per-change diffs across a blind window are not news${verNote}`,
+        details: {
+          inferred: true,
+          previousAt: previous.takenAt,
+          currentAt: current.takenAt,
+          gapHours: gapH,
+          versionBeforeGap: vPrev ?? null,
+          versionAfterGap: vCurr ?? null,
+        },
+      }),
+    ];
+  }
+
   const events = [];
   const prev = previous.sources;
   const curr = current.sources;
