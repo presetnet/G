@@ -970,6 +970,25 @@ export function translate(previous, current) {
     }
   }
 
+  // Sync watch — opencode surface + StackNet version moving in the same cycle.
+  const zenMoved =
+    (prev["opencode.zen"]?.fingerprint !== curr["opencode.zen"]?.fingerprint) ||
+    (prev["opencode.go"]?.fingerprint !== curr["opencode.go"]?.fingerprint) ||
+    (prev["opencode.registry"]?.fingerprint !== curr["opencode.registry"]?.fingerprint);
+  const snVerPrev = prev["stacknet.health"]?.version ?? prev["stacknet.root"]?.version;
+  const snVerCurr = curr["stacknet.health"]?.version ?? curr["stacknet.root"]?.version;
+  if (zenMoved && snVerPrev && snVerCurr && snVerPrev !== snVerCurr) {
+    events.push(
+      event({
+        kind: "zen",
+        rank: "note",
+        title: "Sync watch: opencode surface + StackNet moved same cycle",
+        summary: `stacknet ${snVerPrev} → ${snVerCurr} while zen/registry/go fingerprints also changed — probably coincidence, exactly once.`,
+        details: { stacknet: { from: snVerPrev, to: snVerCurr } },
+      }),
+    );
+  }
+
   // Token press — the minting authority's coins (PAPER, CCU, CUSD...).
   const prevTok = prev["solana.tokens"];
   const currTok = curr["solana.tokens"];
@@ -1033,19 +1052,32 @@ export function translate(previous, current) {
     const changed =
       costNow[0] !== costWas[0] ||
       costNow[1] !== costWas[1] ||
-      sp.status !== old.status;
+      sp.status !== old.status ||
+      sp.knowledge !== old.knowledge ||
+      sp.displayName !== old.displayName ||
+      Number(sp.contextLimit ?? 0) !== Number(old.contextLimit ?? 0) ||
+      Number(sp.outputLimit ?? 0) !== Number(old.outputLimit ?? 0);
     if (!changed) continue;
     const wentPaid = costWas.every((v) => v === 0) && costNow.some((v) => v > 0);
+    const knowledgeSurfaced =
+      !old.knowledge && sp.knowledge ? ` · KNOWLEDGE CUTOFF SURFACED: ${sp.knowledge}` : "";
     events.push(
       event({
         kind: "zen",
-        rank: wentPaid ? "spike" : "move",
+        rank: wentPaid || knowledgeSurfaced ? "spike" : "move",
         title: wentPaid
           ? `Ghost starts charging: ${sp.id}`
-          : `Ghost paper record changed: ${sp.id}`,
+          : knowledgeSurfaced
+            ? `Ghost paper record grew a knowledge field: ${sp.id}`
+            : `Ghost paper record changed: ${sp.id}`,
         summary: [
           `cost $${costWas[0]}→$${costNow[0]} in · $${costWas[1]}→$${costNow[1]} out`,
           old.status !== sp.status && sp.status ? `status: ${sp.status}` : null,
+          old.knowledge !== sp.knowledge ? `knowledge ${old.knowledge ?? "?"}→${sp.knowledge ?? "?"}` : null,
+          Number(sp.contextLimit ?? 0) !== Number(old.contextLimit ?? 0)
+            ? `ctx ${old.contextLimit ?? "?"}→${sp.contextLimit ?? "?"}`
+            : null,
+          knowledgeSurfaced,
         ]
           .filter(Boolean)
           .join(" · "),

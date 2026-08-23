@@ -347,3 +347,58 @@ Standing accurate position:
   independent context via pond0x.stats source; payout spikes labeled as POND0X news only.
 - Any future linkage claims require primary-source evidence (shared contracts, shared
   mint authorities, or explicit statements from either team).
+
+
+## Appendix B.3 · CORRECTION: Geoff DOES publish Terms — and they gut the dream
+
+Desk claimed geoff.ai has no public Terms. WRONG THREE WAYS: tested apex not www,
+declared from a 404-shell body without checking shared-layout boilerplate, and let an
+extraction pipeline strip the content living inside escaped script payloads.
+
+Actual document lives at https://www.geoff.ai/terms. Key clauses extracted:
+
+- Governing law: SINGAPORE, exclusive jurisdiction for disputes.
+- "(b) the nodes comprising any decentralized peer-to-peer task execution network are
+  operated by INDEPENDENT AISPs over whom the Company has no authority"  [AISP x7]
+- "(d) the AI MODELS hosted on [the network] are DEVELOPED, TRAINED, AND MAINTAINED BY
+  THIRD PARTIES without the Company['s involvement]"
+- Routers and ALL routing decisions = Third-Party Services the Company does not own,
+  operate, or control
+- TEEs / confidential computing / co-processor systems / PAYMENT PROTOCOLS = third-party
+  operated; no security or performance warranties
+- "Imaginations" = third-party authored inference context primitives the Company has not
+  reviewed or verified  [x6]
+- Mentions of pond0x: 0 · Pond: 0 · metaproof: 0 · PAPER: 0
+
+Consequences:
+1. Separation from pond0x re-confirmed by Geoff-side silence (mirrors pond0x TOS silence).
+2. "Geoff has a secret brain" theories contradict Geoff's OWN legal position: per their
+   Terms, Geoff develops/trains/maintains NO models and operates NO nodes or routers.
+   Whatever runs behind their lanes, their contract says it is third-party, attested, and
+   executed on infrastructure they do not control.
+3. "AISP" formalized as the node-operator class — matches operator testimony about the
+   pay-to-mine → node-operator arc (see Appendix B.1 testimony notes).
+
+## Appendix C · THE OX ALPHA QUESTION (open file)
+
+Theory under watch in the wild: opencode zen slot x-preview-f-free (display name
+"Ox Alpha Free (Unlimited)", released 2026-08-21, closed weights, 1M ctx, image+video)
+is Geoff/StackNet brains wearing a promo mask. Investigator note: this desk's own runtime
+identifies as ox-alpha — suspect and investigator share a name; nothing here is neutral.
+
+FOR: 1M context matches pyro:max docs; id contains "preview" matching an internal base
+name; stealth/closed-weight slot style mirrors lane design; Aug 2026 release postdates
+consumer stack (RDAP: geoff.ai reg 2020, magma-rpc 2024 — timeline barrier dead).
+AGAINST: traffic never touches magma/geoff; zen gateway uniformity hides any upstream
+identity; shelf prior favors mundane relabels; native reasoning_content vs client-side
+think-stripping divergence (weak — distributor choice).
+UNRESOLVABLE PUBLICLY: inference host, API-level tokenizer, upstream contracts.
+
+VERDICT: open. Strongest candidate ever logged; investigator cannot clear itself.
+
+TRIPWIRES ARMED (translator):
+- Ghost paper-record lane now spikes on knowledge-cutoff surfacing / context changes /
+  display renames for every watchlist ghost incl. Ox Alpha slot.
+- Sync-watch lane fires when zen/registry/go fingerprints move in the same cycle as a
+  Stacknet version bump.
+- TODO probe: zen error-shape baseline + fingerprint-keyword watch (magma|stacknet|6008).
