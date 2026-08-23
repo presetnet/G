@@ -1232,3 +1232,65 @@ html, body {
   .cover-wins,
   .frame-cards { grid-template-columns: 1fr; }
 }
+
+.claims-desk .claim-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.claim-tile {
+  display: grid;
+  gap: 0.3rem;
+  padding: 1.15rem 1.25rem;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+
+.claim-tile .tile-kicker {
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.76rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.claim-tile strong {
+  font-family: var(--display);
+  font-size: clamp(1.7rem, 4vw, 2.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+
+.claim-tile > span {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.claim-tile.booked strong { color: var(--blue-deep); }
+.claim-tile.paid strong { color: var(--good); }
+.claim-tile.chain strong { color: var(--warn); }
+
+.claims-desk .ghost-shelf {
+  margin: 1rem 0 0;
+  padding: 0.7rem 0.9rem;
+  background: var(--blue-soft);
+  border-radius: var(--radius-sm);
+  font-size: 0.92rem;
+  color: var(--ink);
+}
+
+.claims-desk .fine-print {
+  margin: 0.9rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .claims-desk .claim-tiles {
+    grid-template-columns: 1fr;
+  }
+}

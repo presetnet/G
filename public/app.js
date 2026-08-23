@@ -205,8 +205,12 @@ const els = {
   apiModelCount: document.getElementById("apiModelCount"),
   widgetCount: document.getElementById("widgetCount"),
   mcpContract: document.getElementById("mcpContract"),
-  treasurySol: document.getElementById("treasurySol"),
-  treasuryMeta: document.getElementById("treasuryMeta"),
+  paperworkUsd: document.getElementById("paperworkUsd"),
+  paperworkMeta: document.getElementById("paperworkMeta"),
+  ghostCount: document.getElementById("ghostCount"),
+  ghostMeta: document.getElementById("ghostMeta"),
+  fleetCount: document.getElementById("fleetCount"),
+  fleetLinesText: document.getElementById("fleetLinesText"),
   exploreCount: document.getElementById("exploreCount"),
   exploreMeta: document.getElementById("exploreMeta"),
   exploreCue: document.getElementById("exploreCue"),
@@ -524,6 +528,15 @@ function setTrust(payload) {
     : "Local file desk — this machine only";
 }
 
+function fmtCompactUsd(n) {
+  if (!Number.isFinite(n)) return "—";
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return `$${(n / 1e9).toFixed(abs >= 1e10 ? 1 : 2)}B`;
+  if (abs >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
+  return `$${n.toFixed(0)}`;
+}
+
 function renderMetrics(latest) {
   const s = latest?.summary ?? {};
   els.stackVersion.textContent = s.stacknetVersion || "—";
@@ -572,20 +585,52 @@ function renderMetrics(latest) {
     els.mcpContract.title =
       "remote_mcp missing on /health this sniff — docs.geoff.ai/mcp is still fingerprinted";
   }
-  if (els.treasurySol) {
-    els.treasurySol.textContent =
-      s.solPriceUsd != null ? `$${Number(s.solPriceUsd).toFixed(2)} SOL` : "—";
+  if (els.paperworkUsd) {
+    const booked = Number(s.metaproofsPaperworkUsd);
+    els.paperworkUsd.textContent =
+      s.metaproofsPaperworkUsd != null && Number.isFinite(booked)
+        ? fmtCompactUsd(booked)
+        : "—";
+    els.paperworkUsd.title = `Metaproof paperwork booked (raw: ${s.metaproofsPaperworkUsd ?? "—"})`;
   }
-  if (els.treasuryMeta) {
+  if (els.paperworkMeta) {
     const bits = [];
-    if (s.treasuryCluster) bits.push(s.treasuryCluster);
-    if (s.metaproofsTotal != null) bits.push(`proofs ${s.metaproofsTotal}`);
-    if (s.treasuryStaleSeconds != null) bits.push(`stale ${s.treasuryStaleSeconds}s`);
-    if (s.treasuryAddress) bits.push(short(s.treasuryAddress, 6, 4));
-    els.treasuryMeta.textContent = bits.length ? bits.join(" · ") : "—";
-    els.treasuryMeta.title = s.treasuryAddress
-      ? `Treasury ${s.treasuryAddress}`
-      : "Public treasury + metaproofs from /network/summary";
+    if (s.metaproofsPaidUsd != null)
+      bits.push(`paid ${fmtCompactUsd(Number(s.metaproofsPaidUsd))}`);
+    if (s.metaproofsTotal != null) bits.push(`${s.metaproofsTotal} proofs`);
+    if (s.treasuryRpcOk) {
+      bits.push(`chain ${Number(s.treasuryRpcSol ?? 0).toFixed(3)} SOL`);
+      if (s.treasuryRpcSigCount != null)
+        bits.push(`${s.treasuryRpcSigCount} lifetime tx`);
+    }
+    if (!bits.length && s.solPriceUsd != null)
+      bits.push(`SOL $${Number(s.solPriceUsd).toFixed(2)}`);
+    els.paperworkMeta.textContent = bits.length ? bits.join(" · ") : "—";
+    els.paperworkMeta.title = `Booked vs paid metaproof ledger · chain balance via public Solana RPC${s.treasuryAddress ? ` · ${s.treasuryAddress}` : ""}`;
+  }
+  if (els.ghostCount) {
+    const ghosts = Array.isArray(s.zenGhostIds) ? s.zenGhostIds : [];
+    els.ghostCount.textContent = ghosts.length ? String(ghosts.length) : "0";
+    els.ghostCount.title = `Zen free-tier anonymous models: ${ghosts.join(", ") || "none"}`;
+  }
+  if (els.ghostMeta) {
+    const bits = [];
+    if (s.zenModelCount != null) bits.push(`zen ${s.zenModelCount} models`);
+    if (s.zenFreeCount != null) bits.push(`${s.zenFreeCount} free`);
+    els.ghostMeta.textContent = bits.length ? bits.join(" · ") : "zen watchlist";
+  }
+  if (els.fleetCount) {
+    const bases = Array.isArray(s.fleetBases) ? s.fleetBases : [];
+    const lines = Array.isArray(s.fleetLines) ? s.fleetLines : [];
+    els.fleetCount.textContent =
+      bases.length && lines.length ? `${bases.length}×${lines.length}` : "—";
+    els.fleetCount.title = `Engine bases: ${bases.join(", ") || "?"}\nProduct lines: ${lines.join(", ") || "?"}`;
+  }
+  if (els.fleetLinesText) {
+    const lines = Array.isArray(s.fleetLines) ? s.fleetLines : [];
+    els.fleetLinesText.textContent = lines.length
+      ? lines.slice(0, 5).join("·")
+      : "—";
   }
   if (els.exploreCount) {
     els.exploreCount.textContent = s.exploreCount != null ? String(s.exploreCount) : "—";

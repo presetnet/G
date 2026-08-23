@@ -20,7 +20,22 @@ const els = {
   vendors: document.getElementById("vendors"),
   menus: document.getElementById("menus"),
   footnote: document.getElementById("footnote"),
+  claimsMeta: document.getElementById("claimsMeta"),
+  claimBooked: document.getElementById("claimBooked"),
+  claimPaid: document.getElementById("claimPaid"),
+  claimChain: document.getElementById("claimChain"),
+  claimChainNote: document.getElementById("claimChainNote"),
+  ghostShelf: document.getElementById("ghostShelf"),
 };
+
+function fmtCompactUsd(n) {
+  if (!Number.isFinite(n)) return "—";
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return `$${(n / 1e9).toFixed(abs >= 1e10 ? 1 : 2)}B`;
+  if (abs >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
+  return `$${n.toFixed(0)}`;
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -462,13 +477,66 @@ function applyPayload(data) {
     : "";
 }
 
+function renderClaimsDesk(summary) {
+  if (!summary || Object.keys(summary).length === 0) {
+    els.claimsMeta.textContent = "Books unavailable right now";
+    return;
+  }
+  const booked = Number(summary.metaproofsPaperworkUsd);
+  const paid = Number(summary.metaproofsPaidUsd);
+  els.claimBooked.textContent =
+    summary.metaproofsPaperworkUsd != null ? fmtCompactUsd(booked) : "—";
+  els.claimPaid.textContent =
+    summary.metaproofsPaidUsd != null ? fmtCompactUsd(paid) : "—";
+
+  const chainSol = summary.treasuryRpcOk ? Number(summary.treasuryRpcSol ?? 0) : null;
+  els.claimChain.textContent =
+    chainSol != null && Number.isFinite(chainSol)
+      ? `${chainSol.toFixed(3)} SOL`
+      : "unverified";
+  const chainBits = [];
+  if (summary.treasuryRpcSigCount != null)
+    chainBits.push(
+      `${summary.treasuryRpcSigCount} lifetime signatures`,
+    );
+  if (chainSol === 0 && !chainBits.length) chainBits.push("wallet never touched");
+  els.claimChainNote.textContent = `${
+    chainBits.length ? `${chainBits.join(" · ")} · ` : ""
+  }verified via public Solana RPC`;
+
+  const proofBit =
+    summary.metaproofsTotal != null
+      ? `${summary.metaproofsTotal} metaproof records · `
+      : "";
+  els.claimsMeta.textContent = `${proofBit}booked ${els.claimBooked.textContent} · paid ${els.claimPaid.textContent}`;
+
+  const ghosts = Array.isArray(summary.zenGhostIds) ? summary.zenGhostIds : [];
+  if (ghosts.length) {
+    els.ghostShelf.hidden = false;
+    els.ghostShelf.innerHTML = `<strong>Ghost shelf rider:</strong> anonymous free-tier models ride other carriers’ boards too — ${ghosts
+      .map((g) => escapeHtml(g))
+      .join(" · ")}. Anonymity is industry furniture, not a fingerprint.`;
+  }
+}
+
 async function loadMarket() {
   els.reloadBtn.disabled = true;
   try {
-    const res = await fetch("/api/market");
+    const [res, statusRes] = await Promise.all([
+      fetch("/api/market"),
+      fetch("/api/status", { cache: "no-store" }).catch(() => null),
+    ]);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to load market intel");
     applyPayload(data);
+    let summary = null;
+    if (statusRes && statusRes.ok) {
+      try {
+        const status = await statusRes.json();
+        summary = status?.latest?.summary ?? null;
+      } catch {}
+    }
+    renderClaimsDesk(summary);
   } catch (error) {
     els.liveMeta.textContent = "Load failed";
     els.liveGrid.innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`;
