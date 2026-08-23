@@ -862,18 +862,25 @@ export function translate(previous, current) {
     const priceMoved =
       prevGo.priceIntroUsd !== currGo.priceIntroUsd ||
       prevGo.priceMonthlyUsd !== currGo.priceMonthlyUsd;
+    const freeCut =
+      prevGo.freeDailyRequests != null &&
+      currGo.freeDailyRequests != null &&
+      Number(currGo.freeDailyRequests) < Number(prevGo.freeDailyRequests);
     const leftLineup = (prevGo.lineupNames || []).filter(
       (n) => !(currGo.lineupNames || []).includes(n),
     );
     events.push(
       event({
         kind: "zen",
-        rank: priceMoved ? "spike" : "move",
-        title: priceMoved
-          ? `opencode Go pricing moved: $${prevGo.priceIntroUsd ?? "?"}/$${prevGo.priceMonthlyUsd ?? "??"} → $${currGo.priceIntroUsd ?? "?"}/$${currGo.priceMonthlyUsd ?? "??"}`
-          : "opencode Go sheet changed",
+        rank: priceMoved || freeCut ? "spike" : "move",
+        title: freeCut
+          ? `Free tier leash tightened: ${prevGo.freeDailyRequests} → ${currGo.freeDailyRequests} req/day`
+          : priceMoved
+            ? `opencode Go pricing moved: $${prevGo.priceIntroUsd ?? "?"}/$${prevGo.priceMonthlyUsd ?? "??"} → $${currGo.priceIntroUsd ?? "?"}/$${currGo.priceMonthlyUsd ?? "??"}`
+            : "opencode Go sheet changed",
         summary: [
           `$${currGo.priceIntroUsd ?? "?"} first month · $${currGo.priceMonthlyUsd ?? "?"}/mo`,
+          `free shelf: ${currGo.freeDailyRequests ?? "?"} req/day`,
           `${currGo.lineupCount ?? 0} named models`,
           leftLineup.length ? `dropped from lineup: ${leftLineup.join(", ")}` : null,
           currGo.oxAlphaPromo ? "Ox Alpha Free promo live" : null,

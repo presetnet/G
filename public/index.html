@@ -404,6 +404,22 @@
       </details>
     </main>
 
-    <script type="module" src="/app.js"></script>
+      <div id="proofOverlay" class="proof-overlay" hidden>
+        <div class="proof-modal" role="dialog" aria-modal="true" aria-labelledby="proofTitle">
+          <button id="proofClose" class="proof-close" type="button" aria-label="Close proof">×</button>
+          <p class="story-kicker">Proof · where this number comes from</p>
+          <h2 id="proofTitle">—</h2>
+          <p id="proofExplain"></p>
+          <div id="proofSources" class="proof-sources"></div>
+          <pre id="proofRaw" class="proof-raw"></pre>
+          <div class="proof-footrow">
+            <span>reproduce it yourself · no keys, no logins</span>
+            <button id="proofCopy" type="button" class="btn">Copy curl</button>
+          </div>
+          <pre id="proofCurl" class="proof-curl"></pre>
+        </div>
+      </div>
+
+      <script type="module" src="/app.js"></script>
   </body>
 </html>

@@ -500,11 +500,19 @@ export async function sniffOpencodeGo() {
     .replace(/\s+/g, " ");
   const introMatch = html.match(/\$(\d+)\s*(?:for your first month|first month)/i);
   const monthlyMatches = [...html.matchAll(/\$(\d+)\s*\/\s*month/g)].map((m) => Number(m[1]));
+  const freeQuotaMatch = html.match(/(\d+)\s*requests\s*\/\s*day/i);
+  const equiv5h = html.match(/\$(\d+)\s*per 5 hours/i);
+  const equivWeek = html.match(/\$(\d+)\s*per week/i);
+  const equivMonth = html.match(/\$(\d+)\s*per month/i);
   const ladder = parseGoLadder(flat, GO_LINEUP_NAMES);
   const lineup = ladder.filter((r) => r.quota != null).map((r) => r.name);
   const bits = [
     introMatch?.[1] ?? "-",
     monthlyMatches[0] != null ? String(monthlyMatches[0]) : "-",
+    freeQuotaMatch?.[1] ?? "-",
+    equiv5h?.[1] ?? "-",
+    equivWeek?.[1] ?? "-",
+    equivMonth?.[1] ?? "-",
     String(lineup.length),
     ladder.map((r) => `${r.name}:${r.quota ?? "?"}`).join(","),
     html.includes("available on Go for a limited time") ? "promo" : "nopromo",
@@ -516,6 +524,10 @@ export async function sniffOpencodeGo() {
     ms: res.ms,
     priceIntroUsd: introMatch ? Number(introMatch[1]) : null,
     priceMonthlyUsd: monthlyMatches[0] ?? null,
+    freeDailyRequests: freeQuotaMatch ? Number(freeQuotaMatch[1]) : null,
+    equiv5hUsd: equiv5h ? Number(equiv5h[1]) : null,
+    equivWeekUsd: equivWeek ? Number(equivWeek[1]) : null,
+    equivMonthUsd: equivMonth ? Number(equivMonth[1]) : null,
     lineupCount: lineup.length,
     lineupNames: lineup,
     goLadder: ladder,
@@ -1384,6 +1396,10 @@ export async function runSniff() {
       goFingerprint: bySource["opencode.go"]?.fingerprint ?? null,
       goLadder: bySource["opencode.go"]?.goLadder ?? [],
       goTierTabs: bySource["opencode.go"]?.tierTabs ?? [],
+      goFreeDailyRequests: bySource["opencode.go"]?.freeDailyRequests ?? null,
+      goEquiv5hUsd: bySource["opencode.go"]?.equiv5hUsd ?? null,
+      goEquivWeekUsd: bySource["opencode.go"]?.equivWeekUsd ?? null,
+      goEquivMonthUsd: bySource["opencode.go"]?.equivMonthUsd ?? null,
       catalogModels: bySource["geoff.catalog"]?.models?.length ?? null,
       catalogSkipped: Boolean(bySource["geoff.catalog"]?.skipped),
       catalogSkipReason: bySource["geoff.catalog"]?.reason ?? null,

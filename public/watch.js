@@ -19,6 +19,8 @@ const els = {
   specs: document.getElementById("pwSpecs"),
   goIntro: document.getElementById("pwGoIntro"),
   goMonthly: document.getElementById("pwGoMonthly"),
+  goFree: document.getElementById("pwGoFree"),
+  goEquiv: document.getElementById("pwGoEquiv"),
   goTiers: document.getElementById("pwGoTiers"),
   goMeta: document.getElementById("pwGoMeta"),
   goLadderBody: document.getElementById("pwGoLadderBody"),
@@ -136,6 +138,22 @@ function render(summary, events) {
       .join(" · ");
   }
 
+  if (els.goFree) {
+    const n = s.goFreeDailyRequests;
+    els.goFree.textContent =
+      n != null ? `${Number(n).toLocaleString("en-US")} req/day` : "—";
+    els.goFree.title =
+      "Per the Go FAQ: free models include Big Pickle plus current promos, capped at this many requests per day. When this number moves, the leash moved.";
+  }
+  if (els.goEquiv) {
+    const bits = [];
+    if (s.goEquiv5hUsd != null) bits.push(`$${s.goEquiv5hUsd} per 5h`);
+    if (s.goEquivWeekUsd != null) bits.push(`$${s.goEquivWeekUsd}/week`);
+    if (s.goEquivMonthUsd != null) bits.push(`$${s.goEquivMonthUsd}/month`);
+    els.goEquiv.textContent = bits.length
+      ? `rolling windows enforced across 5-hour / weekly / monthly — roughly ${bits.join(" · ")} of compute value (actual counts vary by model)`
+      : "reading FAQ…";
+  }
   if (els.goIntro) {
     els.goIntro.textContent =
       s.goPriceIntroUsd != null ? `$${s.goPriceIntroUsd}` : "—";
@@ -177,9 +195,16 @@ function render(summary, events) {
     }
   }
   if (els.goMeta) {
+    const tiers = Array.isArray(s.goTierTabs) ? s.goTierTabs : [];
     els.goMeta.textContent =
       s.goFingerprint != null
-        ? `parsed from live page · fingerprint ${s.goFingerprint}`
+        ? [
+            "parsed from live page",
+            tiers.length ? `tier tabs ${tiers.map((t) => `${t}×`).join("/")}` : null,
+            "top-up credit · cancel anytime · works with any agent",
+          ]
+            .filter(Boolean)
+            .join(" · ")
         : "reading opencode.ai/go…";
   }
 
