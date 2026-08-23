@@ -19,13 +19,14 @@ No direct link — but the real answer is stranger than the conspiracy, so lead 
 - Geoff/StackNet (Pauly0x + Hwonder's project) does not make its own AI. Their own code admits it: they take anonymous models from upstream suppliers and rename them to their own brand layers ("magma", "pyro"). When you talk to Geoff, you're talking through a mask.
 - The free model shelf (where big-pickle lives) does the same thing from the other direction. Most of that shelf openly admits it relabels known models — DeepSeek, NVIDIA's Nemotron, Kimi, Qwen. A few, including big-pickle, stay completely silent about who made them.
 - So both brands are wearing masks. The paranoid question writes itself: same face under both?
-- People checked. Hard. The traffic between the two systems never touches. They behave in opposite ways — Geoff hides the AI's reasoning before showing it to you; the mystery model shows you every thought. One charges crypto for everything, the other is free. Their timelines don't even overlap (Geoff's consumer site showed up mid-2026; the mystery model existed by late 2025).
+- People checked. Hard. The traffic between the two systems never touches. They behave in opposite ways — Geoff hides the AI's reasoning before showing it to you; the mystery model shows you every thought. Their timelines don't even overlap (Geoff's consumer site showed up mid-2026; the mystery model existed by late 2025).
+- And kill the idea that one is "paid" while the other is "free." Geoff runs a meter you can see. The mystery shelf hides its meter — but the bill exists anyway: roughly $400k–900k a week in compute that some unnamed payer is eating to keep those models free. A subsidy isn't free. It's just a payer who won't show his face. Which, notice, is the same trick as the models themselves.
 - Even the "one cloned the other" theory dies fast: cloning gets you code, but the valuable part — the supply deals that put real brains behind the labels — doesn't survive a copy-paste.
 - And the "all the dates are faked" angle runs backwards: Geoff's infrastructure was quietly registered way back in early 2024, long before there was anything to cover up. That's a slow, boring build — not an operation.
 
 ## The receipts (only if someone demands numbers)
 
-Geoff's public ledger claims $692.5 million in "metaproof paperwork" booked. Amount actually paid out: zero. Their treasury wallet on Solana: empty, and it has never received a single transaction in its existence — confirmed on-chain, not from their website. Their GPU cluster mostly sits idle. All of it checkable by anyone with a browser. No leaks, no insiders, nothing sketchy done to learn it.
+Both sides have money stories that don't add up, and they're worth putting side by side. Geoff's public ledger claims $692.5 million in "metaproof paperwork" booked — amount actually paid out: zero, from a Solana treasury wallet that is empty and has never received a single transaction in its existence (confirmed on-chain, not from their website). Facing that: the "free" model shelf quietly burns an estimated half-million dollars a week with no visible payer and no visible plan. Two weird economies staring at each other across the table. All of it checkable by anyone with a browser — no leaks, no insiders.
 
 ## What would change the answer
 
