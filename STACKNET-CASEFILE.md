@@ -285,3 +285,26 @@ weak theory structurally real but unapplied. That is the honest terminal state.
 ---
 *All probes were unauthenticated reads of public endpoints. No auth bypassed,
 no private data accessed. Chain of custody: this session's logs.*
+
+
+## Appendix B · Primary sources found late (metaproofs)
+
+The $692,526,478 "totalPaperworkUsd" question has a primary source, sitting on the cofounder's
+own blog the whole time:
+
+- hwonder.com/posts/metaproofs — "MetaProofs: Proof of X Protocol": cryptographic attestations
+  with rewards for validators; source holds event authority, issues ZK validation hashes,
+  validators attest cross-chain and claim rewards. In production for "Pop Bubbles" prediction
+  products. Test report in post dated 2025-07-25.
+- Reading: totalPaperworkUsd = cumulative face value of booked attestations; paid = 0 and
+  treasury signatures = 0 means settlement has not moved on-chain yet.
+- Related: /posts/metavault (oracle infra — "We use the SDK in GEOFF today"; subscription time
+  oracles powering APIs/PRO products), /posts/promptme (PROMPTME.md standard — adopted at this
+  repo root), /posts/metamodels, /posts/plug.
+- Also confirmed via same blog: repo ownership moved sst → anomalyco (Anomaly) on the OpenCode
+  side is unrelated to hwonder; kept here only to note we verified it while correcting our
+  release tracker.
+
+Correction note: the desk called this ledger "fiction or early" before finding this page.
+Truth: it is an unlaunched settlement layer's booking sheet. The economy is still unwritten —
+but now we know which pen awaits it.

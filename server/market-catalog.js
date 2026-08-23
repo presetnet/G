@@ -251,6 +251,60 @@ export const marketCatalog = {
         { label: "GitHub Status", href: "https://www.githubstatus.com" },
       ],
     },
+    {
+      id: "opencode",
+      name: "OpenCode · Zen/Go",
+      company: "Anomaly · opencode.ai",
+      color: "#67e8f9",
+      tagline: "Agent-native coding shelf · free tier with a published leash",
+      delivers: [
+        "Free shelf: Big Pickle plus promo models at 200 requests/day — cap stated in their own FAQ",
+        "Go upsell: $5 first month then $10/mo — capacity framed as roughly $12 per 5h / $30 weekly / $60 monthly",
+        "Per-model call ladder spans ~110 (premium) to 45,300+ (cheap shelf) per rolling 5-hour window; tier tabs 1×–250×",
+        "Zen is a separate pay-as-you-go credit pool — not the same meter as Go",
+        "Disclosure duty: several shelf models are anonymous relabels; paper specs are public via models.dev, upstream identities are not",
+      ],
+      horsepower: {
+        flagship: "big-pickle (anonymous)",
+        context: "200k pickle · 1M promo slots",
+        maxContextLabel: "1M on Ox Alpha Free / Muse Spark",
+        modalities: ["code", "text", "agents", "tools"],
+        apiStyle: "Agent/CLI-first · OpenAI-compatible endpoints",
+        pricingModel: "Free 200 req/day · Go $5→$10/mo · Zen pay-as-you-go",
+      },
+      models: [
+        {
+          id: "big-pickle",
+          role: "Free reasoning ghost",
+          context: "200k",
+          input: "free*",
+          output: "free*",
+          notes: "*200 req/day cap · upstream unnamed · knowledge cutoff Jan 2025 · closed weights",
+        },
+        {
+          id: "Ox Alpha Free",
+          role: "Limited-time unlimited promo",
+          context: "1M",
+          input: "$0",
+          output: "$0",
+          notes: "Stealth slot · can vanish whenever the promo ends",
+        },
+        {
+          id: "Go paid ladder",
+          role: "Kimi K3 → Muse Spark lineup",
+          context: "varies",
+          input: "Go plan",
+          output: "Go plan",
+          notes: "110 → 45,300 calls / 5h by model · Hy3 carries an 8× usage badge",
+        },
+      ],
+      research: [
+        { label: "Go price sheet", href: "https://opencode.ai/go" },
+        { label: "Zen catalog", href: "https://opencode.ai/zen" },
+        { label: "models.dev registry", href: "https://models.dev/" },
+        { label: "GitHub (Anomaly)", href: "https://github.com/anomalyco/opencode" },
+      ],
+    },
   ],
   dimensions: [
     {
@@ -259,6 +313,7 @@ export const marketCatalog = {
       blurb: "What you’re actually buying — shared pool, per-call meter, or a seat.",
       scores: {
         geoff: "Universal Token Plan pool",
+        opencode: "Free daily quota + $10/mo sub",
         grok: "$ / 1M token meter",
         openai: "$ / 1M token meter",
         copilot: "Monthly product seat",
@@ -270,6 +325,7 @@ export const marketCatalog = {
       blurb: "OpenAI-style /v1/models cards vs internal routing lanes.",
       scores: {
         geoff: "5 API cards · ~29 net lanes",
+        opencode: "Public registry · ghosts included",
         grok: "Docs model ids",
         openai: "Large model catalog",
         copilot: "Seat-gated menu",
@@ -279,7 +335,7 @@ export const marketCatalog = {
       id: "api",
       label: "API access coverage",
       blurb: "Can you call models programmatically (Chat Completions-style)?",
-      scores: { geoff: "Partial / network", grok: "Yes", openai: "Yes", copilot: "Product only" },
+      scores: { geoff: "Partial / network", opencode: "Yes — agent/CLI-first", grok: "Yes", openai: "Yes", copilot: "Product only" },
     },
     {
       id: "context",
@@ -287,6 +343,7 @@ export const marketCatalog = {
       blurb: "How much fits in one prompt/session — your deductible on memory.",
       scores: {
         geoff: "Lane-dependent",
+        opencode: "200k free · 1M promos",
         grok: "500k–2M",
         openai: "~1.05M on GPT-5.x",
         copilot: "Provider window",
@@ -298,6 +355,7 @@ export const marketCatalog = {
       blurb: "Same wallet across modalities — or siloed SKUs?",
       scores: {
         geoff: "One pool · text→music→video",
+        opencode: "Text/code first",
         grok: "Text + image/video/voice",
         openai: "Text + image/audio/realtime",
         copilot: "Code-first (+ chat)",
@@ -309,6 +367,7 @@ export const marketCatalog = {
       blurb: "Quiet utility for narrative work — guide, widen, keep the author in the chair.",
       scores: {
         geoff: "Shadow booster · multimodal",
+        opencode: "Code story, not film",
         grok: "Strong chat + media",
         openai: "Strong chat + media",
         copilot: "Code story, not film",
@@ -320,6 +379,7 @@ export const marketCatalog = {
       blurb: "MCP, tool calling, IDE agents, sandboxes — who shows up when work gets messy.",
       scores: {
         geoff: "MCP + widgets + sandboxes",
+        opencode: "Core purpose — agent runner",
         grok: "Strong tool calling",
         openai: "Tools + Responses agents",
         copilot: "IDE/cloud coding agents",
@@ -331,6 +391,7 @@ export const marketCatalog = {
       blurb: "How the bill shows up — compare shape, not fake dollar twins.",
       scores: {
         geoff: "Token Plan $19–$999/mo",
+        opencode: "200/day free · $10/mo Go",
         grok: "$ / 1M tokens",
         openai: "$ / 1M tokens",
         copilot: "Monthly seats",
@@ -342,6 +403,7 @@ export const marketCatalog = {
       blurb: "What you can verify without pledging allegiance (or a credit card).",
       scores: {
         geoff: "High — live vitals",
+        opencode: "Mixed — registry open, upstreams hidden",
         grok: "Medium — docs, auth API",
         openai: "Medium — status + docs",
         copilot: "Medium — model list, seat fog",
@@ -353,6 +415,7 @@ export const marketCatalog = {
       blurb: "Can you strap modules on — or only renew the appliance?",
       scores: {
         geoff: "Strap-on / network",
+        opencode: "Any-agent · BYO harness",
         grok: "API modules",
         openai: "Platform APIs",
         copilot: "Sealed cockpit",

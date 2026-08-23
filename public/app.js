@@ -537,6 +537,203 @@ function fmtCompactUsd(n) {
   return `$${n.toFixed(0)}`;
 }
 
+/* ---- Proof popups · receipts behind every metric ---- */
+const SN_BASE = "https://stacknet.magma-rpc.com";
+let lastLatest = null;
+const SOLANA_DEFAULT = "D2KL4HWbc5URqBti9XLf2DwtiDYJs9wbX6z7tyWLoiH2";
+
+const PROOFS = {
+  stackVersion: {
+    title: "Stacknet version",
+    explain:
+      "Self-reported by StackNet's own health and root endpoints. We display exactly what they publish — nothing inferred.",
+    sources: ["stacknet.health", "stacknet.root"],
+    fields: ["stacknetVersion", "mcpContract", "nodeId", "inFlight", "maxInFlight"],
+    curls: [`curl -s ${SN_BASE}/health`, `curl -s ${SN_BASE}/`],
+  },
+  stackNodes: {
+    title: "Nodes & GPUs",
+    explain:
+      "Live capacity counters from StackNet's public network map — their own numbers, re-sniffed every poll cycle.",
+    sources: ["stacknet.network", "stacknet.node"],
+    fields: ["nodes", "totalNodes", "gpus", "taskCount", "averageLoad"],
+    curls: [`curl -s ${SN_BASE}/network/summary`, `curl -s ${SN_BASE}/node`],
+  },
+  vramText: {
+    title: "VRAM free",
+    explain:
+      "Total vs available VRAM straight off the public network map. The bar shows free share of the whole fleet.",
+    sources: ["stacknet.network"],
+    fields: ["vramGb", "availableVramGb", "vramAvailablePct"],
+    curls: [`curl -s ${SN_BASE}/network/summary`],
+  },
+  geoffBuild: {
+    title: "geoff build",
+    explain:
+      "Deploy fingerprints scraped from geoff.ai's own page metadata and version endpoint.",
+    sources: ["geoff.version", "geoff.deploy"],
+    fields: ["geoffBuildId", "geoffDeployId", "chunkHash", "chunkCount"],
+    curls: [
+      "curl -s https://geoff.ai/api/version",
+      'curl -s https://geoff.ai | grep -oE "build[A-Za-z]*[^,]{0,40}" | head',
+    ],
+  },
+  modelCount: {
+    title: "Models · api vs net",
+    explain:
+      "Two different lists on purpose: public /v1/models cards vs internal routing lanes from the network map.",
+    sources: ["stacknet.network", "stacknet.models"],
+    fields: ["apiModels", "models", "fleetBases", "fleetLines"],
+    curls: [`curl -s ${SN_BASE}/v1/models`, `curl -s ${SN_BASE}/network/summary`],
+  },
+  widgetCount: {
+    title: "Widgets / MCP",
+    explain:
+      "Public widget count plus whether the MCP contract was present on /health this sniff.",
+    sources: ["stacknet.widgets", "stacknet.health"],
+    fields: ["widgets", "mcpOnHealth", "mcpContract"],
+    curls: [`curl -s ${SN_BASE}/widgets`, `curl -s ${SN_BASE}/health`],
+  },
+  paperworkUsd: {
+    title: "Paperwork ledger",
+    explain:
+      "Booked-vs-paid metaproof values from /network/summary, cross-checked against the Solana chain: treasury balance AND lifetime signature count via public RPC. Their books, our math.",
+    sources: ["stacknet.network", "solana.treasury"],
+    fields: [
+      "metaproofsPaperworkUsd",
+      "metaproofsPaidUsd",
+      "metaproofsOutstandingUsd",
+      "metaproofsTotal",
+      "treasuryRpcSol",
+      "treasuryRpcSigCount",
+      "treasuryAddress",
+    ],
+    curls: [
+      `curl -s ${SN_BASE}/network/summary`,
+      `curl -s https://api.mainnet-beta.solana.com -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"getBalance","params":["${
+        lastLatest?.summary?.treasuryRpcAddress || "2W5gxAio1Bz76P58EaDtGC71MuyH4ZAdXHu3qqmeGy7g"
+      }",{"commitment":"confirmed"}]}'`,
+    ],
+  },
+  ghostCount: {
+    title: "Ghost shelf",
+    explain:
+      "Anonymous free-tier models counted live from OpenCode's public zen catalog; watchlist flags which ghosts are present.",
+    sources: ["opencode.zen"],
+    fields: ["zenGhostIds", "zenMissingGhosts", "zenModelCount", "zenFreeCount"],
+    curls: ["curl -s https://opencode.ai/zen/v1/models"],
+  },
+  fleetCount: {
+    title: "Engine tiers",
+    explain:
+      "Internal fleet taxonomy parsed from /network/summary: product lines crossed with engine bases. The magma/pyro map, straight from them.",
+    sources: ["stacknet.network"],
+    fields: ["fleetBases", "fleetLines", "models"],
+    curls: [`curl -s ${SN_BASE}/network/summary`],
+  },
+  exploreCount: {
+    title: "Explore board",
+    explain: "Top-board counts from Geoff's public explore feed.",
+    sources: ["geoff.explore"],
+    fields: ["exploreCount", "exploreAuthors"],
+    curls: ["curl -s https://www.geoff.ai/api/explore/feed"],
+  },
+};
+
+const CARD_PROOF_ORDER = [
+  "stackVersion",
+  "stackNodes",
+  "vramText",
+  "geoffBuild",
+  "modelCount",
+  "widgetCount",
+  "paperworkUsd",
+  "ghostCount",
+  "fleetCount",
+  "exploreCount",
+];
+
+function openProof(key) {
+  const p = PROOFS[key];
+  const overlay = document.getElementById("proofOverlay");
+  if (!p || !overlay) return;
+  const s = lastLatest?.summary ?? {};
+  document.getElementById("proofTitle").textContent = p.title;
+  document.getElementById("proofExplain").textContent = p.explain;
+
+  const srcBox = document.getElementById("proofSources");
+  srcBox.innerHTML = p.sources
+    .map((name) => {
+      const src = lastLatest?.sources?.[name];
+      const status = src
+        ? src.ok
+          ? `<span class="ps-ok">HTTP ${src.status ?? 200} · ${src.ms ?? "?"}ms</span>`
+          : `<span class="ps-bad">FAILED · ${escapeHtml(src.reason || "error")}</span>`
+        : '<span class="ps-warn">not in this sniff</span>';
+      return `<div class="ps-row"><span>${escapeHtml(name)}</span>${status}</div>`;
+    })
+    .join("");
+
+  document.getElementById("proofRaw").textContent = p.fields
+    .map((f) => `${f}: ${JSON.stringify(s[f] ?? null)}`)
+    .join("\n");
+
+  const curlText = p.curls
+    .map((c) =>
+      c.replace(
+        /\$\{lastLatest[\s\S]*?\}/,
+        s.treasuryRpcAddress || "2W5gxAio1Bz76P58EaDtGC71MuyH4ZAdXHu3qqmeGy7g",
+      ),
+    )
+    .join("\n\n");
+  document.getElementById("proofCurl").textContent = curlText;
+
+  overlay.hidden = false;
+}
+
+function closeProof() {
+  const overlay = document.getElementById("proofOverlay");
+  if (overlay) overlay.hidden = true;
+}
+
+function wireProofPopups() {
+  const grid = document.querySelector(".metrics");
+  grid?.addEventListener("click", (e) => {
+    const card = e.target.closest(".metric");
+    if (!card) return;
+    const ids = [...card.querySelectorAll("[id]")].map((x) => x.id);
+    const key = CARD_PROOF_ORDER.find((k) => ids.includes(k));
+    if (key) openProof(key);
+  });
+  document.getElementById("proofClose")?.addEventListener("click", closeProof);
+  document.getElementById("proofOverlay")?.addEventListener("click", (e) => {
+    if (e.target.id === "proofOverlay") closeProof();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeProof();
+  });
+  document.getElementById("proofCopy")?.addEventListener("click", async () => {
+    const text = document.getElementById("proofCurl")?.textContent || "";
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand?.("copy");
+      ta.remove();
+    }
+    const btn = document.getElementById("proofCopy");
+    if (btn) {
+      btn.textContent = "Copied";
+      setTimeout(() => (btn.textContent = "Copy"), 1400);
+    }
+  });
+}
+
+wireProofPopups();
+
 function renderMetrics(latest) {
   const s = latest?.summary ?? {};
   els.stackVersion.textContent = s.stacknetVersion || "—";

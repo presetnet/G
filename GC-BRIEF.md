@@ -26,7 +26,7 @@ No direct link — but the real answer is stranger than the conspiracy, so lead 
 
 ## The receipts (only if someone demands numbers)
 
-Both sides have money stories that don't add up, and they're worth putting side by side. Geoff's public ledger claims $692.5 million in "metaproof paperwork" booked — amount actually paid out: zero — and the minting wallet behind it holds three homemade coins: PAPER (total supply: sixty-five whole coins), CCU (175), and CUSD (10.4). Important for anyone reading this: these are internal test scrip with a microscopic float — there is nothing to buy and anyone who tries will get wrecked on their own; this desk reports the ledger, it doesn't point at exit liquidity. Facing that: the "free" mystery shelf just started showing meters — OpenCode's Go subscription at $5 intro / $10 per month, which buys anywhere from ~110 premium-model calls per 5 hours up to 45,000+ on the cheap shelf, with exactly one unlimited slot (Ox Alpha Free) held out as a limited-time promo. Two weird economies staring at each other across the table. All of it checkable by anyone with a browser — no leaks, no insiders.
+Both sides have money stories that don't add up, and they're worth putting side by side. Geoff's public ledger claims $692.5 million in "metaproof paperwork" booked — amount actually paid out: zero — and the minting wallet behind it holds three homemade coins: PAPER (total supply: sixty-five whole coins), CCU (175), and CUSD (10.4). The mechanism is no longer a mystery either: hwonder's own blog post describes MetaProofs as attestation-with-rewards plumbing for predictions and reward claims — so the $692.5M is the face value of booked attestations, and zero settlement means nobody has been paid out of it yet. Important for anyone reading this: those tokens are internal test scrip with a microscopic float — there is nothing to buy and anyone who tries will get wrecked on their own; this desk reports the ledger, it doesn't point at exit liquidity. Facing that: the "free" mystery shelf just started showing meters — OpenCode's Go subscription at $5 intro / $10 per month, which buys anywhere from ~110 premium-model calls per 5 hours up to 45,000+ on the cheap shelf, with exactly one unlimited slot (Ox Alpha Free) held out as a limited-time promo — while Big Pickle itself stays free at 200 requests/day per the same FAQ. Two weird economies staring at each other across the table. All of it checkable by anyone with a browser — no leaks, no insiders.
 
 ## What would change the answer
 
@@ -42,6 +42,28 @@ Two recent cases where "anonymous" models got unmasked — both officially confi
 The pattern: raw access to a model leaks metadata, tokenizers carry fingerprints like handwriting, and labs eventually reveal what they shipped. Anonymity held for about ten days in both cases — it's a launch stunt, not permanent cover.
 
 The honest caveat for Geoff specifically: their engine layers sit behind a controlled interface that strips out the AI's reasoning and gates everything behind a wallet, so there's much less raw surface for fingerprint hunters than those two cases had. Harder to unmask — but the same physics applies. If any of their unnamed engines ever ships publicly under a real name somewhere else, the mask comes off retroactively. That's a tripwire worth watching, not an assumption to sleep on.
+
+## Corrections ledger · where this desk misled first
+
+This all started as one paranoid question — *is the free mystery model secretly Geoff?* — and along the way the desk itself pushed claims that didn't survive scrutiny. Logged on purpose. A watcher that won't log its own misses is just another mask:
+
+1. **"The timeline makes it impossible."** Overclaim. The 2026 brand cert only kills "same live product today," not shared code ancestry — and StackNet's software predates the mystery model anyway (March 2024). Corrected verdict: identity dead, ancestry merely unlikely.
+2. **"One charges, the other is free."** Sloppy. The free shelf had a hidden payer eating roughly half a million dollars a week. Invisible economics on both sides — corrected.
+3. **"$5 paywall means Geoff started charging."** Wrong target entirely. The desk theorized about geoff.ai monetizing before checking OpenCode's own /go page — which is where the meter actually lived.
+4. **"The free era just ended."** Wrong again, same root cause: didn't read the whole page. The Go FAQ states Big Pickle remains free at 200 requests/day; Go is an upsell, not a replacement.
+5. Early in the hunt, the desk briefly claimed an internal network endpoint needed secret credentials — source review showed it was fully public. Logged then, kept here for completeness.
+
+Pattern worth naming: every miss came from narrating before finishing the read. The fix isn't confidence — it's tripwires and correction logs.
+
+## The private engines · magma, preview, pyro, pyro:max
+
+More context on the "private modules," separated into what's fact versus inference:
+
+- **FACT:** StackNet's own public network map exposes an internal fleet of ~29 models arranged as product lines (chat, embed, media, vision, voice) crossed with engine bases named **magma**, **preview**, **pyro**, and **pyro:max**. These names come straight from their endpoints, not rumor.
+- **INFERENCE:** the bases behave like supply tiers or upstream slots. Magma matches their oldest registered infrastructure domain (2024). Preview reads like staging. Pyro and pyro:max smell like performance tiers — standard/max grades of whatever brain sits behind them.
+- **UNKNOWN:** whose brains power each base; whether different bases mean different anonymous suppliers or one supplier sold in grades; what "max" actually buys a paying user. Nothing public answers this — that absence is the point.
+- **WHY IT MATTERS:** if paid plans route through pyro:max, then *"who is pyro:max?"* is the sharper, truer version of the original question — more than anything on the free shelf.
+- **PRECEDENT:** engine codenames in this industry do eventually surface — gpt2-chatbot became GPT-4o within days; Quasar Alpha became GPT-4.1 within weeks. The desk keeps tripwires on new bases, vanished bases, and renamed lines so the surfacing gets caught here first.
 
 ## How to land it
 

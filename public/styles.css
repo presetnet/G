@@ -3054,3 +3054,96 @@ details[open] > .fold-summary::after {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- proof popups ---- */
+.metric { cursor: pointer; }
+.metric .ico-wrap { pointer-events: none; }
+
+.proof-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(5, 5, 8, 0.74);
+  backdrop-filter: blur(6px);
+}
+
+.proof-overlay[hidden] { display: none; }
+
+.proof-modal {
+  position: relative;
+  width: min(720px, 100%);
+  max-height: 86vh;
+  overflow: auto;
+  padding: 1.3rem 1.5rem;
+  background: var(--bg-panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.proof-close {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.8rem;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.proof-close:hover { color: var(--accent); }
+
+#proofTitle {
+  margin: 0.2rem 0 0.4rem;
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+}
+
+#proofExplain { color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
+
+.proof-sources { margin: 1rem 0; display: grid; gap: 0.35rem; }
+
+.ps-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0.1rem;
+  border-bottom: 1px dashed var(--line);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
+.ps-ok { color: var(--heat-bright); }
+.ps-bad { color: var(--danger); }
+.ps-warn { color: var(--warn); }
+
+.proof-raw,
+.proof-curl {
+  margin: 0.8rem 0 0;
+  padding: 0.75rem 0.9rem;
+  background: rgba(5, 5, 7, 0.85);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--green-bright);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.proof-footrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
