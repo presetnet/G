@@ -2875,3 +2875,105 @@ details[open] > .fold-summary::after {
     grid-template-columns: 1fr;
   }
 }
+
+.pw-specs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.pw-spec {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(11, 11, 14, 0.6);
+  padding: 0.8rem 0.95rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.pw-spec.deprecated {
+  opacity: 0.75;
+  border-style: dashed;
+}
+
+.pw-spec header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.8rem;
+}
+
+.pw-spec strong {
+  font-size: 0.92rem;
+}
+
+.spec-id {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.spec-desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.spec-limits {
+  display: flex;
+  gap: 1rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.spec-limits b {
+  color: var(--green-bright);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.spec-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.spec-badge {
+  padding: 0.14rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.spec-badge.yes {
+  background: var(--accent-soft);
+  border: 1px solid var(--line-strong);
+  color: var(--accent);
+}
+
+.spec-badge.no {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.spec-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.spec-meta .dep {
+  color: var(--danger);
+}
+
+@media (max-width: 720px) {
+  .pw-specs {
+    grid-template-columns: 1fr;
+  }
+}

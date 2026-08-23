@@ -18,6 +18,7 @@ const els = {
   copyBtn: document.getElementById("pwCopyBtn"),
   blurb: document.getElementById("pwBlurb"),
   chips: document.getElementById("pwChips"),
+  specs: document.getElementById("pwSpecs"),
   feed: document.getElementById("pwFeed"),
   feedMeta: document.getElementById("pwFeedMeta"),
 };
@@ -136,6 +137,58 @@ function render(summary, events) {
     els.chips.innerHTML = ghosts.length
       ? ghosts.map((g) => `<span class="chip">${escapeHtml(g)}</span>`).join("")
       : `<span class="chip empty">shelf empty</span>`;
+  }
+
+  if (els.specs) {
+    const specs = Array.isArray(s.ocGhostSpecs) ? s.ocGhostSpecs : [];
+    if (!specs.length) {
+      els.specs.innerHTML = "";
+    } else {
+      const fmtTok = (n) =>
+        Number.isFinite(n)
+          ? n >= 1e6
+            ? `${(n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1)}M`
+            : `${Math.round(n / 1e3)}K`
+          : "?";
+      const badge = (on, yes, no) =>
+        `<span class="spec-badge ${on ? "yes" : "no"}">${on ? yes : no}</span>`;
+      const costLine = (sp) => {
+        if (sp.costInput == null && sp.costOutput == null) return "cost: not listed";
+        const zero = Number(sp.costInput) === 0 && Number(sp.costOutput) === 0;
+        return zero
+          ? "cost: $0 / $0 — subsidy on paper"
+          : `cost: $${sp.costInput} in · $${sp.costOutput} out`;
+      };
+      els.specs.innerHTML = specs
+        .map(
+          (sp) => `
+            <article class="pw-spec${sp.status === "deprecated" ? " deprecated" : ""}">
+              <header>
+                <strong>${escapeHtml(sp.displayName || sp.id)}</strong>
+                <span class="spec-id">${escapeHtml(sp.id)}</span>
+              </header>
+              ${sp.description ? `<p class="spec-desc">${escapeHtml(sp.description)}</p>` : ""}
+              <div class="spec-limits">
+                <span>ctx <b>${fmtTok(sp.contextLimit)}</b></span>
+                <span>in <b>${fmtTok(sp.inputLimit)}</b></span>
+                <span>out <b>${fmtTok(sp.outputLimit)}</b></span>
+              </div>
+              <div class="spec-badges">
+                ${badge(sp.openWeights, "open weights", "closed weights")}
+                ${badge(sp.reasoning, "reasoning", "no reasoning flag")}
+                ${badge(sp.toolCall, "tools", "no tools")}
+              </div>
+              <p class="spec-meta">
+                knowledge ${escapeHtml(sp.knowledge || "?")} · released ${escapeHtml(
+                  sp.releaseDate || "?",
+                )} · ${escapeHtml(costLine(sp))}${
+                  sp.status === "deprecated" ? ' · <b class="dep">DEPRECATED</b>' : ""
+                }
+              </p>
+            </article>`,
+        )
+        .join("");
+    }
   }
 
   const zenEvents = events

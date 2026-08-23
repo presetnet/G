@@ -409,6 +409,31 @@ export async function sniffOpencodeRegistry() {
     (r) => /opencode|zen/i.test(r.provider) || r.ghost,
   );
   const keys = tracked.map((r) => r.key).sort();
+  const ghostSpecs = [];
+  for (const r of tracked) {
+    if (!r.ghost) continue;
+    const raw =
+      providers[r.provider]?.models?.[r.id] ?? {};
+    ghostSpecs.push({
+      key: r.key,
+      id: r.id,
+      displayName: raw.name ?? null,
+      description: raw.description ? String(raw.description).slice(0, 160) : null,
+      reasoning: Boolean(raw.reasoning),
+      toolCall: Boolean(raw.tool_call),
+      structuredOutput: Boolean(raw.structured_output),
+      openWeights: raw.open_weights === true,
+      knowledge: raw.knowledge ?? null,
+      releaseDate: raw.release_date ?? null,
+      lastUpdated: raw.last_updated ?? null,
+      status: raw.status ?? null,
+      contextLimit: Number(raw.limit?.context) || null,
+      inputLimit: Number(raw.limit?.input) || null,
+      outputLimit: Number(raw.limit?.output) || null,
+      costInput: raw.cost?.input ?? null,
+      costOutput: raw.cost?.output ?? null,
+    });
+  }
   return {
     source: "opencode.registry",
     ok: res.ok && rows.length > 0,
@@ -419,6 +444,7 @@ export async function sniffOpencodeRegistry() {
     count: tracked.length,
     keys,
     ghostHits: tracked.filter((r) => r.ghost).map((r) => r.key),
+    ghostSpecs,
     fingerprint: simpleHash(keys.join("|")),
     reason: res.ok
       ? rows.length
@@ -1176,6 +1202,7 @@ export async function runSniff() {
       ocRegistryProviders: bySource["opencode.registry"]?.registryProviders ?? null,
       ocRegistryModels: bySource["opencode.registry"]?.count ?? null,
       ocGhostHits: bySource["opencode.registry"]?.ghostHits ?? [],
+      ocGhostSpecs: bySource["opencode.registry"]?.ghostSpecs ?? [],
       ocRegistryFingerprint: bySource["opencode.registry"]?.fingerprint ?? null,
       ocReleaseTag: bySource["opencode.releases"]?.latestTag ?? null,
       ocReleaseName: bySource["opencode.releases"]?.latestName ?? null,
