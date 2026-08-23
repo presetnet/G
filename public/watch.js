@@ -11,6 +11,12 @@ const els = {
   registryMeta: document.getElementById("pwRegistryMeta"),
   release: document.getElementById("pwRelease"),
   releaseMeta: document.getElementById("pwReleaseMeta"),
+  hpGeoff: document.getElementById("pwHpGeoff"),
+  hpGeoffMeta: document.getElementById("pwHpGeoffMeta"),
+  hpCtx: document.getElementById("pwHpCtx"),
+  hpCtxMeta: document.getElementById("pwHpCtxMeta"),
+  copyBtn: document.getElementById("pwCopyBtn"),
+  blurb: document.getElementById("pwBlurb"),
   chips: document.getElementById("pwChips"),
   feed: document.getElementById("pwFeed"),
   feedMeta: document.getElementById("pwFeedMeta"),
@@ -39,8 +45,19 @@ function relTime(iso) {
   return `${Math.round(hrs / 24)}d ago`;
 }
 
+function fmtCtx(n) {
+  if (!Number.isFinite(n)) return "—";
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B tok`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M tok`;
+  if (n >= 1e3) return `${Math.round(n / 1e3)}K tok`;
+  return `${n} tok`;
+}
+
+let lastPayload = { summary: null, events: [] };
+
 function render(summary, events) {
   const s = summary ?? {};
+  lastPayload = { summary: s, events };
   const ghosts = Array.isArray(s.zenGhostIds) ? s.zenGhostIds : [];
 
   if (els.ghosts) {
@@ -83,6 +100,36 @@ function render(summary, events) {
     ]
       .filter(Boolean)
       .join(" · ") || "github.com/sst/opencode";
+  }
+
+  if (els.hpGeoff) {
+    els.hpGeoff.textContent =
+      s.nodes != null && s.gpus != null ? `${s.nodes} nodes · ${s.gpus} GPUs` : "—";
+  }
+  if (els.hpGeoffMeta) {
+    const vram = Number(s.vramGb);
+    const load = s.averageLoad != null ? `load ${s.averageLoad}` : null;
+    els.hpGeoffMeta.textContent = [
+      vram > 0 ? `${Math.round(vram)} GB VRAM` : null,
+      load,
+      "public /network/summary",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
+  if (els.hpCtx) {
+    els.hpCtx.textContent =
+      s.zenFreeContextTotal != null ? fmtCtx(Number(s.zenFreeContextTotal)) : "n/a";
+  }
+  if (els.hpCtxMeta) {
+    const ghostCtx =
+      s.zenGhostContextTotal != null ? fmtCtx(Number(s.zenGhostContextTotal)) : null;
+    els.hpCtxMeta.textContent = [
+      `${s.zenFreeCount ?? "?"} free slots combined`,
+      ghostCtx ? `ghosts alone: ${ghostCtx}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
   }
 
   if (els.chips) {
@@ -146,6 +193,10 @@ function render(summary, events) {
       ? `${zenEvents.length} zen-lane events on tape`
       : "tape empty";
   }
+
+  if (els.blurb && s.zenModelCount != null) {
+    els.blurb.textContent = buildBlurb();
+  }
 }
 
 async function load() {
@@ -172,5 +223,48 @@ async function load() {
 }
 
 els.refresh?.addEventListener("click", load);
+
+function buildBlurb() {
+  const s = lastPayload.summary ?? {};
+  const ghosts = Array.isArray(s.zenGhostIds) ? s.zenGhostIds : [];
+  const zenMoves = lastPayload.events
+    .filter((e) => e.kind === "zen")
+    .sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0));
+  const lastMove = zenMoves[0];
+  const lines = [
+    `PICKLE WATCH · ${new Date().toISOString().slice(0, 10)}`,
+    "",
+    `Ghosts on shelf: ${ghosts.length}/${5} present`,
+    ghosts.length ? `(${ghosts.join(", ")})` : "(none — shelf emptied)",
+    `Zen catalog: ${s.zenModelCount ?? "?"} models · ${s.zenFreeCount ?? "?"} free`,
+    s.zenFreeContextTotal != null
+      ? `Free-shelf context capacity: ${fmtCtx(Number(s.zenFreeContextTotal))}`
+      : null,
+    `models.dev slice: ${s.ocRegistryModels ?? "?"} entries across ${
+      s.ocRegistryProviders ?? "?"
+    } providers`,
+    s.ocReleaseTag
+      ? `Latest opencode release: ${s.ocReleaseTag}${
+          relTime(s.ocReleaseAt) ? ` (${relTime(s.ocReleaseAt)})` : ""
+        }`
+      : "Latest release: unknown",
+    `Last shelf move: ${lastMove ? `${lastMove.title} · ${relTime(lastMove.at)}` : "nothing on tape yet"}`,
+    `Geoff cluster (for contrast): ${s.nodes ?? "?"} nodes · ${s.gpus ?? "?"} GPUs · opencode publishes no fleet data`,
+    "",
+    "Track it live: aisp.live/watch.html",
+  ];
+  return lines.filter((l) => l !== null).join("\n");
+}
+
+els.copyBtn?.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(buildBlurb());
+    els.copyBtn.textContent = "Copied";
+    setTimeout(() => (els.copyBtn.textContent = "Copy"), 1500);
+  } catch {
+    els.blurb.textContent = buildBlurb();
+  }
+});
+
 load();
 setInterval(load, 60_000);

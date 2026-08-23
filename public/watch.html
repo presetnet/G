@@ -121,6 +121,135 @@
         <div id="pwFeed" class="pw-feed"></div>
       </section>
 
+      <p class="deck-label"><span>◈</span> Horsepower · who shows their fleet?</p>
+      <section class="metrics" aria-label="Horsepower comparison">
+        <article class="metric" style="--i:0">
+          <div class="metric-top">
+            <span class="ico-wrap" data-icon="cpu"></span>
+            <span class="k">Geoff cluster</span>
+          </div>
+          <strong id="pwHpGeoff">—</strong>
+          <em id="pwHpGeoffMeta">self-published network map</em>
+        </article>
+        <article class="metric" style="--i:1">
+          <div class="metric-top">
+            <span class="ico-wrap" data-icon="server"></span>
+            <span class="k">opencode fleet</span>
+          </div>
+          <strong>not published</strong>
+          <em>no public map exists — the asymmetry is the point</em>
+        </article>
+        <article class="metric" style="--i:2">
+          <div class="metric-top">
+            <span class="ico-wrap" data-icon="memory"></span>
+            <span class="k">Free-shelf context</span>
+          </div>
+          <strong id="pwHpCtx">—</strong>
+          <em id="pwHpCtxMeta">paper capacity the subsidy buys</em>
+        </article>
+        <article class="metric" style="--i:3">
+          <div class="metric-top">
+            <span class="ico-wrap" data-icon="activity"></span>
+            <span class="k">Ghost demand receipt</span>
+          </div>
+          <strong>~67B tok/day</strong>
+          <a
+            class="pw-hp-link"
+            href="https://prompt.16x.engineer/blog/quasar-alpha-openai-stealth-model"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Quasar Alpha peak ≈ 780k tok/s ↗</a
+          >
+        </article>
+      </section>
+
+      <section class="panel pw-alarms" aria-label="Alarm list">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="ico-wrap sm" data-icon="bolt"></span>
+            <h2>What trips an alarm</h2>
+          </div>
+        </div>
+        <ul class="pw-alarm-list">
+          <li><strong>A ghost appears</strong> — someone signed a new anonymous supply deal. New brain on the free shelf.</li>
+          <li><strong>A ghost vanishes</strong> — a supply deal died or went paid. Watch which ghosts survive the cull.</li>
+          <li><strong>The registry reshuffles</strong> — models.dev is opencode's public catalog for every tool; silent upstream swaps land here first.</li>
+          <li><strong>A release ships</strong> — version heartbeats show the desk is alive and sometimes admit model changes in plain text.</li>
+        </ul>
+      </section>
+
+      <section class="panel" aria-label="Unmasking precedent">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="ico-wrap sm" data-icon="layers"></span>
+            <h2>Masks come off · twice in 12 months</h2>
+          </div>
+        </div>
+        <div class="pw-links two">
+          <a
+            class="pw-linkcard"
+            href="https://arstechnica.com/information-technology/2024/05/before-launching-gpt-4o-broke-records-on-chatbot-leaderboard-under-a-secret-name/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <span class="lc-kicker">Case 01 · April–May 2024</span>
+            <strong>gpt2-chatbot → GPT-4o</strong>
+            <span class="lc-body">Mystery model topped the public arena under a joke name. A leaked error message exposed OpenAI's own infrastructure. Days later OpenAI confirmed it: GPT-4o in disguise, pre-launch.</span>
+            <span class="lc-src">Ars Technica ↗</span>
+          </a>
+          <a
+            class="pw-linkcard"
+            href="https://openrouter.ai/blog/announcements/quasar-alpha-and-optimus-alpha-reveal/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <span class="lc-kicker">Case 02 · April 2025</span>
+            <strong>Quasar / Optimus Alpha → GPT-4.1</strong>
+            <span class="lc-body">Two cloaked free models de-gloved in days by pure forensics: OpenAI-format IDs in responses, the exact known tokenizer bug on Chinese characters, matching API quirks. Router confirmed both.</span>
+            <span class="lc-src">OpenRouter blog ↗</span>
+          </a>
+        </div>
+        <p class="pw-fine">Anonymity held about ten days in both cases. Raw access leaks metadata; tokenizers are fingerprints; labs eventually want credit. Geoff's layers hide more surface (stripped reasoning, wallet gate) — harder to unmask, same physics.</p>
+      </section>
+
+      <section class="panel" aria-label="Verify yourself">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="ico-wrap sm" data-icon="book"></span>
+            <h2>Verify it yourself · public only</h2>
+          </div>
+        </div>
+        <div class="pw-links">
+          <a class="pw-linkcard sm" href="https://opencode.ai/zen/" target="_blank" rel="noopener noreferrer">
+            <strong>Zen catalog</strong>
+            <span class="lc-body">The shelf itself — every model opencode sells, ghosts included.</span>
+          </a>
+          <a class="pw-linkcard sm" href="https://models.dev/" target="_blank" rel="noopener noreferrer">
+            <strong>models.dev</strong>
+            <span class="lc-body">The public registry tools read from — where upstream swaps surface.</span>
+          </a>
+          <a class="pw-linkcard sm" href="https://github.com/sst/opencode/releases" target="_blank" rel="noopener noreferrer">
+            <strong>GitHub releases</strong>
+            <span class="lc-body">Version heartbeat of the maker.</span>
+          </a>
+          <a class="pw-linkcard sm" href="https://github.com/presetnet/G" target="_blank" rel="noopener noreferrer">
+            <strong>This thermometer</strong>
+            <span class="lc-body">Full source. Every claim reproducible with curl — no keys, no leaks.</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="panel pw-share" aria-label="Share blurb">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="ico-wrap sm" data-icon="spark"></span>
+            <h2>Copy for the group chat</h2>
+          </div>
+          <button id="pwCopyBtn" type="button" class="btn">Copy</button>
+        </div>
+        <pre id="pwBlurb" class="pw-blurb">loading live numbers…</pre>
+      </section>
+
       <p class="pw-foot">
         Public endpoints only: opencode.ai/zen catalog · models.dev registry · GitHub releases.
         No keys, no probes of the models themselves. Shelf, not skull.

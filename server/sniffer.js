@@ -343,6 +343,17 @@ export async function sniffOpencodeZen() {
   const res = await fetchJson(OPENCODE_ZEN_URL);
   const rows = Array.isArray(res.json?.data) ? res.json.data : [];
   const ids = rows.map((m) => String(m.id || "")).filter(Boolean).sort();
+  const contexts = new Map();
+  for (const m of rows) {
+    const id = String(m.id || "");
+    if (!id) continue;
+    const raw =
+      m.context_length ?? m.top_provider?.context_length ?? m.limit?.context ?? null;
+    const n = Number(raw);
+    contexts.set(id, Number.isFinite(n) && n > 0 ? n : null);
+  }
+  const ctxSum = (list) =>
+    list.reduce((acc, id) => acc + (contexts.get(id) || 0), 0);
   const freeIds = ids.filter((id) => /(^|[-_])free$|free[-_]/.test(id) || id.endsWith("free"));
   const ghosts = ids.filter((id) => ZEN_GHOST_WATCHLIST.includes(id));
   return {
@@ -356,6 +367,8 @@ export async function sniffOpencodeZen() {
     freeIds,
     ghostIds: ghosts,
     missingGhosts: ZEN_GHOST_WATCHLIST.filter((g) => !ids.includes(g)),
+    freeContextTotal: ctxSum(freeIds) || null,
+    ghostContextTotal: ctxSum(ghosts) || null,
     fingerprint: simpleHash(ids.join("|")),
     reason: res.ok ? (ids.length ? null : "Zen catalog empty") : `HTTP ${res.status || 0} from zen`,
   };
@@ -1155,6 +1168,9 @@ export async function runSniff() {
       zenModelCount: bySource["opencode.zen"]?.count ?? null,
       zenFreeCount: bySource["opencode.zen"]?.freeCount ?? null,
       zenGhostIds: bySource["opencode.zen"]?.ghostIds ?? [],
+      zenFreeIds: bySource["opencode.zen"]?.freeIds ?? [],
+      zenFreeContextTotal: bySource["opencode.zen"]?.freeContextTotal ?? null,
+      zenGhostContextTotal: bySource["opencode.zen"]?.ghostContextTotal ?? null,
       zenMissingGhosts: bySource["opencode.zen"]?.missingGhosts ?? [],
       zenFingerprint: bySource["opencode.zen"]?.fingerprint ?? null,
       ocRegistryProviders: bySource["opencode.registry"]?.registryProviders ?? null,

@@ -2781,3 +2781,97 @@ details[open] > .fold-summary::after {
   font-size: 0.8rem;
   line-height: 1.5;
 }
+
+.pw-hp-link {
+  color: var(--cyan);
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.pw-hp-link:hover {
+  text-decoration: underline;
+}
+
+.pw-alarm-list {
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.pw-alarm-list li {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.pw-alarm-list strong {
+  color: var(--ink);
+}
+
+.pw-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.pw-links .pw-linkcard {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.95rem 1.05rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.pw-links .pw-linkcard:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.pw-linkcard strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.lc-kicker {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lc-body {
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.lc-src {
+  color: var(--cyan);
+  font-size: 0.78rem;
+}
+
+.pw-share pre {
+  margin: 0.6rem 0 0;
+  padding: 0.9rem 1rem;
+  background: rgba(11, 11, 14, 0.85);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--green-bright);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+@media (max-width: 720px) {
+  .pw-links {
+    grid-template-columns: 1fr;
+  }
+}
