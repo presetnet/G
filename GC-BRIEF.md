@@ -1,27 +1,36 @@
-# GC-BRIEF — paste this whole file into ChatGPT
+# GC-BRIEF — paste into ChatGPT
 
-**ROLE:** You're briefing a crypto/AI group chat ("the GC") on a finished investigation. Tone: confident, receipts-first, zero hedging, light humor allowed. Short punchy paragraphs. No corporate voice, no "further research needed" filler.
+**ROLE:** Tell a crypto/AI group chat what's really going on with Geoff and the mystery models. Plain English, like a friend explaining it. No bragging about research tools, no "our tracker caught this" energy, no receipt-flexing. Just the story, straight.
 
-**THE QUESTION:** Is opencode's free mystery model `big-pickle` secretly Geoff/StackNet (Pauly0x + Hwonder) wearing a mask?
+---
 
-**THE VERDICT: NO — killed four ways, all public data, all reproducible:**
-1. StackNet's public catalog sells exactly **5 models**. No pickle on the menu.
-2. StackNet's **internal 29-model fleet** leaked through a public endpoint — pure taxonomy (5 product lines × 3 engine tiers). No pickle there either. Dead at both layers.
-3. Live traffic tracing: big-pickle sessions only ever touch `opencode.ai`. Zero packets to geoff or magma-rpc.
-4. Brand timeline: big-pickle existed October 2025; the geoff.ai launch brand's first TLS cert is June 2026. (Kills "same live product" — not "shared code ancestry," see fork defense below.)
+## The question everyone keeps dancing around
 
-**FORK DEFENSE (in case someone yells "they cloned it, backdated everything"):** Identity ≠ ancestry. StackNet-the-software predates big-pickle anyway (magma-rpc.com, March 2024 — a 19-month quiet build, the opposite of a psyop launch). And clones diverge on visible behavior: StackNet strips `<think>` reasoning client-side; big-pickle exposes full native thinking. One wallet-gates every call ($692.5M booked / $0 paid); the other is free and keyless. Forking also gets you nothing — the value is upstream model contracts + GPU fleet + wallet rails, which don't survive `git clone`. What would flip the verdict: pickle traffic touching magma/geoff IPs, matching TLS fingerprints, or identical strip-think API quirks. None seen across hundreds of traced sessions.
+Is the free mystery model everyone uses (big-pickle) secretly Geoff's hidden weapon? Or flipped around — is Geoff secretly running on the same kind of anonymous model we're all already chatting with?
 
-**WHAT STACKNET ACTUALLY IS:** A relabeling aggregator — proven by their own code. Anonymous upstream models branded `stacknet-layer`, `<think>` reasoning stripped client-side before users see it, wallet-gated inference. And the lore checks out: `magma-rpc.com` registered **March 2024** — the "2.5 years of quiet dev" story is real.
+## The short answer
 
-**THE NUMBERS RIGHT NOW** *(live public endpoints, chain-verified)*:
-- **$692,526,478** of "metaproof paperwork" booked · **$0 paid**
-- Treasury: **0 SOL, ZERO lifetime signatures** — confirmed straight from Solana RPC. Wallet never touched. Their entire economy is unwritten.
-- Cluster: 8 nodes · 7 GPUs · 871 GB VRAM · currently idle
-- Server: `v3.14.24`
+No direct link — but the real answer is stranger than the conspiracy, so lead with this:
 
-**PLOT TWIST:** opencode's own free tier hides anonymous ghosts too (`big-pickle`, `hy3-free`, `laguna-s-2.1-free`, `x-preview-f-free`). Anonymity is the industry pattern — not a Geoff fingerprint.
+**Nobody knows whose brains are inside any of these things. That's not a gap in the research. That's the business model.**
 
-**WHAT WE'RE WATCHING NEXT:** A fan-built dashboard (**aisp.live** — public-data-only, passed an independent audit 8-of-9 exact match) now has tripwires on: first metaproof payment, first SOL entering the treasury, any new engine tier joining the fleet, and any ghost model appearing or vanishing. The moment their economy goes live, we call it in real time.
+## What's actually true
 
-**DELIVERY:** Lead with the verdict in one line. Then the four kills. Then the money number ($692.5M / $0 / empty wallet). Close with what's being watched. If challenged: every claim reproduces with plain `curl` — no keys, no leaks, no LARP.
+- Geoff/StackNet (Pauly0x + Hwonder's project) does not make its own AI. Their own code admits it: they take anonymous models from upstream suppliers and rename them to their own brand layers ("magma", "pyro"). When you talk to Geoff, you're talking through a mask.
+- The free model shelf (where big-pickle lives) does the same thing from the other direction. Most of that shelf openly admits it relabels known models — DeepSeek, NVIDIA's Nemotron, Kimi, Qwen. A few, including big-pickle, stay completely silent about who made them.
+- So both brands are wearing masks. The paranoid question writes itself: same face under both?
+- People checked. Hard. The traffic between the two systems never touches. They behave in opposite ways — Geoff hides the AI's reasoning before showing it to you; the mystery model shows you every thought. One charges crypto for everything, the other is free. Their timelines don't even overlap (Geoff's consumer site showed up mid-2026; the mystery model existed by late 2025).
+- Even the "one cloned the other" theory dies fast: cloning gets you code, but the valuable part — the supply deals that put real brains behind the labels — doesn't survive a copy-paste.
+- And the "all the dates are faked" angle runs backwards: Geoff's infrastructure was quietly registered way back in early 2024, long before there was anything to cover up. That's a slow, boring build — not an operation.
+
+## The receipts (only if someone demands numbers)
+
+Geoff's public ledger claims $692.5 million in "metaproof paperwork" booked. Amount actually paid out: zero. Their treasury wallet on Solana: empty, and it has never received a single transaction in its existence — confirmed on-chain, not from their website. Their GPU cluster mostly sits idle. All of it checkable by anyone with a browser. No leaks, no insiders, nothing sketchy done to learn it.
+
+## What would change the answer
+
+If anyone ever catches the mystery model's traffic touching Geoff's servers, or finds both systems sharing identical weird quirks, or sees Geoff's internal model names pop up somewhere they shouldn't — then yes, same beast, case closed. Until then: two separate shops running the same magic trick, and the magician won't show his face in either one.
+
+## How to land it
+
+Don't end on "case closed." End on the elephant: the interesting thing isn't whether these two specific masks hide the same face — it's that an entire industry learned it can sell AI without telling anyone what's under the hood. And it works because almost nobody asks.
