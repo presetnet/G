@@ -470,17 +470,43 @@ export async function sniffOpencodeRegistry() {
   };
 }
 
+function parseGoLadder(flatText, names) {
+  const tokens = flatText.split(/\s+/);
+  const out = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const t = tokens[i];
+    const isQuota = t === "∞" || /^[\d,]+$/.test(t);
+    if (!isQuota) continue;
+    for (const n of names) {
+      if (out.some((row) => row.name === n)) continue;
+      const words = n.split(/\s+/);
+      if (words.every((w, j) => tokens[i + 1 + j] === w)) {
+        out.push({ name: n, quota: t === "∞" ? "unlimited" : Number(t.replaceAll(",", "")) });
+        i += words.length;
+        break;
+      }
+    }
+  }
+  return names.map((n) => out.find((row) => row.name === n) ?? { name: n, quota: null });
+}
+
 export async function sniffOpencodeGo() {
   const res = await fetchJson(OPENCODE_GO_URL);
   const html = res.text || "";
+  const flat = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ");
   const introMatch = html.match(/\$(\d+)\s*(?:for your first month|first month)/i);
   const monthlyMatches = [...html.matchAll(/\$(\d+)\s*\/\s*month/g)].map((m) => Number(m[1]));
-  const lineup = GO_LINEUP_NAMES.filter((n) => html.includes(n));
+  const ladder = parseGoLadder(flat, GO_LINEUP_NAMES);
+  const lineup = ladder.filter((r) => r.quota != null).map((r) => r.name);
   const bits = [
     introMatch?.[1] ?? "-",
     monthlyMatches[0] != null ? String(monthlyMatches[0]) : "-",
     String(lineup.length),
-    lineup.join(","),
+    ladder.map((r) => `${r.name}:${r.quota ?? "?"}`).join(","),
     html.includes("available on Go for a limited time") ? "promo" : "nopromo",
   ];
   return {
@@ -492,8 +518,12 @@ export async function sniffOpencodeGo() {
     priceMonthlyUsd: monthlyMatches[0] ?? null,
     lineupCount: lineup.length,
     lineupNames: lineup,
+    goLadder: ladder,
     oxAlphaPromo: html.includes("available on Go for a limited time"),
     gptLunaListed: html.includes("GPT 5.6 Luna"),
+    tierTabs: [
+      ...new Set([...flat.matchAll(/(\d+)x(?=\s)/g)].map((m) => Number(m[1]))),
+    ].filter((v) => [1, 10, 25, 50, 100, 250].includes(v)),
     fingerprint: simpleHash(bits.join("|")),
     reason: res.ok ? null : `HTTP ${res.status || 0} from opencode.ai/go`,
   };
@@ -1352,6 +1382,8 @@ export async function runSniff() {
       goOxAlphaPromo: Boolean(bySource["opencode.go"]?.oxAlphaPromo),
       goGptLunaListed: Boolean(bySource["opencode.go"]?.gptLunaListed),
       goFingerprint: bySource["opencode.go"]?.fingerprint ?? null,
+      goLadder: bySource["opencode.go"]?.goLadder ?? [],
+      goTierTabs: bySource["opencode.go"]?.tierTabs ?? [],
       catalogModels: bySource["geoff.catalog"]?.models?.length ?? null,
       catalogSkipped: Boolean(bySource["geoff.catalog"]?.skipped),
       catalogSkipReason: bySource["geoff.catalog"]?.reason ?? null,

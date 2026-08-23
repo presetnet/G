@@ -17,6 +17,11 @@ const els = {
   hpCtxMeta: document.getElementById("pwHpCtxMeta"),
   chips: document.getElementById("pwChips"),
   specs: document.getElementById("pwSpecs"),
+  goIntro: document.getElementById("pwGoIntro"),
+  goMonthly: document.getElementById("pwGoMonthly"),
+  goTiers: document.getElementById("pwGoTiers"),
+  goMeta: document.getElementById("pwGoMeta"),
+  goLadderBody: document.getElementById("pwGoLadderBody"),
   feed: document.getElementById("pwFeed"),
   feedMeta: document.getElementById("pwFeedMeta"),
 };
@@ -129,6 +134,53 @@ function render(summary, events) {
     ]
       .filter(Boolean)
       .join(" · ");
+  }
+
+  if (els.goIntro) {
+    els.goIntro.textContent =
+      s.goPriceIntroUsd != null ? `$${s.goPriceIntroUsd}` : "—";
+  }
+  if (els.goMonthly) {
+    els.goMonthly.textContent =
+      s.goPriceMonthlyUsd != null ? `$${s.goPriceMonthlyUsd}/mo` : "—";
+  }
+  if (els.goTiers) {
+    const tiers = Array.isArray(s.goTierTabs) ? s.goTierTabs : [];
+    els.goTiers.textContent = tiers.length
+      ? ` · tier multipliers seen: ${tiers.map((t) => `${t}×`).join(" / ")}`
+      : "";
+  }
+  if (els.goLadderBody) {
+    const ladder = Array.isArray(s.goLadder) ? s.goLadder : [];
+    const notes = {
+      Hy3: "8× usage badge",
+      "Muse Spark 1.2 Contributor": "Meta region lock",
+      "Ox Alpha Free":
+        s.goOxAlphaPromo ? "limited-time promo · the ∞ slot" : "promo ended?",
+      "GPT 5.6 Luna": "OpenAI-named slot in an open-source pitch",
+    };
+    if (!ladder.length) {
+      els.goLadderBody.innerHTML =
+        '<tr><td colspan="3" class="go-empty">ladder not parsed yet</td></tr>';
+    } else {
+      els.goLadderBody.innerHTML = ladder
+        .map((row) => {
+          const quota =
+            row.quota === "unlimited"
+              ? "∞"
+              : row.quota != null
+                ? Number(row.quota).toLocaleString("en-US")
+                : "?";
+          return `<tr><td>${escapeHtml(row.name)}</td><td class="go-num">${escapeHtml(quota)}</td><td class="go-note">${escapeHtml(notes[row.name] || "")}</td></tr>`;
+        })
+        .join("");
+    }
+  }
+  if (els.goMeta) {
+    els.goMeta.textContent =
+      s.goFingerprint != null
+        ? `parsed from live page · fingerprint ${s.goFingerprint}`
+        : "reading opencode.ai/go…";
   }
 
   if (els.chips) {
