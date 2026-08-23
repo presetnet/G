@@ -3147,3 +3147,8 @@ details[open] > .fold-summary::after {
   color: var(--muted);
   font-size: 0.8rem;
 }
+
+/* ---- bottom-half density pass ---- */
+.deck-label { margin: 1.6rem 0 0.7rem; }
+.feed-hint { margin: 0.25rem 0 0.5rem; font-size: 0.74rem; opacity: 0.75; }
+.signal-deck .panel, .price-panel { padding-bottom: 1rem; }

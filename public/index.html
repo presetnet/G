@@ -246,7 +246,7 @@
         </section>
       </section>
 
-      <p class="deck-label"><span>04</span> Heat · bars + cubes prove the story</p>
+      <p class="deck-label"><span>04</span> Heat · proof in cubes</p>
       <div class="signal-deck">
         <section class="panel pump-panel" aria-label="72 hour pump tape">
           <div class="panel-head">
@@ -254,16 +254,16 @@
               <span class="ico-wrap sm" data-icon="activity"></span>
               <h2>72h pump tape</h2>
             </div>
-            <p id="pumpMeta">Building history from live sniffs…</p>
+            <p id="pumpMeta">building…</p>
           </div>
-          <p class="feed-hint">Heat = ranked public diffs · cyan dots = sampled in_flight · no fake volume</p>
+          <p class="feed-hint">heat = ranked diffs · cyan = in_flight sample</p>
           <div id="pumpStats" class="pump-stats"></div>
           <div class="pump-chart-wrap">
             <svg id="pumpChart" class="pump-chart" viewBox="0 0 720 140" role="img" aria-label="72 hour activity chart"></svg>
             <div class="pump-legend">
-              <span><i class="lg-heat"></i> update heat</span>
-              <span><i class="lg-agent"></i> in_flight sample</span>
-              <span><i class="lg-crazy"></i> crazy / spike</span>
+              <span><i class="lg-heat"></i> heat</span>
+              <span><i class="lg-agent"></i> in-flight</span>
+              <span><i class="lg-crazy"></i> spike</span>
             </div>
           </div>
           <div class="pump-axis">
@@ -276,11 +276,11 @@
           <div class="panel-head">
             <div class="panel-title">
               <span class="ico-wrap sm" data-icon="activity"></span>
-              <h2>2-month change map</h2>
+              <h2>2-month map</h2>
             </div>
-            <p id="heatMeta">Collecting daily cubes…</p>
+            <p id="heatMeta">collecting…</p>
           </div>
-          <p class="feed-hint">One cell per day · darker = more ranked public diffs</p>
+          <p class="feed-hint">one cell per day · darker = busier</p>
           <div class="heat-shell">
             <div id="heatMonths" class="heat-months" aria-hidden="true"></div>
             <div class="heat-body">
@@ -308,11 +308,11 @@
         <summary class="panel-head fold-summary">
           <div class="panel-title">
             <span class="ico-wrap sm" data-icon="bolt"></span>
-            <h2 id="hpHeadline">On-demand horsepower</h2>
+            <h2 id="hpHeadline">Horsepower</h2>
           </div>
-          <p id="hpMeta">Public Stacknet map · tap to expand</p>
+          <p id="hpMeta">public map · tap</p>
         </summary>
-        <p id="hpSentence" class="hp-sentence">Live compute, brains, power lanes, and widgets — plus what isn’t shared.</p>
+        <p id="hpSentence" class="hp-sentence">Compute, brains, lanes, widgets — and what they don't share.</p>
         <div id="hpScore" class="hp-score"></div>
 
         <div class="hp-layer">
@@ -341,14 +341,14 @@
         </div>
       </details>
 
-      <p class="deck-label"><span>05</span> Value · Token Plan vs the field</p>
+      <p class="deck-label"><span>05</span> Value · Token Plan vs field</p>
       <section class="panel price-panel price-dense" aria-label="Token plan value sheet">
         <div class="panel-head">
           <div class="panel-title">
             <span class="ico-wrap sm" data-icon="tag"></span>
             <h2 id="priceHeadline">Geoff Token Plan</h2>
           </div>
-          <p id="priceMeta">Waiting for docs.geoff.ai…</p>
+          <p id="priceMeta">waiting on docs…</p>
         </div>
         <p id="priceSentence" class="price-sentence">One pool. Every modality. Public numbers.</p>
         <div id="priceWins" class="price-wins"></div>
@@ -361,7 +361,7 @@
         <p id="priceSource" class="price-source"></p>
       </section>
 
-      <p class="deck-label"><span>06</span> Feed · ranked public diffs only</p>
+      <p class="deck-label"><span>06</span> Feed · ranked diffs only</p>
       <div class="board">
         <section class="panel feed-panel">
           <div class="panel-head">
@@ -369,9 +369,9 @@
               <span class="ico-wrap sm" data-icon="activity"></span>
               <h2>What’s changing</h2>
             </div>
-            <p id="tempMeta">Waiting…</p>
+            <p id="tempMeta">waiting…</p>
           </div>
-          <p class="feed-hint">20 newest surface diffs (deploy / models / docs / explore / lanes / health) · queue/in-flight stays below</p>
+          <p class="feed-hint">20 newest surface diffs · queue stays below</p>
           <div id="feed" class="feed"></div>
 
           <div class="queue-strip">
@@ -380,9 +380,8 @@
                 <span class="ico-wrap sm" data-icon="bolt"></span>
                 <h3>Queue telemetry</h3>
               </div>
-              <p id="queueMeta">in-flight / load · not counted as updates</p>
+              <p id="queueMeta">in-flight / load · not updates</p>
             </div>
-            <p class="feed-hint">Separate dataset from “What’s changing” — public counters only</p>
             <div id="queueFeed" class="feed queue-feed"></div>
           </div>
         </section>
