@@ -2639,3 +2639,145 @@ details[open] > .fold-summary::after {
   .panel-head p { text-align: left; }
   .story { grid-template-columns: 1fr; }
 }
+
+/* ---- mode switch + pickle watch page ---- */
+.mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(24, 24, 27, 0.7);
+}
+
+.mode-btn {
+  padding: 0.32rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.mode-btn:hover {
+  color: var(--ink);
+}
+
+.mode-btn.active {
+  background: var(--accent-soft);
+  border: 1px solid var(--line-strong);
+  color: var(--accent);
+}
+
+.pw-mark {
+  color: var(--cyan);
+}
+
+.pw-shell {
+  display: grid;
+  gap: 1.4rem;
+}
+
+.pw-metrics {
+  margin-top: 0.4rem;
+}
+
+.pw-shelf-fold {
+  padding: 1rem 1.2rem;
+}
+
+.pw-roster-hint {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.pw-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0.9rem;
+}
+
+.chip {
+  padding: 0.42rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+}
+
+.chip.empty {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+}
+
+.pw-fine {
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.pw-feed-panel {
+  padding: 1rem 1.2rem 1.3rem;
+}
+
+.pw-feed {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+}
+
+.pw-item {
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.95rem;
+  background: var(--bg-elevated);
+}
+
+.pw-item header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.pw-item strong {
+  font-size: 0.92rem;
+}
+
+.pw-item time {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.pw-item p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.pw-item.rank-spike { border-left-color: var(--danger); }
+.pw-item.rank-move { border-left-color: var(--accent); }
+.pw-item.rank-note { border-left-color: var(--line-strong); }
+
+.pw-empty {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.pw-foot {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}

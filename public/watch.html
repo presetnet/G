@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pickle Watch · tracking opencode's ghost shelf</title>
+    <meta
+      name="description"
+      content="The thermometer turned around. Public-data-only watch on opencode's model shelf: ghosts appearing and vanishing, registry moves, release heartbeats."
+    />
+    <meta name="theme-color" content="#0b0b0e" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="pw-body">
+    <div class="atmosphere" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <div class="brand-lockup">
+        <div class="brand-mark pw-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3c-4 4-6 7-6 10a6 6 0 0 0 12 0c0-3-2-6-6-10z"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand">Pickle <span class="brand-full">Watch</span><span class="brand-short">Watch</span></h1>
+          <p class="tag">the thermometer, turned around</p>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <nav class="mode-switch" aria-label="Tracking target">
+          <a class="mode-btn" href="/">Geoff</a>
+          <a class="mode-btn active" href="/watch.html" aria-current="page">Pickle</a>
+        </nav>
+        <span id="pwConnection" class="pill" aria-live="polite">connecting</span>
+        <button id="pwRefresh" type="button" class="btn" title="Refresh">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 12a8 8 0 1 1-2.2-5.4"/><path d="M20 4v5h-5"/>
+          </svg>
+          <span class="btn-label-full">Refresh</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="shell pw-shell">
+      <section id="pwStory" class="story tone-muted" aria-live="polite">
+        <div class="story-icon" data-icon="pulse"></div>
+        <div class="story-copy">
+          <p class="story-kicker">Shelf status</p>
+          <h2 id="pwHeadline">Waiting for first sniff</h2>
+          <p id="pwSentence">Public catalog data only. We track the menu — we never taste the kitchen.</p>
+        </div>
+      </section>
+
+      <section class="metrics pw-metrics" aria-label="Ghost shelf vitals">
+        <article class="metric" style="--i:0">
+          <div class="metric-top">
+            <span class="ico-wrap" data-icon="spark"></span>
+            <span class="k">Ghosts on shelf</span>
+          </div>
+          <strong id="pwGhosts">—</strong>
+          <em id="pwGhostMeta">anonymous free-tier models</em>
+        </article>
+        <article class="metric" style="--i:1">
+          <div class="metric-top">
+            <span class="ico-wrap" data-icon="brain"></span>
+            <span class="k">Zen catalog</span>
+          </div>
+          <strong id="pwZenCount">—</strong>
+          <em id="pwZenMeta">opencode.ai/zen models</em>
+        </article>
+        <article class="metric" style="--i:2">
+          <div class="metric-top">
+            <span class="ico-wrap" data-icon="blocks"></span>
+            <span class="k">models.dev slice</span>
+          </div>
+          <strong id="pwRegistry">—</strong>
+          <em id="pwRegistryMeta">tracked entries</em>
+        </article>
+        <article class="metric" style="--i:3">
+          <div class="metric-top">
+            <span class="ico-wrap" data-icon="rocket"></span>
+            <span class="k">Latest release</span>
+          </div>
+          <strong id="pwRelease">—</strong>
+          <em id="pwReleaseMeta">github.com/sst/opencode</em>
+        </article>
+      </section>
+
+      <details class="panel fold pw-shelf-fold" open aria-label="Ghost shelf roster">
+        <summary class="fold-summary">
+          <div class="panel-title">
+            <span class="ico-wrap sm" data-icon="spark"></span>
+            <h2>Ghost shelf roster</h2>
+          </div>
+          <p class="pw-roster-hint">the anonymous ones · tap to collapse</p>
+        </summary>
+        <div id="pwChips" class="pw-chips"></div>
+        <p class="pw-fine">
+          Half this shelf openly relabels known models (DeepSeek, Nemotron, Kimi, Qwen). The chips above
+          go further: no upstream name at all. When one appears or vanishes, somebody somewhere signed
+          or killed a supply deal — that's the shadow ledger.
+        </p>
+      </details>
+
+      <p class="deck-label"><span>◈</span> Shelf tape · every public move</p>
+      <section class="panel pw-feed-panel" aria-label="Shelf event tape">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="ico-wrap sm" data-icon="activity"></span>
+            <h2>What moved</h2>
+          </div>
+          <p id="pwFeedMeta">loading…</p>
+        </div>
+        <div id="pwFeed" class="pw-feed"></div>
+      </section>
+
+      <p class="pw-foot">
+        Public endpoints only: opencode.ai/zen catalog · models.dev registry · GitHub releases.
+        No keys, no probes of the models themselves. Shelf, not skull.
+      </p>
+    </main>
+
+    <script type="module" src="/watch.js"></script>
+  </body>
+</html>

@@ -801,6 +801,60 @@ export function translate(previous, current) {
     }
   }
 
+  // opencode release heartbeat — the maker's own version pulse.
+  const prevRel = prev["opencode.releases"];
+  const currRel = curr["opencode.releases"];
+  if (prevRel?.ok && currRel?.ok && prevRel.latestTag !== currRel.latestTag) {
+    events.push(
+      event({
+        kind: "zen",
+        rank: "move",
+        title: "opencode shipped a new release",
+        summary: [
+          `${prevRel.latestTag || "?"} → ${currRel.latestTag}`,
+          currRel.latestName || null,
+          currRel.latestAt ? new Date(currRel.latestAt).toISOString().slice(0, 10) : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        details: { from: prevRel.latestTag, to: currRel.latestTag, at: currRel.latestAt },
+      }),
+    );
+  }
+
+  // models.dev registry — the public catalog of opencode's shelf for every tool.
+  const prevReg = prev["opencode.registry"];
+  const currReg = curr["opencode.registry"];
+  if (prevReg?.ok && currReg?.ok) {
+    const regDiff = listDiff(prevReg.keys || [], currReg.keys || []);
+    const flap = isScrapeFlap(prevReg.keys, currReg.keys, regDiff);
+    if (!flap && regDiff.changed) {
+      events.push(
+        event({
+          kind: "zen",
+          rank: regDiff.added.length && !regDiff.removed.length ? "move" : "note",
+          title: "models.dev shelf moved",
+          summary: [
+            regDiff.added.length
+              ? `+${[regDiff.added.slice(0, 4).join(", "), regDiff.added.length > 4 ? `+${regDiff.added.length - 4} more` : ""].filter(Boolean).join(" ")}`
+              : null,
+            regDiff.removed.length
+              ? `-${[regDiff.removed.slice(0, 4).join(", "), regDiff.removed.length > 4 ? `+${regDiff.removed.length - 4} more` : ""].filter(Boolean).join(" ")}`
+              : null,
+            `${currReg.count} tracked entries`,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          details: {
+            diff: regDiff,
+            ghostHits: currReg.ghostHits ?? [],
+            fingerprint: { from: prevReg.fingerprint, to: currReg.fingerprint },
+          },
+        }),
+      );
+    }
+  }
+
   const nodesPrev = prev["stacknet.network"]?.availableNodes;
   const nodesCurr = curr["stacknet.network"]?.availableNodes;
   if (isNumber(nodesPrev) && isNumber(nodesCurr) && nodesPrev !== nodesCurr) {

@@ -361,6 +361,108 @@ export async function sniffOpencodeZen() {
   };
 }
 
+const OPENCODE_REGISTRY_URL = "https://models.dev/api.json";
+const OPENCODE_RELEASES_URL =
+  "https://api.github.com/repos/sst/opencode/releases?per_page=5";
+const RELEASES_CACHE_TTL_MS = 15 * 60 * 1000;
+let releasesCache = { at: 0, value: null };
+
+export async function sniffOpencodeRegistry() {
+  const res = await fetchJson(OPENCODE_REGISTRY_URL);
+  const providers =
+    res.json && typeof res.json === "object" && !Array.isArray(res.json)
+      ? res.json
+      : {};
+  const rows = [];
+  for (const [providerId, provider] of Object.entries(providers)) {
+    const models =
+      provider?.models && typeof provider.models === "object"
+        ? provider.models
+        : {};
+    for (const [modelId, model] of Object.entries(models)) {
+      const name = String(model?.name || "").toLowerCase();
+      const ghost = ZEN_GHOST_WATCHLIST.some(
+        (g) => modelId === g || name.includes(g),
+      );
+      rows.push({
+        key: `${providerId}/${modelId}`,
+        provider: providerId,
+        id: modelId,
+        ghost,
+      });
+    }
+  }
+  const tracked = rows.filter(
+    (r) => /opencode|zen/i.test(r.provider) || r.ghost,
+  );
+  const keys = tracked.map((r) => r.key).sort();
+  return {
+    source: "opencode.registry",
+    ok: res.ok && rows.length > 0,
+    status: res.status,
+    ms: res.ms,
+    registryProviders: Object.keys(providers).length,
+    registryModels: rows.length,
+    count: tracked.length,
+    keys,
+    ghostHits: tracked.filter((r) => r.ghost).map((r) => r.key),
+    fingerprint: simpleHash(keys.join("|")),
+    reason: res.ok
+      ? rows.length
+        ? null
+        : "models.dev payload empty"
+      : `HTTP ${res.status || 0} from models.dev`,
+  };
+}
+
+export async function sniffOpencodeReleases() {
+  const started = Date.now();
+  if (releasesCache.value && Date.now() - releasesCache.at < RELEASES_CACHE_TTL_MS) {
+    return { ...releasesCache.value, cached: true, ms: Date.now() - started };
+  }
+  try {
+    const res = await fetchJson(OPENCODE_RELEASES_URL, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "geoff-thermometer",
+      },
+    });
+    const rows = Array.isArray(res.json) ? res.json : [];
+    const latest = rows.find((r) => !r.draft) ?? null;
+    const value = {
+      source: "opencode.releases",
+      ok: res.ok && rows.length > 0,
+      status: res.status,
+      ms: Date.now() - started,
+      latestTag: latest?.tag_name ?? null,
+      latestName: latest?.name ?? null,
+      latestAt: latest?.published_at ?? null,
+      recentTags: rows.map((r) => r.tag_name).filter(Boolean),
+      fingerprint: simpleHash(rows.map((r) => String(r.tag_name)).join("|")),
+      reason: res.ok
+        ? rows.length
+          ? null
+          : "No releases returned"
+        : `HTTP ${res.status || 0} from GitHub`,
+    };
+    if (value.ok) releasesCache = { at: Date.now(), value };
+    return value;
+  } catch (error) {
+    return {
+      source: "opencode.releases",
+      ok: false,
+      status: 0,
+      ms: Date.now() - started,
+      latestTag: releasesCache.value?.latestTag ?? null,
+      latestName: releasesCache.value?.latestName ?? null,
+      latestAt: releasesCache.value?.latestAt ?? null,
+      recentTags: [],
+      fingerprint: null,
+      reason: error?.message || String(error),
+    };
+  }
+}
+
 const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
 const DEFAULT_TREASURY_ADDRESS = "2W5gxAio1Bz76P58EaDtGC71MuyH4ZAdXHu3qqmeGy7g";
 const SIG_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -960,6 +1062,8 @@ export async function runSniff() {
     sniffStacknetModels(),
     sniffStacknetWidgets(),
     sniffOpencodeZen(),
+    sniffOpencodeRegistry(),
+    sniffOpencodeReleases(),
   ]);
 
   const sources = settled.map((result, index) => {
@@ -1053,6 +1157,14 @@ export async function runSniff() {
       zenGhostIds: bySource["opencode.zen"]?.ghostIds ?? [],
       zenMissingGhosts: bySource["opencode.zen"]?.missingGhosts ?? [],
       zenFingerprint: bySource["opencode.zen"]?.fingerprint ?? null,
+      ocRegistryProviders: bySource["opencode.registry"]?.registryProviders ?? null,
+      ocRegistryModels: bySource["opencode.registry"]?.count ?? null,
+      ocGhostHits: bySource["opencode.registry"]?.ghostHits ?? [],
+      ocRegistryFingerprint: bySource["opencode.registry"]?.fingerprint ?? null,
+      ocReleaseTag: bySource["opencode.releases"]?.latestTag ?? null,
+      ocReleaseName: bySource["opencode.releases"]?.latestName ?? null,
+      ocReleaseAt: bySource["opencode.releases"]?.latestAt ?? null,
+      ocReleaseRecentTags: bySource["opencode.releases"]?.recentTags ?? [],
       catalogModels: bySource["geoff.catalog"]?.models?.length ?? null,
       catalogSkipped: Boolean(bySource["geoff.catalog"]?.skipped),
       catalogSkipReason: bySource["geoff.catalog"]?.reason ?? null,
