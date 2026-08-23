@@ -735,6 +735,7 @@ function wireProofPopups() {
 wireProofPopups();
 
 function renderMetrics(latest) {
+  lastLatest = latest ?? null;
   const s = latest?.summary ?? {};
   els.stackVersion.textContent = s.stacknetVersion || "—";
   els.stackHealth.textContent = s.stacknetStatus || "—";
