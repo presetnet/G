@@ -123,20 +123,49 @@ laundered before users see them.
 Every layer is `owned_by: stacknet-layer` with upstream identities anonymized.
 No third-party model names anywhere. **big-pickle does not appear.**
 
+**INTERNAL FLEET SUMMARY** (`GET https://stacknet.magma-rpc.com/network/summary` — also public, no auth):
+
+The full 29-model internal fleet is just two naming axes multiplied out:
+
+- **Bases:** `magma`, `preview`, `pyro`, `pyro:max` (+ one oddball: `mom-preview`)
+- **Product lines:** `stack-chat`, `stack-embed`, `stack-media`, `stack-vision`, `stack-voice`
+- **Fleet = product lines × {magma, preview, pyro} variants**
+
+So the intimidating "29 hidden models" are ~5 products × 3 engine tiers. The real
+engine diversity is the base tier: magma / preview / pyro — three brains, relabeled
+across five modalities. **big-pickle appears nowhere here either.** The strong theory
+is now dead at both the public *and* internal layer.
+
+Cluster vitals (live): 8 nodes · 7 GPUs · 871 GB VRAM (602 available, 69%) ·
+averageLoad 0 · capabilities: chat, consensus, control-plane, coordinator,
+image_editing, image_generation, media_generation, runtime:shell, streaming,
+style_transfer, text, video_generation.
+
+**The $692M line:** the same endpoint reports
+`metaproofs: {totalPaperworkUsd: "692526478", paid: 0}` against a treasury holding
+**$0** on mainnet (independently confirmed via Solana RPC: 0 lamports). Whatever
+"metaproof paperwork" is, StackNet books **$692,526,478** of it — none of it paid.
+Largest unexplained number in the entire investigation. Next-hunt material.
+
 ---
 
 ## 6. Final Ledger
 
-1. **Strong theory dead three ways:** big-pickle absent from StackNet's catalog;
-   opencode traffic never contacts them; big-pickle's release date (2025-10-17) predates
-   every geoff cert by 8 months.
+1. **Strong theory dead four ways:** big-pickle absent from StackNet's *public catalog*;
+   absent from its *internal 29-model fleet*; opencode traffic never contacts them;
+   big-pickle's release date (2025-10-17) predates every geoff cert by 8 months.
 2. **Relabeling mechanism confirmed real:** anonymous `stacknet-layer` branding over
    unnamed upstreams + client-side `<think>` stripping + MoM routing per their docs.
    This is an aggregator wearing a lab coat — by design, not by conspiracy.
 3. **Open mystery:** WHO supplies the actual brains behind preview/magma/pyro?
    The `<think>` capability suggests R1-distill/QwQ-family routes for at least some
-   layers. Unnamed by design. That's the next hunt.
-4. **Epistemological note:** platform timestamps (CT logs, RDAP, snowflakes, GitHub)
+   layers. Unnamed by design. Same pattern, second location: opencode's own free tier
+   hides a ghost shelf of upstream-anonymous models (`big-pickle`, `hy3-free`,
+   `laguna-s-2.1-free`, `x-preview-f-free`, `muse-spark-1.2-contributor-free`) sitting
+   next to transparently-labeled relabels (deepseek/nemotron/kimi/qwen). Anonymity is
+   the industry pattern, not geoff's fingerprint — and it cuts both ways.
+4. **New lead:** the $692M unpaid metaproofs (see §5). Unexplained. Follow it.
+5. **Epistemological note:** platform timestamps (CT logs, RDAP, snowflakes, GitHub)
    cannot be backdated — everything above is reproducible. What operators control is
    only *when they act*. Every measured action was internally consistent with deliberate,
    patient stealth — of a launch, not of a hidden model behind opencode.
@@ -177,7 +206,40 @@ a treasury burning ~$1M+/month and a reason.
 
 ---
 
-## Appendix A: Reproduce It Yourself
+## 8. External Validation — Auditing a Community-Built Thermometer
+
+An independent fan-built dashboard ("Geoff Thermometer", `aisp.live` →
+`g-eight-psi.vercel.app`) monitors StackNet via public endpoints only
+(source: `github.com/goldennftplatform-svg/gt`). We audited it against primary sources:
+
+| Dashboard claim | Primary source | Match |
+|---|---|---|
+| version v3.14.24, MCP contract string | `/` and `/health` | ✅ exact |
+| node_id, task_count, in_flight/max | `/node`, `/health` | ✅ exact |
+| apiModels: 5 | `/v1/models` catalog | ✅ exact |
+| geoff deployId `dpl_8Nz2…` | independent geoff.ai scrape | ✅ exact |
+| treasury $0 | Solana mainnet RPC: 0 lamports | ✅ exact |
+| SOL ~$92 | CoinGecko: $91.90 | ⚠️ feed lag |
+
+**Score: 8/9 checkable claims exact.** The instrument is honest.
+
+**Correction log (kept on purpose):** during the audit we briefly claimed the
+dashboard must hold hidden credentials, because our probe of `/internal/network`
+returned `401 edge-auth`. Wrong. Reading the dashboard's actual source showed it
+calls **`/network/summary`** — fully public; our sweep had tested `/network`,
+gotten 404, and stopped one path short. Lesson recorded: verify the actual claim,
+not its neighbor. No tokens exist anywhere in the deployment.
+
+**Data-quality finding:** the dashboard's event store died 2026-08-10
+(`sharedStoreBackend: "none"`, serverless memory loss). Its dramatic
+"`v3.8.346 → v3.14.24` upgrade" event fired 2026-08-23 was a stale-baseline
+artifact — direct probes already showed 3.14.24 ten hours earlier. Fixes
+(persistent store, timestamped baselines, raw-version logging) were applied.
+Version stability is real though: frozen ≥10h under direct observation.
+
+---
+
+
 
 ```bash
 # StackNet public catalog (no key needed)
@@ -185,6 +247,12 @@ curl https://stacknet.magma-rpc.com/v1/models
 
 # StackNet server version
 curl https://stacknet.magma-rpc.com/
+
+# StackNet internal fleet + cluster + treasury + $692M metaproofs (all public)
+curl https://stacknet.magma-rpc.com/network/summary
+
+# Full opencode zen catalog (64 models; find the ghost free shelf)
+curl https://opencode.ai/zen/v1/models
 
 # Cert history
 curl "https://api.certspotter.com/v1/issuances?domain=magma-rpc.com&include_subdomains=true&expand=dns_names"

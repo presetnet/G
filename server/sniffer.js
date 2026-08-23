@@ -232,7 +232,15 @@ async function sniffStacknetNetwork() {
         }
       : null,
     metaproofs: res.json?.metaproofs
-      ? { total: res.json.metaproofs.total ?? null }
+      ? {
+          total: res.json.metaproofs.total ?? null,
+          totalPaperworkUsd: res.json.metaproofs.totalPaperworkUsd ?? null,
+          paidPaperworkUsd:
+            res.json.metaproofs.totalPaidPaperworkMetaproofUsd ??
+            res.json.metaproofs.paidPaperworkUsd ??
+            null,
+          outstandingUsd: res.json.metaproofs.outstandingUsd ?? null,
+        }
       : null,
     timestamp: res.json?.timestamp ?? null,
   };
@@ -304,6 +312,137 @@ async function sniffStacknetWidgets() {
     ids: widgets.map((w) => w.id),
     widgets,
   };
+}
+
+/** Internal fleet taxonomy: stack-<line>-<base> naming axis + standalone bases. */
+function fleetTaxonomy(models = []) {
+  const bases = new Set();
+  const lines = new Set();
+  for (const id of models) {
+    const m = /^stack-([a-z0-9]+)-([a-z0-9:.+-]+)$/.exec(String(id));
+    if (m) {
+      lines.add(m[1]);
+      bases.add(m[2]);
+    } else {
+      bases.add(String(id));
+    }
+  }
+  return { bases: [...bases].sort(), lines: [...lines].sort() };
+}
+
+const OPENCODE_ZEN_URL = "https://opencode.ai/zen/v1/models";
+const ZEN_GHOST_WATCHLIST = [
+  "big-pickle",
+  "hy3-free",
+  "laguna-s-2.1-free",
+  "x-preview-f-free",
+  "muse-spark-1.2-contributor-free",
+];
+
+export async function sniffOpencodeZen() {
+  const res = await fetchJson(OPENCODE_ZEN_URL);
+  const rows = Array.isArray(res.json?.data) ? res.json.data : [];
+  const ids = rows.map((m) => String(m.id || "")).filter(Boolean).sort();
+  const freeIds = ids.filter((id) => /(^|[-_])free$|free[-_]/.test(id) || id.endsWith("free"));
+  const ghosts = ids.filter((id) => ZEN_GHOST_WATCHLIST.includes(id));
+  return {
+    source: "opencode.zen",
+    ok: res.ok && ids.length > 0,
+    status: res.status,
+    ms: res.ms,
+    count: ids.length,
+    ids,
+    freeCount: freeIds.length,
+    freeIds,
+    ghostIds: ghosts,
+    missingGhosts: ZEN_GHOST_WATCHLIST.filter((g) => !ids.includes(g)),
+    fingerprint: simpleHash(ids.join("|")),
+    reason: res.ok ? (ids.length ? null : "Zen catalog empty") : `HTTP ${res.status || 0} from zen`,
+  };
+}
+
+const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+const DEFAULT_TREASURY_ADDRESS = "2W5gxAio1Bz76P58EaDtGC71MuyH4ZAdXHu3qqmeGy7g";
+const SIG_CACHE_TTL_MS = 10 * 60 * 1000;
+let sigCache = { at: 0, value: null };
+
+async function solanaRpc(method, params = []) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const res = await fetch(SOLANA_RPC_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      signal: controller.signal,
+    });
+    const json = await res.json().catch(() => null);
+    if (json?.error) throw new Error(json.error.message || "solana rpc error");
+    return json?.result ?? null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function sniffSolanaTreasury(address = DEFAULT_TREASURY_ADDRESS) {
+  const started = Date.now();
+  try {
+    const balRes = await solanaRpc("getBalance", [address, { commitment: "confirmed" }]);
+    const lamports = typeof balRes?.value === "number" ? balRes.value : null;
+    let sigs;
+    if (sigCache.value && Date.now() - sigCache.at < SIG_CACHE_TTL_MS) {
+      sigs = sigCache.value;
+    } else {
+      const sigRes = await solanaRpc("getSignaturesForAddress", [
+        address,
+        { limit: 1000, commitment: "confirmed" },
+      ]);
+      const rows = Array.isArray(sigRes) ? sigRes : [];
+      sigs = {
+        count: rows.length,
+        pageFull: rows.length >= 1000,
+        latestSlot: rows[0]?.slot ?? null,
+        latestAt:
+          rows[0]?.blockTime != null
+            ? new Date(rows[0].blockTime * 1000).toISOString()
+            : null,
+      };
+      sigCache = { at: Date.now(), value: sigs };
+    }
+    return {
+      source: "solana.treasury",
+      ok: lamports !== null,
+      status: lamports !== null ? 200 : 0,
+      ms: Date.now() - started,
+      address,
+      cluster: "mainnet",
+      lamports,
+      sol: lamports !== null ? lamports / 1e9 : null,
+      sigCount: sigs.count,
+      sigPageFull: sigs.pageFull,
+      latestActivitySlot: sigs.latestSlot,
+      latestActivityAt: sigs.latestAt,
+      rpcUrl: SOLANA_RPC_URL,
+      reason: lamports !== null ? null : "getBalance returned no value",
+    };
+  } catch (error) {
+    return {
+      source: "solana.treasury",
+      ok: false,
+      status: 0,
+      ms: Date.now() - started,
+      address,
+      cluster: "mainnet",
+      lamports: null,
+      sol: null,
+      sigCount: sigCache.value?.count ?? null,
+      sigPageFull: false,
+      latestActivitySlot: null,
+      latestActivityAt: null,
+      rpcUrl: SOLANA_RPC_URL,
+      reason: error?.message || String(error),
+    };
+  }
 }
 
 /** Public docs pages we fingerprint so silent surface moves show up in the feed. */
@@ -820,6 +959,7 @@ export async function runSniff() {
     sniffStacknetNode(),
     sniffStacknetModels(),
     sniffStacknetWidgets(),
+    sniffOpencodeZen(),
   ]);
 
   const sources = settled.map((result, index) => {
@@ -832,8 +972,24 @@ export async function runSniff() {
     };
   });
 
+  const treasuryAddress =
+    sources.find((s) => s.source === "stacknet.network")?.treasury?.treasuryAddress ||
+    DEFAULT_TREASURY_ADDRESS;
+  try {
+    sources.push(await sniffSolanaTreasury(treasuryAddress));
+  } catch (error) {
+    sources.push({
+      source: "solana.treasury",
+      ok: false,
+      status: 0,
+      address: treasuryAddress,
+      reason: error?.message || String(error),
+    });
+  }
+
   const bySource = Object.fromEntries(sources.map((s) => [s.source, s]));
   const network = bySource["stacknet.network"] ?? {};
+  const fleet = fleetTaxonomy(network.models || []);
   const vramPct =
     isFiniteNumber(network.totalVramGb) &&
     network.totalVramGb > 0 &&
@@ -881,6 +1037,22 @@ export async function runSniff() {
       treasuryPending: network.treasury?.pendingObligations ?? null,
       treasuryWarnings: network.treasury?.warnings?.length ?? 0,
       metaproofsTotal: network.metaproofs?.total ?? null,
+      metaproofsPaperworkUsd: network.metaproofs?.totalPaperworkUsd ?? null,
+      metaproofsPaidUsd: network.metaproofs?.paidPaperworkUsd ?? null,
+      metaproofsOutstandingUsd: network.metaproofs?.outstandingUsd ?? null,
+      fleetBases: fleet.bases,
+      fleetLines: fleet.lines,
+      treasuryRpcOk: Boolean(bySource["solana.treasury"]?.ok),
+      treasuryRpcAddress: bySource["solana.treasury"]?.address ?? null,
+      treasuryRpcLamports: bySource["solana.treasury"]?.lamports ?? null,
+      treasuryRpcSol: bySource["solana.treasury"]?.sol ?? null,
+      treasuryRpcSigCount: bySource["solana.treasury"]?.sigCount ?? null,
+      treasuryLatestActivityAt: bySource["solana.treasury"]?.latestActivityAt ?? null,
+      zenModelCount: bySource["opencode.zen"]?.count ?? null,
+      zenFreeCount: bySource["opencode.zen"]?.freeCount ?? null,
+      zenGhostIds: bySource["opencode.zen"]?.ghostIds ?? [],
+      zenMissingGhosts: bySource["opencode.zen"]?.missingGhosts ?? [],
+      zenFingerprint: bySource["opencode.zen"]?.fingerprint ?? null,
       catalogModels: bySource["geoff.catalog"]?.models?.length ?? null,
       catalogSkipped: Boolean(bySource["geoff.catalog"]?.skipped),
       catalogSkipReason: bySource["geoff.catalog"]?.reason ?? null,

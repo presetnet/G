@@ -98,7 +98,21 @@ export function inferRank(e = {}) {
   // Explicit rare full-stack marker wins
   if (/full-stack ship/i.test(blob)) return "crazy";
 
-  if (e.kind === "baseline" || e.kind === "treasury" || e.kind === "metaproofs") return "whisper";
+  if (e.kind === "baseline" || e.kind === "treasury") return "whisper";
+  if (e.kind === "metaproofs") {
+    if (/first|paid|settl/i.test(blob)) return "spike";
+    if (/booked|paperwork|outstanding/i.test(blob)) return "note";
+    return "whisper";
+  }
+  if (e.kind === "fleet") {
+    if (/ghost|brain|new engine/i.test(blob)) return "spike";
+    return /retired|reshap/i.test(blob) ? "move" : "note";
+  }
+  if (e.kind === "zen") return /ghost/i.test(blob) ? "spike" : "note";
+  if (e.kind === "solana") {
+    if (/funded/i.test(blob)) return "spike";
+    return /disagree/i.test(blob) ? "move" : "note";
+  }
   if (e.kind === "docs") return "note";
   if (e.kind === "agent") return "note";
   if (e.kind === "agentCluster") {
@@ -577,18 +591,59 @@ export function translate(previous, current) {
     }
   }
 
-  const prevMeta = prev["stacknet.network"]?.metaproofs?.total;
-  const currMeta = curr["stacknet.network"]?.metaproofs?.total;
-  if (isNumber(prevMeta) && isNumber(currMeta) && prevMeta !== currMeta) {
+  // Metaproofs ledger — the $ paperwork StackNet books against its $0 treasury.
+  const mpPrev = prev["stacknet.network"]?.metaproofs || {};
+  const mpCurr = curr["stacknet.network"]?.metaproofs || {};
+  const pwPrev = usdNumber(mpPrev.totalPaperworkUsd);
+  const pwCurr = usdNumber(mpCurr.totalPaperworkUsd);
+  const paidPrev = usdNumber(mpPrev.paidPaperworkUsd);
+  const paidCurr = usdNumber(mpCurr.paidPaperworkUsd);
+  const outCurr = usdNumber(mpCurr.outstandingUsd);
+  const moneyMoved =
+    (isNumber(pwPrev) && isNumber(pwCurr) && pwPrev !== pwCurr) ||
+    (isNumber(paidPrev) && isNumber(paidCurr) && paidPrev !== paidCurr);
+
+  if (moneyMoved) {
+    const firstPayment = paidCurr > 0 && (paidPrev ?? 0) === 0;
     events.push(
       event({
         kind: "metaproofs",
-        rank: "whisper",
-        title: "Metaproofs counter moved",
-        summary: `Network metaproofs.total ${prevMeta} → ${currMeta}.`,
-        details: { from: prevMeta, to: currMeta },
+        rank: firstPayment ? "spike" : "note",
+        title: firstPayment
+          ? "FIRST METAPROOF PAPERWORK PAID"
+          : "Metaproof paperwork moved",
+        summary: [
+          isNumber(pwPrev) && isNumber(pwCurr) && pwPrev !== pwCurr
+            ? `booked $${fmtUsd(pwPrev)} → $${fmtUsd(pwCurr)}`
+            : null,
+          isNumber(paidPrev) && isNumber(paidCurr) && paidPrev !== paidCurr
+            ? `paid $${fmtUsd(paidPrev)} → $${fmtUsd(paidCurr)}`
+            : null,
+          isNumber(outCurr) ? `outstanding $${fmtUsd(outCurr)}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        details: {
+          paperwork: { from: pwPrev ?? null, to: pwCurr ?? null },
+          paid: { from: paidPrev ?? null, to: paidCurr ?? null },
+          outstanding: outCurr ?? null,
+        },
       }),
     );
+  } else if (!isNumber(pwCurr)) {
+    const prevMeta = prev["stacknet.network"]?.metaproofs?.total;
+    const currMeta = curr["stacknet.network"]?.metaproofs?.total;
+    if (isNumber(prevMeta) && isNumber(currMeta) && prevMeta !== currMeta) {
+      events.push(
+        event({
+          kind: "metaproofs",
+          rank: "whisper",
+          title: "Metaproofs counter moved",
+          summary: `Network metaproofs.total ${prevMeta} → ${currMeta}.`,
+          details: { from: prevMeta, to: currMeta },
+        }),
+      );
+    }
   }
 
   // Health string changes (healthy/unhealthy) — ignore bare HTTP codes like "502".
@@ -674,6 +729,76 @@ export function translate(previous, current) {
         },
       }),
     );
+  }
+
+  // Engine-tier census — a NEW BASE means a new brain joined the relabeling machine.
+  const prevFleet = fleetTaxonomyOf(prev["stacknet.network"]?.models);
+  const currFleet = fleetTaxonomyOf(curr["stacknet.network"]?.models);
+  if (prevFleet && currFleet) {
+    const baseDiff = listDiff(prevFleet.bases, currFleet.bases);
+    const lineDiff = listDiff(prevFleet.lines, currFleet.lines);
+    if (baseDiff.changed || lineDiff.changed) {
+      const newBrain = baseDiff.added.length > 0;
+      events.push(
+        event({
+          kind: "fleet",
+          rank: newBrain ? "spike" : "move",
+          title: newBrain
+            ? "A new engine tier joined the internal fleet"
+            : "Internal model fleet reshaped",
+          summary: [
+            baseDiff.added.length ? `new engine base(s): ${baseDiff.added.join(", ")}` : null,
+            baseDiff.removed.length ? `retired base(s): ${baseDiff.removed.join(", ")}` : null,
+            lineDiff.added.length ? `new product line(s): ${lineDiff.added.join(", ")}` : null,
+            lineDiff.removed.length ? `retired line(s): ${lineDiff.removed.join(", ")}` : null,
+            `${currFleet.bases.length} bases × ${currFleet.lines.length} lines`,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          details: { bases: baseDiff, lines: lineDiff, fleet: currFleet },
+        }),
+      );
+    }
+  }
+
+  // Zen ghost shelf — opencode's own anonymous free models.
+  const prevZen = prev["opencode.zen"];
+  const currZen = curr["opencode.zen"];
+  if (prevZen?.ok && currZen?.ok) {
+    const ghostDiff = listDiff(prevZen.ghostIds || [], currZen.ghostIds || []);
+    const freeDiff = listDiff(prevZen.freeIds || [], currZen.freeIds || []);
+    const idDiff = listDiff(prevZen.ids || [], currZen.ids || []);
+    const flap = isScrapeFlap(prevZen.ids, currZen.ids, idDiff);
+    if (!flap && (ghostDiff.changed || freeDiff.changed)) {
+      const ghostMoved = ghostDiff.changed;
+      events.push(
+        event({
+          kind: "zen",
+          rank: ghostMoved ? "spike" : "note",
+          title: ghostMoved
+            ? ghostDiff.added.length
+              ? "Ghost model appeared on opencode zen"
+              : "Ghost model vanished from opencode zen"
+            : "Zen free shelf reshuffled",
+          summary: [
+            ghostDiff.added.length ? `ghost +${ghostDiff.added.join(", ")}` : null,
+            ghostDiff.removed.length ? `ghost -${ghostDiff.removed.join(", ")}` : null,
+            freeDiff.changed
+              ? `free shelf +${freeDiff.added.length}/-${freeDiff.removed.length}`
+              : null,
+            `${currZen.count} models · ${currZen.freeCount} free`,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          details: {
+            ghosts: ghostDiff,
+            free: freeDiff,
+            count: currZen.count,
+            fingerprint: { from: prevZen.fingerprint, to: currZen.fingerprint },
+          },
+        }),
+      );
+    }
   }
 
   const nodesPrev = prev["stacknet.network"]?.availableNodes;
@@ -830,6 +955,52 @@ export function translate(previous, current) {
     );
   }
 
+  // Independent chain check — Solana RPC vs StackNet's own treasury self-report.
+  const prevChain = prev["solana.treasury"];
+  const currChain = curr["solana.treasury"];
+  if (prevChain?.ok && currChain?.ok) {
+    const chainPrev = prevChain.lamports;
+    const chainCurr = currChain.lamports;
+    const repCurr = usdNumber(tCurr.totalLamports);
+    if (isNumber(chainPrev) && isNumber(chainCurr) && chainPrev !== chainCurr) {
+      const funded = chainPrev === 0 && chainCurr > 0;
+      events.push(
+        event({
+          kind: "solana",
+          rank: funded ? "spike" : "note",
+          title: funded ? "Treasury wallet funded on-chain" : "Treasury balance moved on-chain",
+          summary: `Independent Solana RPC: ${(chainPrev / 1e9).toFixed(9)} → ${(chainCurr / 1e9).toFixed(9)} SOL.`,
+          details: { from: chainPrev, to: chainCurr, address: currChain.address },
+        }),
+      );
+    } else if (isNumber(chainCurr) && isNumber(repCurr) && chainCurr !== repCurr) {
+      events.push(
+        event({
+          kind: "solana",
+          rank: "move",
+          title: "Treasury self-report disagrees with chain",
+          summary: `StackNet reports ${(repCurr / 1e9).toFixed(9)} SOL; the chain says ${(chainCurr / 1e9).toFixed(9)} SOL.`,
+          details: { reportedLamports: repCurr, onChainLamports: chainCurr, address: currChain.address },
+        }),
+      );
+    } else if (
+      isNumber(prevChain.sigCount) &&
+      isNumber(currChain.sigCount) &&
+      currChain.sigCount > prevChain.sigCount
+    ) {
+      events.push(
+        event({
+          kind: "solana",
+          rank: "whisper",
+          heat: 0,
+          title: "Treasury wallet activity",
+          summary: `Signature count ${prevChain.sigCount} → ${currChain.sigCount}${currChain.latestActivityAt ? ` · latest ${currChain.latestActivityAt}` : ""}.`,
+          details: { from: prevChain.sigCount, to: currChain.sigCount },
+        }),
+      );
+    }
+  }
+
   const prevApiIds = prev["stacknet.models"]?.ids;
   const currApiIds = curr["stacknet.models"]?.ids;
   const apiModelDiff = listDiff(prevApiIds, currApiIds);
@@ -969,9 +1140,18 @@ function agentActivityEvent(previous, current) {
 
 function agentClusterEvent(events) {
   const surface = events.filter((e) =>
-    ["deploy", "version", "models", "apiModels", "widgets", "capabilities", "catalog"].includes(
-      e.kind,
-    ),
+    [
+      "deploy",
+      "version",
+      "models",
+      "apiModels",
+      "widgets",
+      "capabilities",
+      "catalog",
+      "fleet",
+      "zen",
+      "metaproofs",
+    ].includes(e.kind),
   );
   if (surface.length < 2) return null;
 
@@ -1232,6 +1412,38 @@ function short(id) {
 
 function isNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function usdNumber(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) {
+    return Number(value);
+  }
+  return null;
+}
+
+function fmtUsd(n) {
+  if (!isNumber(n)) return String(n);
+  if (Math.abs(n) >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (Math.abs(n) >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return String(n);
+}
+
+function fleetTaxonomyOf(models = []) {
+  if (!Array.isArray(models)) return null;
+  const bases = new Set();
+  const lines = new Set();
+  for (const id of models) {
+    const m = /^stack-([a-z0-9]+)-([a-z0-9:.+-]+)$/.exec(String(id));
+    if (m) {
+      lines.add(m[1]);
+      bases.add(m[2]);
+    } else {
+      bases.add(String(id));
+    }
+  }
+  return { bases: [...bases].sort(), lines: [...lines].sort() };
 }
 
 export { prettyCapability, RANK };
