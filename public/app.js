@@ -1025,7 +1025,6 @@ function renderMetrics(latest) {
       els.oxAlphaMeta.textContent = "not on ladder";
     }
   }
-}
   // Sync detector: opencode surface + StackNet version moving together
   if (els.syncStatus) {
     const snVer = s.stacknetVersion;
@@ -1085,6 +1084,8 @@ function renderMetrics(latest) {
     els.exploreMeta.textContent = bits.length ? bits.join(" · ") : "geoff.ai/explore";
     els.exploreMeta.title = "Top board from public /api/explore/feed";
   }
+}
+
 }
 
 function renderExploreCue(board, events = []) {
