@@ -416,46 +416,6 @@ export async function sniffMiningSurface() {
     };
   }
 }
-const POND0X_URL = "https://pond0x.com";
-
-export async function sniffPond0xStats() {
-  try {
-    const res = await fetchJson(POND0X_URL, { timeoutMs: 12_000 });
-    const text = (res.text || "").replaceAll('\\"', '"');
-    const num = (re) => {
-      const m = text.match(re);
-      return m ? Number(m[1]) : null;
-    };
-    const usdTotal = num(/"usd_total":([\d.]+)/);
-    return {
-      source: "pond0x.stats",
-      ok: res.ok && usdTotal != null,
-      status: res.status,
-      ms: res.ms,
-      usdTotal,
-      usdClaims: num(/"usd_claims":([\d.]+)/),
-      usdRefRewards: num(/"usd_ref_rewards":([\d.]+)/),
-      ethRewards: [...text.matchAll(/"usd_([a-z_]*?)rewards":([\d.]+)/g)].map((m) => ({
-        kind: m[1] || "misc",
-        usd: Number(m[2]),
-      })),
-      numSwaps: num(/"num_swaps":(\d+)/),
-      fingerprint: simpleHash(`${usdTotal}:${num(/"num_swaps":(\d+)/)}`),
-      reason: res.ok ? (usdTotal != null ? null : "stats block not found") : `HTTP ${res.status}`,
-    };
-  } catch (error) {
-    return {
-      source: "pond0x.stats",
-      ok: false,
-      status: 0,
-      ms: null,
-      usdTotal: null,
-      fingerprint: null,
-      reason: error?.message || String(error),
-    };
-  }
-}
-
 const OPENCODE_RELEASES_URL =
   "https://api.github.com/repos/anomalyco/opencode/releases?per_page=5";
 const OPENCODE_GO_URL = "https://opencode.ai/go";
@@ -1391,7 +1351,6 @@ export async function runSniff() {
     sniffOpencodeReleases(),
     sniffOpencodeGo(),
     sniffMiningSurface(),
-    sniffPond0xStats(),
     sniffZenErrorShape(),
   ]);
 
@@ -1532,9 +1491,6 @@ export async function runSniff() {
       miningClaimsOn: bySource["surface.mining"]?.claimsOn ?? null,
       miningFacetState: bySource["surface.mining"]?.facetState ?? null,
       miningBand: bySource["surface.mining"]?.band ?? null,
-      pondUsdTotal: bySource["pond0x.stats"]?.usdTotal ?? null,
-      pondUsdClaims: bySource["pond0x.stats"]?.usdClaims ?? null,
-      pondNumSwaps: bySource["pond0x.stats"]?.numSwaps ?? null,
       zenErrShape: bySource["opencode.zenerr"]?.shape ?? null,
       zenErrLeakHit: Boolean(bySource["opencode.zenerr"]?.leakHit),
       catalogModels: bySource["geoff.catalog"]?.models?.length ?? null,
