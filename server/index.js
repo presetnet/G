@@ -7,6 +7,7 @@ import {
   startPoller,
 } from "./poller.js";
 import { prettyCapability } from "./translator.js";
+import { loadSnapshots } from "./store.js";
 import { publicConfig } from "./service.js";
 import { buildMarketPayload } from "./market.js";
 
@@ -110,6 +111,18 @@ app.get("/api/stream", async (req, res) => {
     clearInterval(heartbeat);
     unsubscribe();
   });
+});
+
+app.get("/api/paperwork-history", async (_req, res) => {
+  try {
+    const snaps = await loadSnapshots();
+    const series = snaps
+      .map((s) => ({ at: s.takenAt, v: Number(s.summary?.metaproofsPaperworkUsd ?? NaN) }))
+      .filter((p) => p.at && Number.isFinite(p.v));
+    res.json({ count: series.length, series });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.get("/api/market", async (_req, res) => {

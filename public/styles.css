@@ -3152,3 +3152,24 @@ details[open] > .fold-summary::after {
 .deck-label { margin: 1.6rem 0 0.7rem; }
 .feed-hint { margin: 0.25rem 0 0.5rem; font-size: 0.74rem; opacity: 0.75; }
 .signal-deck .panel, .price-panel { padding-bottom: 1rem; }
+
+/* ---- paperwork accumulation spark ---- */
+.proof-spark { margin-top: 0.9rem; }
+.proof-spark svg {
+  display: block;
+  width: 100%;
+  height: 90px;
+  background: rgba(5, 5, 7, 0.85);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.spark-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0.4rem 0.2rem;
+  color: var(--ink);
+  font-size: 0.86rem;
+}
+.spark-stats i { color: var(--muted); font-style: normal; margin-right: 0.3rem; }
+.spark-note { color: var(--muted); font-size: 0.82rem; }

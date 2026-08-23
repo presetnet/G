@@ -689,6 +689,17 @@ function openProof(key) {
     .map((f) => `${f}: ${JSON.stringify(s[f] ?? null)}`)
     .join("\n");
 
+  const spark = document.getElementById("proofSpark");
+  if (spark) {
+    if (key === "paperworkUsd") {
+      spark.hidden = false;
+      renderPaperworkSpark(spark);
+    } else {
+      spark.hidden = true;
+      spark.innerHTML = "";
+    }
+  }
+
   const curlText = p.curls
     .map((c) =>
       c.replace(
@@ -705,6 +716,79 @@ function openProof(key) {
 function closeProof() {
   const overlay = document.getElementById("proofOverlay");
   if (overlay) overlay.hidden = true;
+}
+
+/* ---- Paperwork accumulation tape ---- */
+let pwHistoryCache = { at: 0, series: [] };
+
+async function fetchPaperworkHistory(force = false) {
+  if (!force && Date.now() - pwHistoryCache.at < 5 * 60 * 1000) return pwHistoryCache.series;
+  try {
+    const res = await fetch("/api/paperwork-history", { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    pwHistoryCache = {
+      at: Date.now(),
+      series: Array.isArray(data?.series) ? data.series : [],
+    };
+  } catch {}
+  return pwHistoryCache.series;
+}
+
+function paperworkVelocity(series, windowMs) {
+  if (!series.length) return null;
+  const nowT = Date.parse(series[0].at);
+  if (!Number.isFinite(nowT)) return null;
+  let ref = null;
+  for (const p of series) {
+    if (nowT - Date.parse(p.at) >= windowMs) {
+      ref = p;
+      break;
+    }
+  }
+  if (!ref && series.length > 1) ref = series[series.length - 1];
+  if (!ref) return null;
+  return Number(series[0].v) - Number(ref.v);
+}
+
+function renderPaperworkSpark(box) {
+  const series = [...pwHistoryCache.series]; // newest-first
+  if (series.length < 2) {
+    box.innerHTML =
+      '<p class="spark-note">accumulation tape warming up — needs a few more sniffs</p>';
+    return;
+  }
+  const d24 = paperworkVelocity(pwHistoryCache.series, 24 * 3600e3);
+  const d72 = paperworkVelocity(pwHistoryCache.series, 72 * 3600e3);
+  const fmtD = (n) =>
+    n == null ? "—" : `${n >= 0 ? "▲" : "▼"} ${fmtCompactUsd(Math.abs(n))}`;
+
+  const W = 640;
+  const H = 90;
+  const pts = [...series].reverse(); // oldest→newest
+  const vals = pts.map((p) => Number(p.v));
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const span = max - min || 1;
+  const coords = vals
+    .map((v, i) => {
+      const x = (i / (vals.length - 1)) * (W - 8) + 4;
+      const y = H - 10 - ((v - min) / span) * (H - 20);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const lastPt = coords.split(" ").pop().split(",");
+  box.innerHTML = `
+    <div class="spark-stats">
+      <span><i>booked</i> ${fmtCompactUsd(vals[vals.length - 1])}</span>
+      <span><i>24h</i> ${fmtD(d24)}</span>
+      <span><i>72h</i> ${fmtD(d72)}</span>
+      <span><i>tape</i> ${pts.length} sniffs</span>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="paperwork build-up">
+      <polyline fill="none" stroke="var(--accent)" stroke-width="2" points="${coords}"/>
+      <circle cx="${lastPt[0]}" cy="${lastPt[1]}" r="3.2" fill="var(--heat-bright)"/>
+    </svg>`;
 }
 
 function wireProofPopups() {
@@ -744,6 +828,10 @@ function wireProofPopups() {
 }
 
 wireProofPopups();
+fetchPaperworkHistory().then(() => {
+  if (lastLatest) renderMetrics(lastLatest);
+});
+setInterval(() => fetchPaperworkHistory(true), 5 * 60 * 1000);
 
 function renderMetrics(latest) {
   lastLatest = latest ?? null;
@@ -818,6 +906,9 @@ function renderMetrics(latest) {
       ? s.tokenPress.filter((t) => t.symbol && !["USDC", "mSOL"].includes(t.symbol))
       : [];
     if (press.length) bits.push(`press ${press.map((p) => p.symbol).join("·")}`);
+    const d24 = paperworkVelocity(pwHistoryCache.series, 24 * 3600e3);
+    if (d24 != null && Math.abs(d24) > 0.5)
+      bits.push(`${d24 >= 0 ? "▲" : "▼"}${fmtCompactUsd(Math.abs(d24))}/24h`);
     els.paperworkMeta.textContent = bits.length ? bits.join(" · ") : "—";
     els.paperworkMeta.title = [
       `Booked vs paid metaproof ledger · chain balance via public Solana RPC${
