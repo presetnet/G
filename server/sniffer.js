@@ -586,6 +586,82 @@ export async function sniffSolanaTreasury(address = DEFAULT_TREASURY_ADDRESS) {
   }
 }
 
+export const DEFAULT_TOKEN_AUTHORITY =
+  process.env.GEOFF_TOKEN_AUTHORITY || "D2KL4HWbc5URqBti9XLf2DwtiDYJs9wbX6z7tyWLoiH2";
+
+function symbolFromMint(mint) {
+  const known = [
+    ["PAPERu8xjrqfjBLj8XG6FCiokuk7pG1GzUbRTYwX1nU", "PAPER"],
+    ["CCPU6wgqmMiWigL3Tffpg7NgPfKuBRePTmrhxqqizWSa", "CCU"],
+    ["CUSDxMH4nG6KeB5Qwf8ZWzEugHJBLnfcTAqk9GQy211u", "CUSD"],
+    ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "USDC"],
+    ["mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", "mSOL"],
+  ];
+  const hit = known.find(([addr]) => addr === mint);
+  if (hit) return hit[1];
+  const vanity = mint.match(/^[A-Z]{3,6}/);
+  return vanity ? vanity[0] : `${mint.slice(0, 4)}…`;
+}
+
+export async function sniffSolanaTokens(authority = DEFAULT_TOKEN_AUTHORITY) {
+  const started = Date.now();
+  try {
+    const accountsRes = await solanaRpc("getTokenAccountsByOwner", [
+      authority,
+      { programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" },
+      { encoding: "jsonParsed" },
+    ]);
+    const accounts = accountsRes?.value ?? [];
+    const mints = [];
+    for (const acc of accounts) {
+      const info = acc?.account?.data?.parsed?.info;
+      if (!info?.mint) continue;
+      const supplyRes = await solanaRpc("getTokenSupply", [info.mint]);
+      const sv = supplyRes?.value ?? {};
+      const supplyRaw = Number(sv.amount ?? 0);
+      const decimals = Number(sv.decimals ?? info.tokenAmount?.decimals ?? 0);
+      mints.push({
+        mint: info.mint,
+        symbol: symbolFromMint(info.mint),
+        balanceUi: Number(info.tokenAmount?.uiAmountString ?? 0),
+        supplyUi: decimals > 0 ? supplyRaw / 10 ** decimals : supplyRaw,
+        decimals,
+        mintAuthority: null,
+      });
+    }
+    for (const row of mints) {
+      try {
+        const mi = await solanaRpc("getAccountInfo", [row.mint, { encoding: "jsonParsed" }]);
+        row.mintAuthority = mi?.value?.data?.parsed?.info?.mintAuthority ?? null;
+      } catch {}
+    }
+    const order = [...mints].sort((a, b) => a.mint.localeCompare(b.mint));
+    return {
+      source: "solana.tokens",
+      ok: true,
+      status: 200,
+      ms: Date.now() - started,
+      authority,
+      mints: order,
+      fingerprint: simpleHash(
+        order.map((m) => `${m.mint}:${m.supplyUi}`).join("|"),
+      ),
+      reason: null,
+    };
+  } catch (error) {
+    return {
+      source: "solana.tokens",
+      ok: false,
+      status: 0,
+      ms: Date.now() - started,
+      authority,
+      mints: [],
+      fingerprint: null,
+      reason: error?.message || String(error),
+    };
+  }
+}
+
 /** Public docs pages we fingerprint so silent surface moves show up in the feed. */
 const DOCS_SURFACE_PAGES = [
   // Intro
@@ -1130,6 +1206,19 @@ export async function runSniff() {
     });
   }
 
+  try {
+    sources.push(await sniffSolanaTokens());
+  } catch (error) {
+    sources.push({
+      source: "solana.tokens",
+      ok: false,
+      status: 0,
+      authority: DEFAULT_TOKEN_AUTHORITY,
+      mints: [],
+      reason: error?.message || String(error),
+    });
+  }
+
   const bySource = Object.fromEntries(sources.map((s) => [s.source, s]));
   const network = bySource["stacknet.network"] ?? {};
   const fleet = fleetTaxonomy(network.models || []);
@@ -1191,6 +1280,9 @@ export async function runSniff() {
       treasuryRpcSol: bySource["solana.treasury"]?.sol ?? null,
       treasuryRpcSigCount: bySource["solana.treasury"]?.sigCount ?? null,
       treasuryLatestActivityAt: bySource["solana.treasury"]?.latestActivityAt ?? null,
+      tokenPress: bySource["solana.tokens"]?.mints ?? [],
+      tokenPressAuthority: bySource["solana.tokens"]?.authority ?? null,
+      tokenPressFingerprint: bySource["solana.tokens"]?.fingerprint ?? null,
       zenModelCount: bySource["opencode.zen"]?.count ?? null,
       zenFreeCount: bySource["opencode.zen"]?.freeCount ?? null,
       zenGhostIds: bySource["opencode.zen"]?.ghostIds ?? [],

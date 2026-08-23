@@ -855,6 +855,90 @@ export function translate(previous, current) {
     }
   }
 
+  // Token press — the minting authority's coins (PAPER, CCU, CUSD...).
+  const prevTok = prev["solana.tokens"];
+  const currTok = curr["solana.tokens"];
+  if (prevTok?.ok && currTok?.ok) {
+    const before = new Map((prevTok.mints || []).map((m) => [m.mint, m]));
+    for (const mint of currTok.mints || []) {
+      const old = before.get(mint.mint);
+      if (!old) {
+        events.push(
+          event({
+            kind: "treasury",
+            rank: "move",
+            title: `New coin under the Geoff authority: ${mint.symbol}`,
+            summary: `${mint.mint} · supply ${mint.supplyUi} · wallet holds ${mint.balanceUi}`,
+            details: mint,
+          }),
+        );
+        continue;
+      }
+      const delta = Number(mint.supplyUi) - Number(old.supplyUi);
+      if (Math.abs(delta) >= Math.max(0.01, Number(old.supplyUi) * 0.005)) {
+        events.push(
+          event({
+            kind: "treasury",
+            rank: delta > 0 ? "spike" : "note",
+            title:
+              delta > 0
+                ? `The ${mint.symbol} printer runs: supply ${old.supplyUi} → ${mint.supplyUi}`
+                : `${mint.symbol} supply shrank: ${old.supplyUi} → ${mint.supplyUi}`,
+            summary: `authority ${currTok.authority}`,
+            details: { from: old.supplyUi, to: mint.supplyUi, mint: mint.mint },
+          }),
+        );
+      }
+    }
+    const gone = (prevTok.mints || []).filter(
+      (m) => !(currTok.mints || []).some((c) => c.mint === m.mint),
+    );
+    for (const m of gone) {
+      events.push(
+        event({
+          kind: "treasury",
+          rank: "move",
+          title: `Token account closed: ${m.symbol}`,
+          summary: `${m.mint} no longer under authority ${currTok.authority}`,
+          details: m,
+        }),
+      );
+    }
+  }
+
+  // Ghost price tags — when an anonymous model stops being free.
+  const prevSpecs = prev["opencode.registry"]?.ghostSpecs ?? [];
+  const currSpecs = curr["opencode.registry"]?.ghostSpecs ?? [];
+  const prevById = new Map(prevSpecs.map((sp) => [sp.id, sp]));
+  for (const sp of currSpecs) {
+    const old = prevById.get(sp.id);
+    if (!old) continue;
+    const costNow = [Number(sp.costInput ?? 0), Number(sp.costOutput ?? 0)];
+    const costWas = [Number(old.costInput ?? 0), Number(old.costOutput ?? 0)];
+    const changed =
+      costNow[0] !== costWas[0] ||
+      costNow[1] !== costWas[1] ||
+      sp.status !== old.status;
+    if (!changed) continue;
+    const wentPaid = costWas.every((v) => v === 0) && costNow.some((v) => v > 0);
+    events.push(
+      event({
+        kind: "zen",
+        rank: wentPaid ? "spike" : "move",
+        title: wentPaid
+          ? `Ghost starts charging: ${sp.id}`
+          : `Ghost paper record changed: ${sp.id}`,
+        summary: [
+          `cost $${costWas[0]}→$${costNow[0]} in · $${costWas[1]}→$${costNow[1]} out`,
+          old.status !== sp.status && sp.status ? `status: ${sp.status}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        details: { id: sp.id, was: old, now: sp },
+      }),
+    );
+  }
+
   const nodesPrev = prev["stacknet.network"]?.availableNodes;
   const nodesCurr = curr["stacknet.network"]?.availableNodes;
   if (isNumber(nodesPrev) && isNumber(nodesCurr) && nodesPrev !== nodesCurr) {

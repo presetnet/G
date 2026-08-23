@@ -605,8 +605,23 @@ function renderMetrics(latest) {
     }
     if (!bits.length && s.solPriceUsd != null)
       bits.push(`SOL $${Number(s.solPriceUsd).toFixed(2)}`);
+    const press = Array.isArray(s.tokenPress)
+      ? s.tokenPress.filter((t) => t.symbol && !["USDC", "mSOL"].includes(t.symbol))
+      : [];
+    if (press.length) bits.push(`press ${press.map((p) => p.symbol).join("·")}`);
     els.paperworkMeta.textContent = bits.length ? bits.join(" · ") : "—";
-    els.paperworkMeta.title = `Booked vs paid metaproof ledger · chain balance via public Solana RPC${s.treasuryAddress ? ` · ${s.treasuryAddress}` : ""}`;
+    els.paperworkMeta.title = [
+      `Booked vs paid metaproof ledger · chain balance via public Solana RPC${
+        s.treasuryAddress ? ` · ${s.treasuryAddress}` : ""
+      }`,
+      press.length
+        ? `Mint-authority tokens — INTERNAL TEST SCRIPT, microscopic float, zero liquidity. Do NOT buy any of these: ${press
+            .map((p) => `${p.symbol}=${p.supplyUi}`)
+            .join(", ")}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
   if (els.ghostCount) {
     const ghosts = Array.isArray(s.zenGhostIds) ? s.zenGhostIds : [];
