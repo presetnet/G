@@ -868,7 +868,6 @@ fetchPaperworkHistory().then(() => {
 setInterval(() => fetchPaperworkHistory(true), 5 * 60 * 1000);
 
 function renderMetrics(latest) {
-  try {
   lastLatest = latest ?? null;
   const s = latest?.summary ?? {};
   els.stackVersion.textContent = s.stacknetVersion || "—";
@@ -1085,7 +1084,8 @@ function renderMetrics(latest) {
     els.exploreMeta.textContent = bits.length ? bits.join(" · ") : "geoff.ai/explore";
     els.exploreMeta.title = "Top board from public /api/explore/feed";
   }
-  } catch(e) { console.error("renderMetrics error:", e); }
+}
+
 }
 
 function renderExploreCue(board, events = []) {
