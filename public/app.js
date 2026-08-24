@@ -1004,45 +1004,6 @@ function renderMetrics(latest) {
   }
   if (els.miningBand) {
     els.miningBand.textContent = s.miningBand || "watching the miner desk";
-  }
-    const ladder = Array.isArray(s.goLadder) ? s.goLadder : [];
-    if (ox) {
-      const quota =
-        ox.quota === "unlimited"
-          ? "∞"
-          : ox.quota != null
-            ? Number(ox.quota).toLocaleString("en-US")
-            : "?";
-      const parts = [];
-      if (ox.contextLimit != null) parts.push(`ctx ${Number(ox.contextLimit).toLocaleString()}`);
-      if (ox.inputLimit != null) parts.push(`in ${Number(ox.inputLimit).toLocaleString()}`);
-      if (ox.outputLimit != null) parts.push(`out ${Number(ox.outputLimit).toLocaleString()}`);
-      if (ox.knowledge) parts.push(`cutoff ${ox.knowledge}`);
-      if (ox.releaseDate) parts.push(`rel ${ox.releaseDate}`);
-      if (ox.status) parts.push(ox.status);
-    } else {
-    }
-  }
-    const snVer = s.stacknetVersion;
-    const ocZenFp = s.zenFingerprint;
-    const ocGoFp = s.goFingerprint;
-    const ocRegFp = s.ocRegistryFingerprint;
-    const zenMoved = ocZenFp && s.prevZenFingerprint && ocZenFp !== s.prevZenFingerprint;
-    const goMoved = ocGoFp && s.prevGoFingerprint && ocGoFp !== s.prevGoFingerprint;
-    const regMoved = ocRegFp && s.prevOcRegistryFingerprint && ocRegFp !== s.prevOcRegistryFingerprint;
-    const snChanged = snVer && s.prevStacknetVersion && snVer !== s.prevStacknetVersion;
-
-    if (snChanged && (zenMoved || goMoved || regMoved)) {
-    } else if (snChanged) {
-    } else {
-    }
-  }
-
-    if (ze) {
-      } else {
-      }
-    } else {
-    }
   if (els.exploreCount) {
     els.exploreCount.textContent = s.exploreCount != null ? String(s.exploreCount) : "—";
   }
@@ -1057,9 +1018,8 @@ function renderMetrics(latest) {
     els.exploreMeta.title = "Top board from public /api/explore/feed";
   }
 }
+}
 
-}
-}
 function renderExploreCue(board, events = []) {
   if (!els.exploreCue) return;
   const href = board?.url || "https://www.geoff.ai/explore";
