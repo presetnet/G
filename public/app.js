@@ -875,9 +875,9 @@ setInterval(() => fetchPaperworkHistory(true), 5 * 60 * 1000);
 function renderMetrics(latest) {
   lastLatest = latest ?? null;
   const s = latest?.summary ?? {};
-  els.stackVersion.textContent = s.stacknetVersion || "—";
-  els.stackHealth.textContent = s.stacknetStatus || "—";
-  els.stackNodes.textContent =
+  if (els.stackVersion) els.stackVersion.textContent = s.stacknetVersion || "—";
+  if (els.stackHealth) els.stackHealth.textContent = s.stacknetStatus || "—";
+  if (els.stackNodes) els.stackNodes.textContent =
     s.nodes != null && s.gpus != null ? `${s.nodes} / ${s.gpus}` : "—";
   const loadBits = [];
   if (s.averageLoad != null) loadBits.push(`load ${s.averageLoad}`);
@@ -887,24 +887,24 @@ function renderMetrics(latest) {
     );
   }
   if (s.taskCount != null) loadBits.push(`tasks ${s.taskCount}`);
-  els.stackLoad.textContent = loadBits.length ? loadBits.join(" · ") : "load —";
+  if (els.stackLoad) els.stackLoad.textContent = loadBits.length ? loadBits.join(" · ") : "load —";
   if (s.availableVramGb != null && s.vramGb != null) {
-    els.vramText.textContent = `${s.availableVramGb}/${s.vramGb} GB`;
+    if (els.vramText) els.vramText.textContent = `${s.availableVramGb}/${s.vramGb} GB`;
     els.vramBar.style.width = `${s.vramAvailablePct ?? 0}%`;
   } else {
     els.vramText.textContent = "—";
     els.vramBar.style.width = "0%";
   }
-  els.geoffBuild.textContent = short(s.geoffBuildId, 10, 6);
+  if (els.geoffBuild) els.geoffBuild.textContent = short(s.geoffBuildId, 10, 6);
   if (s.geoffDeployId) {
-    els.geoffDeploy.textContent = s.geoffDeployId;
+    if (els.geoffDeploy) els.geoffDeploy.textContent = s.geoffDeployId;
   } else if (s.chunkHash) {
     els.geoffDeploy.textContent = `asset ${short(s.chunkHash, 4, 4)}`;
   } else {
     els.geoffDeploy.textContent = "—";
   }
-  els.modelCount.textContent = s.models != null ? String(s.models) : "—";
-  els.apiModelCount.textContent =
+  if (els.modelCount) els.modelCount.textContent = s.models != null ? String(s.models) : "—";
+  if (els.apiModelCount) els.apiModelCount.textContent =
     s.apiModels != null
       ? `api ${s.apiModels}${s.models != null ? ` · net ${s.models}` : ""}`
       : "api —";
@@ -912,9 +912,9 @@ function renderMetrics(latest) {
     els.apiModelCount.title =
       "api = public /v1/models cards · net = /network/summary routing lanes (not the same list)";
   }
-  els.widgetCount.textContent = s.widgets != null ? String(s.widgets) : "—";
+  if (els.widgetCount) els.widgetCount.textContent = s.widgets != null ? String(s.widgets) : "—";
   if (s.mcpContract) {
-    els.mcpContract.textContent = short(s.mcpContract, 22, 0);
+    if (els.mcpContract) els.mcpContract.textContent = short(s.mcpContract, 22, 0);
     els.mcpContract.title = `MCP contract from Stacknet /health · ${s.mcpContract}`;
   } else {
     els.mcpContract.textContent = "not on /health";
