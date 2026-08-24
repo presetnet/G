@@ -1005,9 +1005,7 @@ function renderMetrics(latest) {
   if (els.miningBand) {
     els.miningBand.textContent = s.miningBand || "watching the miner desk";
   }
-  if (els.oxAlphaSpec) {
     const ladder = Array.isArray(s.goLadder) ? s.goLadder : [];
-    const ox = ladder.find((r) => r.name === "Ox Alpha Free" || r.name === "x-preview-f-free");
     if (ox) {
       const quota =
         ox.quota === "unlimited"
@@ -1015,7 +1013,6 @@ function renderMetrics(latest) {
           : ox.quota != null
             ? Number(ox.quota).toLocaleString("en-US")
             : "?";
-      els.oxAlphaSpec.textContent = quota;
       const parts = [];
       if (ox.contextLimit != null) parts.push(`ctx ${Number(ox.contextLimit).toLocaleString()}`);
       if (ox.inputLimit != null) parts.push(`in ${Number(ox.inputLimit).toLocaleString()}`);
@@ -1023,15 +1020,9 @@ function renderMetrics(latest) {
       if (ox.knowledge) parts.push(`cutoff ${ox.knowledge}`);
       if (ox.releaseDate) parts.push(`rel ${ox.releaseDate}`);
       if (ox.status) parts.push(ox.status);
-      els.oxAlphaMeta.textContent = parts.length ? parts.join(" · ") : "x-preview-f-free";
-      els.oxAlphaSpec.style.color = "";
     } else {
-      els.oxAlphaSpec.textContent = "—";
-      els.oxAlphaMeta.textContent = "not on ladder";
     }
   }
-  // Sync detector: opencode surface + StackNet version moving together
-  if (els.syncStatus) {
     const snVer = s.stacknetVersion;
     const ocZenFp = s.zenFingerprint;
     const ocGoFp = s.goFingerprint;
@@ -1042,39 +1033,15 @@ function renderMetrics(latest) {
     const snChanged = snVer && s.prevStacknetVersion && snVer !== s.prevStacknetVersion;
 
     if (snChanged && (zenMoved || goMoved || regMoved)) {
-      els.syncStatus.textContent = "SYNC";
-      els.syncStatus.style.color = "var(--accent)";
-      els.syncMeta.textContent = `StackNet ${s.prevStacknetVersion} → ${snVer} + opencode surface moved`;
-      els.syncStatus.title = `StackNet version bump coincided with opencode surface change`;
     } else if (snChanged) {
-      els.syncStatus.textContent = "SN MOVED";
-      els.syncStatus.style.color = "var(--muted)";
-      els.syncMeta.textContent = `StackNet ${s.prevStacknetVersion} → ${snVer} (opencode quiet)`;
     } else {
-      els.syncStatus.textContent = "—";
-      els.syncMeta.textContent = snVer ? `StackNet ${snVer}` : "waiting…";
     }
   }
 
-  // Zen error probe status
-  if (els.zenErrStatus) {
-    const ze = s.zenErrShape;
     if (ze) {
-      if (s.zenErrLeakHit) {
-        els.zenErrStatus.textContent = "LEAK";
-        els.zenErrStatus.style.color = "var(--danger)";
-        els.zenErrMeta.textContent = `LEAK: ${ze} · ${s.zenErrSnippet ? s.zenErrSnippet.slice(0, 80) : "stacknet fingerprint detected"}`;
-        els.zenErrStatus.title = "StackNet fingerprint detected in zen error payload";
-      } else if (s.zenErrCached) {
-        els.zenErrStatus.textContent = "cached";
-        els.zenErrMeta.textContent = `shape: ${ze}`;
       } else {
-        els.zenErrStatus.textContent = "baselined";
-        els.zenErrMeta.textContent = `shape: ${ze}`;
       }
     } else {
-      els.zenErrStatus.textContent = "—";
-      els.zenErrMeta.textContent = "waiting for probe…";
     }
   if (els.exploreCount) {
     els.exploreCount.textContent = s.exploreCount != null ? String(s.exploreCount) : "—";
@@ -1092,7 +1059,7 @@ function renderMetrics(latest) {
 }
 
 }
-
+}
 function renderExploreCue(board, events = []) {
   if (!els.exploreCue) return;
   const href = board?.url || "https://www.geoff.ai/explore";
