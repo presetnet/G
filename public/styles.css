@@ -4103,3 +4103,10 @@ details[open] > .fold-summary::after {
   .playbook-grid { grid-template-columns: 1fr; }
   .metrics-grid { grid-template-columns: 1fr; }
 }
+
+.identified-banner { text-align:center; padding:2rem 1.5rem; background:rgba(52,211,153,0.06); border-top:1px solid rgba(52,211,153,0.2); border-bottom:1px solid rgba(52,211,153,0.2); }
+.identified-badge { display:inline-block; padding:0.3rem 0.9rem; border-radius:999px; font-size:0.7rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:#34d399; background:rgba(52,211,153,0.12); border:1px solid rgba(52,211,153,0.3); margin-bottom:0.75rem; }
+.identified-banner h2 { font-size:1.4rem; font-weight:700; color:var(--ink); margin-bottom:0.5rem; }
+.identified-banner p { color:var(--muted); font-size:0.9rem; line-height:1.6; max-width:800px; margin:0 auto 0.5rem; }
+.identified-banner code { font-family:"JetBrains Mono",monospace; font-size:0.8rem; color:var(--accent); background:rgba(255,214,10,0.08); padding:0.1rem 0.3rem; border-radius:3px; }
+.identified-note { font-style:italic; font-size:0.82rem; }
