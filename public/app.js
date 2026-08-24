@@ -1,3 +1,8 @@
+window.onerror = function(msg, src, line, col, err) {
+  const el = document.getElementById("paperworkMeta");
+  if (el) el.textContent = "ERROR: " + msg + " @line " + line;
+  console.error("GLOBAL:", msg, "line", line, err);
+};
 import { icon } from "./icons.js";
 import { CLIENT_TOKEN_PLAN } from "./token-plan-fallback.js";
 import {
