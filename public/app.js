@@ -875,7 +875,7 @@ setInterval(() => fetchPaperworkHistory(true), 5 * 60 * 1000);
 function renderMetrics(latest) {
   lastLatest = latest ?? null;
   const s = latest?.summary ?? {};
-  if (els.stackVersion) els.stackVersion.textContent = s.stacknetVersion || "—";
+  if (els.stackVersion) els.stackVersion.innerHTML = (s.stacknetVersion ? '<span class="live-dot"></span>' : '') + (s.stacknetVersion || "—");
   if (els.stackHealth) els.stackHealth.textContent = s.stacknetStatus || "—";
   if (els.stackNodes) els.stackNodes.textContent =
     s.nodes != null && s.gpus != null ? `${s.nodes} / ${s.gpus}` : "—";
@@ -947,8 +947,8 @@ function renderMetrics(latest) {
     if (press.length) bits.push(`press ${press.map((p) => p.symbol).join("·")}`);
     const d24 = paperworkVelocity(pwHistoryCache.series, 24 * 3600e3);
     if (d24 != null && Math.abs(d24) > 0.5)
-      bits.push(`${d24 >= 0 ? "▲" : "▼"}${fmtCompactUsd(Math.abs(d24))}/24h`);
-    els.paperworkMeta.textContent = bits.length ? bits.join(" · ") : "—";
+      bits.push(`<span class="${d24 >= 0 ? "vel-up" : "vel-down"}">${d24 >= 0 ? "▲" : "▼"} ${fmtCompactUsd(Math.abs(d24))}</span>/24h`);
+    if (els.paperworkMeta) els.paperworkMeta.innerHTML = bits.length ? bits.join(" · ") : "—";
     els.paperworkMeta.title = [
       `Booked vs paid metaproof ledger · chain balance via public Solana RPC${
         s.treasuryAddress ? ` · ${s.treasuryAddress}` : ""

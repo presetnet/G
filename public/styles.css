@@ -4110,3 +4110,30 @@ details[open] > .fold-summary::after {
 .identified-banner p { color:var(--muted); font-size:0.9rem; line-height:1.6; max-width:800px; margin:0 auto 0.5rem; }
 .identified-banner code { font-family:"JetBrains Mono",monospace; font-size:0.8rem; color:var(--accent); background:rgba(255,214,10,0.08); padding:0.1rem 0.3rem; border-radius:3px; }
 .identified-note { font-style:italic; font-size:0.82rem; }
+
+/* ---- live pulse on changing values ---- */
+.metric strong.updated {
+  animation: pulse-glow 2s ease-in-out 3;
+}
+@keyframes pulse-glow {
+  0% { text-shadow: 0 0 4px var(--accent); color: var(--accent); }
+  50% { text-shadow: 0 0 12px var(--accent); }
+  100% { text-shadow: none; }
+}
+.metric em .vel-up { color: var(--heat-bright); font-weight: 700; }
+.metric em .vel-down { color: var(--danger); font-weight: 700; }
+
+/* ---- live dot ---- */
+.live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--heat-bright);
+  margin-right: 4px;
+  animation: live-blink 1.5s ease-in-out infinite;
+}
+@keyframes live-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
