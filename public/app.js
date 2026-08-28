@@ -228,6 +228,8 @@ const els = {
   exploreMeta: document.getElementById("exploreMeta"),
   exploreCue: document.getElementById("exploreCue"),
   exploreCueLink: document.getElementById("exploreCueLink"),
+  subscriptionCount: document.getElementById("subscriptionCount"),
+  subscriptionMeta: document.getElementById("subscriptionMeta"),
   docsCue: document.getElementById("docsCue"),
   docsCueLink: document.getElementById("docsCueLink"),
   lanesCue: document.getElementById("lanesCue"),
@@ -315,6 +317,7 @@ const EVENT_ICONS = {
   explore: "spark",
   productLanes: "layers",
   maxSolana: "bolt",
+  subscription: "tag",
   metaproofs: "layers",
 };
 
@@ -1016,6 +1019,21 @@ function renderMetrics(latest) {
     }
     els.exploreMeta.textContent = bits.length ? bits.join(" · ") : "geoff.ai/explore";
     els.exploreMeta.title = "Top board from public /api/explore/feed";
+  }
+  if (els.subscriptionCount) {
+    els.subscriptionCount.textContent =
+      s.subscriptionLiveCount != null
+        ? `${s.subscriptionLiveCount}/${s.subscriptionTotal ?? "?"}`
+        : "—";
+  }
+  if (els.subscriptionMeta) {
+    const labels = Array.isArray(s.subscriptionLiveLabels) ? s.subscriptionLiveLabels : [];
+    const bits = labels.map((l) => l.toLowerCase());
+    els.subscriptionMeta.textContent = bits.length
+      ? bits.join(" · ")
+      : "no billing routes up yet";
+    els.subscriptionMeta.title =
+      "Public billing/plans/subscription route probe (API is auth-gated)";
   }
 }
 }

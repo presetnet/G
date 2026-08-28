@@ -1213,6 +1213,57 @@ async function sniffGeoffProductLanes() {
   };
 }
 
+/** Auth-gated billing / subscription shells on geoff.ai — public route probe only. */
+const SUBSCRIPTION_ROUTES = [
+  { id: "account", path: "/account", label: "Account" },
+  { id: "billing", path: "/billing", label: "Billing" },
+  { id: "plan", path: "/plan", label: "Plan" },
+  { id: "plans", path: "/plans", label: "Plans" },
+  { id: "subscription", path: "/subscription", label: "Subscription" },
+];
+
+async function sniffGeoffSubscription() {
+  const started = Date.now();
+  const settled = await Promise.allSettled(
+    SUBSCRIPTION_ROUTES.map(async (route) => {
+      const probe = await probeRoute(route.path);
+      return { ...route, ...probe, id: route.id };
+    }),
+  );
+
+  const routes = settled
+    .filter((r) => r.status === "fulfilled")
+    .map((r) => r.value);
+  const live = routes.filter((r) => r.live);
+  const fingerprint = simpleHash(
+    routes
+      .map((r) => `${r.id}:${r.status}:${r.toConnect ? "connect" : r.live ? "open" : "down"}`)
+      .sort()
+      .join("|"),
+  );
+  const liveLabels = live.map((r) => r.label || r.id);
+
+  return {
+    source: "geoff.subscription",
+    ok: live.length > 0,
+    status: live.length ? 200 : 0,
+    ms: Date.now() - started,
+    fingerprint,
+    liveCount: live.length,
+    total: SUBSCRIPTION_ROUTES.length,
+    liveLabels,
+    accountLive: Boolean(routes.find((r) => r.id === "account" && r.live)),
+    billingLive: Boolean(routes.find((r) => r.id === "billing" && r.live)),
+    plansLive: Boolean(routes.find((r) => r.id === "plans" && r.live)),
+    subscriptionLive: Boolean(routes.find((r) => r.id === "subscription" && r.live)),
+    routes,
+    note: "Public route probe — billing/plans/subscription shells exist as app routes; API (/api/v2 + /stacks/*) is auth-gated.",
+    reason: live.length
+      ? null
+      : "No billing/subscription routes answered with connect-gate or 200",
+  };
+}
+
 async function sniffGeoffDocsSurface() {
   const started = Date.now();
   const settled = await Promise.allSettled(
@@ -1340,6 +1391,7 @@ export async function runSniff() {
     sniffGeoffExplore(),
     sniffGeoffMaxSolana(),
     sniffGeoffProductLanes(),
+    sniffGeoffSubscription(),
     sniffStacknetHealth(),
     sniffStacknetRoot(),
     sniffStacknetNetwork(),
@@ -1517,6 +1569,14 @@ export async function runSniff() {
       productLanesTotal: bySource["geoff.product.lanes"]?.total ?? null,
       productLanesLabels: bySource["geoff.product.lanes"]?.liveLabels ?? null,
       productLanesFingerprint: bySource["geoff.product.lanes"]?.fingerprint ?? null,
+      subscriptionLiveCount: bySource["geoff.subscription"]?.liveCount ?? null,
+      subscriptionTotal: bySource["geoff.subscription"]?.total ?? null,
+      subscriptionFingerprint: bySource["geoff.subscription"]?.fingerprint ?? null,
+      subscriptionLiveLabels: bySource["geoff.subscription"]?.liveLabels ?? null,
+      subscriptionAccount: Boolean(bySource["geoff.subscription"]?.accountLive),
+      subscriptionBilling: Boolean(bySource["geoff.subscription"]?.billingLive),
+      subscriptionPlans: Boolean(bySource["geoff.subscription"]?.plansLive),
+      subscriptionRoute: Boolean(bySource["geoff.subscription"]?.subscriptionLive),
       healthySources: sources.filter((s) => s.ok).length,
       skippedSources: sources.filter((s) => s.skipped).length,
       failedSources: sources.filter((s) => !s.ok && !s.skipped).length,

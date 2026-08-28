@@ -540,6 +540,46 @@ export function translate(previous, current) {
     );
   }
 
+  // Billing / subscription surface — public route probe (auth-gated API, not wallet contents).
+  const prevSub = prev["geoff.subscription"];
+  const currSub = curr["geoff.subscription"];
+  if (prevSub?.fingerprint && currSub?.fingerprint && prevSub.fingerprint !== currSub.fingerprint) {
+    const prevLive = new Set((prevSub.routes || []).filter((r) => r.live).map((r) => r.id));
+    const currLive = new Set((currSub.routes || []).filter((r) => r.live).map((r) => r.id));
+    const added = [...currLive].filter((id) => !prevLive.has(id));
+    const removed = [...prevLive].filter((id) => !currLive.has(id));
+    const labels = Object.fromEntries((currSub.routes || []).map((r) => [r.id, r.label || r.path]));
+    events.push(
+      event({
+        kind: "subscription",
+        rank: added.length || removed.length ? "move" : "note",
+        title: added.length
+          ? "Billing / subscription surface expanded"
+          : removed.length
+            ? "Billing / subscription surface shrank"
+            : "Billing / subscription routes shifted",
+        summary: [
+          added.length ? `+${added.map((id) => labels[id] || id).join(", ")}` : null,
+          removed.length ? `-${removed.map((id) => labels[id] || id).join(", ")}` : null,
+          `${currSub.liveCount ?? 0}/${currSub.total ?? "?"} routes answering (open app route)`,
+          "Public route probe — billing/plans/api behind auth. Not payment contents.",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        details: {
+          from: prevSub.fingerprint,
+          to: currSub.fingerprint,
+          added,
+          removed,
+          accountLive: currSub.accountLive,
+          billingLive: currSub.billingLive,
+          plansLive: currSub.plansLive,
+          subscriptionLive: currSub.subscriptionLive,
+        },
+      }),
+    );
+  }
+
   // Community Explore board — public /api/explore/feed post IDs (not engagement spam).
   const prevExplore = prev["geoff.explore"];
   const currExplore = curr["geoff.explore"];
@@ -1534,6 +1574,7 @@ export function inferAgentDesk(latest, newEvents = []) {
       "maxSolana",
       "productLanes",
       "pricing",
+      "subscription",
     ].includes(e.kind),
   );
   const clustered = surface.length >= 2;
