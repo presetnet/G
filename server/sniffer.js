@@ -246,6 +246,44 @@ async function sniffStacknetNetwork() {
   };
 }
 
+async function sniffStacknetPile() {
+  const res = await fetchJson(`${config.stacknetBaseUrl}/api/v2/node-keys/pile`);
+  const raw = res.json?.pile ?? null;
+  const value = raw == null ? null : Number(raw);
+  return {
+    source: "stacknet.pile",
+    ok: res.ok && Number.isFinite(value),
+    status: res.status,
+    ms: res.ms,
+    pile: Number.isFinite(value) ? value : null,
+    raw,
+    docsUrl: "https://devconsole-indol.vercel.app/aisp/node-keys",
+  };
+}
+
+async function sniffStacknetX402() {
+  const [latest, downloads] = await Promise.all([
+    fetchJson("https://registry.npmjs.org/@stacknet/x402payg/latest"),
+    fetchJson("https://api.npmjs.org/downloads/point/last-week/@stacknet/x402payg"),
+  ]);
+  const weeklyDownloads = Number(downloads.json?.downloads);
+  const version = latest.json?.version ?? null;
+  return {
+    source: "stacknet.x402",
+    ok: latest.ok && downloads.ok && Boolean(version) && Number.isFinite(weeklyDownloads),
+    status: latest.ok && downloads.ok ? 200 : latest.status || downloads.status,
+    ms: Math.max(latest.ms, downloads.ms),
+    version,
+    weeklyDownloads: Number.isFinite(weeklyDownloads) ? weeklyDownloads : null,
+    periodStart: downloads.json?.start ?? null,
+    periodEnd: downloads.json?.end ?? null,
+    package: "@stacknet/x402payg",
+    paymentMints: ["SOL", "USDC", "PAPER"],
+    docsUrl: "https://devconsole-indol.vercel.app/stacks/packages/x402payg",
+    fingerprint: simpleHash(`${version || ""}|${weeklyDownloads || 0}|${downloads.json?.end || ""}`),
+  };
+}
+
 async function sniffStacknetNode() {
   const res = await fetchJson(`${config.stacknetBaseUrl}/node`);
   return {
@@ -1395,6 +1433,8 @@ export async function runSniff() {
     sniffStacknetHealth(),
     sniffStacknetRoot(),
     sniffStacknetNetwork(),
+    sniffStacknetPile(),
+    sniffStacknetX402(),
     sniffStacknetNode(),
     sniffStacknetModels(),
     sniffStacknetWidgets(),
@@ -1497,6 +1537,13 @@ export async function runSniff() {
       metaproofsPaperworkUsd: network.metaproofs?.totalPaperworkUsd ?? null,
       metaproofsPaidUsd: network.metaproofs?.paidPaperworkUsd ?? null,
       metaproofsOutstandingUsd: network.metaproofs?.outstandingUsd ?? null,
+      pile: bySource["stacknet.pile"]?.pile ?? null,
+      x402Version: bySource["stacknet.x402"]?.version ?? null,
+      x402WeeklyDownloads: bySource["stacknet.x402"]?.weeklyDownloads ?? null,
+      x402PeriodStart: bySource["stacknet.x402"]?.periodStart ?? null,
+      x402PeriodEnd: bySource["stacknet.x402"]?.periodEnd ?? null,
+      x402PaymentMints: bySource["stacknet.x402"]?.paymentMints ?? [],
+      x402Fingerprint: bySource["stacknet.x402"]?.fingerprint ?? null,
       fleetBases: fleet.bases,
       fleetLines: fleet.lines,
       treasuryRpcOk: Boolean(bySource["solana.treasury"]?.ok),

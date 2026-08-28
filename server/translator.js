@@ -580,6 +580,47 @@ export function translate(previous, current) {
     );
   }
 
+  const prevPile = Number(prev["stacknet.pile"]?.pile);
+  const currPile = Number(curr["stacknet.pile"]?.pile);
+  if (Number.isFinite(prevPile) && Number.isFinite(currPile) && prevPile !== currPile) {
+    const delta = currPile - prevPile;
+    events.push(
+      event({
+        kind: "pile",
+        rank: "note",
+        title: delta > 0 ? "Network PILE grew" : "Network PILE moved down",
+        summary: `Unredeemed Node Key earnings ${prevPile.toLocaleString()} → ${currPile.toLocaleString()} (${delta > 0 ? "+" : ""}${delta.toLocaleString()}). Public /api/v2/node-keys/pile.`,
+        details: { from: prevPile, to: currPile, delta },
+      }),
+    );
+  }
+
+  const prevX402 = prev["stacknet.x402"];
+  const currX402 = curr["stacknet.x402"];
+  if (prevX402?.ok && currX402?.ok) {
+    const versionChanged = prevX402.version !== currX402.version;
+    const downloadsChanged = prevX402.weeklyDownloads !== currX402.weeklyDownloads;
+    if (versionChanged || downloadsChanged) {
+      events.push(
+        event({
+          kind: "x402",
+          rank: versionChanged ? "move" : "note",
+          title: versionChanged ? "x402 PAYG shipped" : "x402 PAYG adoption moved",
+          summary: versionChanged
+            ? `@stacknet/x402payg ${prevX402.version || "?"} → ${currX402.version || "?"} · ${currX402.weeklyDownloads?.toLocaleString?.() || currX402.weeklyDownloads} downloads last week.`
+            : `@stacknet/x402payg weekly downloads ${prevX402.weeklyDownloads?.toLocaleString?.() || prevX402.weeklyDownloads} → ${currX402.weeklyDownloads?.toLocaleString?.() || currX402.weeklyDownloads}.`,
+          details: {
+            versionFrom: prevX402.version,
+            versionTo: currX402.version,
+            downloadsFrom: prevX402.weeklyDownloads,
+            downloadsTo: currX402.weeklyDownloads,
+            periodEnd: currX402.periodEnd,
+          },
+        }),
+      );
+    }
+  }
+
   // Community Explore board — public /api/explore/feed post IDs (not engagement spam).
   const prevExplore = prev["geoff.explore"];
   const currExplore = curr["geoff.explore"];
@@ -1575,6 +1616,8 @@ export function inferAgentDesk(latest, newEvents = []) {
       "productLanes",
       "pricing",
       "subscription",
+      "pile",
+      "x402",
     ].includes(e.kind),
   );
   const clustered = surface.length >= 2;

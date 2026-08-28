@@ -208,8 +208,8 @@ const els = {
   geoffDeploy: document.getElementById("geoffDeploy"),
   modelCount: document.getElementById("modelCount"),
   apiModelCount: document.getElementById("apiModelCount"),
-  widgetCount: document.getElementById("widgetCount"),
-  mcpContract: document.getElementById("mcpContract"),
+  pileValue: document.getElementById("pileValue"),
+  pileMeta: document.getElementById("pileMeta"),
   paperworkUsd: document.getElementById("paperworkUsd"),
   paperworkMeta: document.getElementById("paperworkMeta"),
   miningClaims: document.getElementById("miningClaims"),
@@ -224,10 +224,8 @@ const els = {
   ghostMeta: document.getElementById("ghostMeta"),
   fleetCount: document.getElementById("fleetCount"),
   fleetLinesText: document.getElementById("fleetLinesText"),
-  exploreCount: document.getElementById("exploreCount"),
-  exploreMeta: document.getElementById("exploreMeta"),
-  exploreCue: document.getElementById("exploreCue"),
-  exploreCueLink: document.getElementById("exploreCueLink"),
+  x402Downloads: document.getElementById("x402Downloads"),
+  x402Meta: document.getElementById("x402Meta"),
   subscriptionCount: document.getElementById("subscriptionCount"),
   subscriptionMeta: document.getElementById("subscriptionMeta"),
   docsCue: document.getElementById("docsCue"),
@@ -318,6 +316,8 @@ const EVENT_ICONS = {
   productLanes: "layers",
   maxSolana: "bolt",
   subscription: "tag",
+  pile: "layers",
+  x402: "bolt",
   metaproofs: "layers",
 };
 
@@ -581,6 +581,15 @@ function fmtCompactUsd(n) {
   return `$${n.toFixed(0)}`;
 }
 
+function fmtCompactNumber(n) {
+  if (!Number.isFinite(n)) return "—";
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return `${(n / 1e9).toFixed(abs >= 1e10 ? 1 : 2)}B`;
+  if (abs >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return n.toLocaleString();
+}
+
 /* ---- Proof popups · receipts behind every metric ---- */
 const SN_BASE = "https://stacknet.magma-rpc.com";
 let lastLatest = null;
@@ -630,13 +639,13 @@ const PROOFS = {
     fields: ["apiModels", "models", "fleetBases", "fleetLines"],
     curls: [`curl -s ${SN_BASE}/v1/models`, `curl -s ${SN_BASE}/network/summary`],
   },
-  widgetCount: {
-    title: "Widgets / MCP",
+  pileValue: {
+    title: "Network PILE",
     explain:
-      "Public widget count plus whether the MCP contract was present on /health this sniff.",
-    sources: ["stacknet.widgets", "stacknet.health"],
-    fields: ["widgets", "mcpOnHealth", "mcpContract"],
-    curls: [`curl -s ${SN_BASE}/widgets`, `curl -s ${SN_BASE}/health`],
+      "StackNet's documented public PILE: unredeemed earnings across Node Keys that are at least 10% utilized.",
+    sources: ["stacknet.pile"],
+    fields: ["pile"],
+    curls: [`curl -s ${SN_BASE}/api/v2/node-keys/pile`],
   },
   paperworkUsd: {
     title: "Paperwork ledger",
@@ -675,12 +684,16 @@ const PROOFS = {
     fields: ["fleetBases", "fleetLines", "models"],
     curls: [`curl -s ${SN_BASE}/network/summary`],
   },
-  exploreCount: {
-    title: "Explore board",
-    explain: "Top-board counts from Geoff's public explore feed.",
-    sources: ["geoff.explore"],
-    fields: ["exploreCount", "exploreAuthors"],
-    curls: ["curl -s https://www.geoff.ai/api/explore/feed"],
+  x402Downloads: {
+    title: "x402 PAYG adoption",
+    explain:
+      "Weekly npm downloads and current release of StackNet's public wallet-funded pay-as-you-go SDK.",
+    sources: ["stacknet.x402"],
+    fields: ["x402WeeklyDownloads", "x402Version", "x402PaymentMints", "x402PeriodEnd"],
+    curls: [
+      "curl -s https://api.npmjs.org/downloads/point/last-week/@stacknet/x402payg",
+      "curl -s https://registry.npmjs.org/@stacknet/x402payg/latest",
+    ],
   },
   miningClaims: {
     title: "wPOND claims",
@@ -698,12 +711,12 @@ const CARD_PROOF_ORDER = [
   "vramText",
   "geoffBuild",
   "modelCount",
-  "widgetCount",
+  "pileValue",
   "paperworkUsd",
   "ghostCount",
   "fleetCount",
   "miningClaims",
-  "exploreCount",
+  "x402Downloads",
 ];
 
 function openProof(key) {
@@ -915,15 +928,12 @@ function renderMetrics(latest) {
     els.apiModelCount.title =
       "api = public /v1/models cards · net = /network/summary routing lanes (not the same list)";
   }
-  if (els.widgetCount) els.widgetCount.textContent = s.widgets != null ? String(s.widgets) : "—";
-  if (s.mcpContract) {
-    if (els.mcpContract) els.mcpContract.textContent = short(s.mcpContract, 22, 0);
-    els.mcpContract.title = `MCP contract from Stacknet /health · ${s.mcpContract}`;
-  } else {
-    els.mcpContract.textContent = "not on /health";
-    els.mcpContract.title =
-      "remote_mcp missing on /health this sniff — docs.geoff.ai/mcp is still fingerprinted";
+  if (els.pileValue) {
+    const pile = Number(s.pile);
+    els.pileValue.textContent = Number.isFinite(pile) ? fmtCompactNumber(pile) : "—";
+    els.pileValue.title = `Network PILE raw value: ${s.pile ?? "—"}`;
   }
+  if (els.pileMeta) els.pileMeta.textContent = "unredeemed key earnings";
   if (els.paperworkUsd) {
     const booked = Number(s.metaproofsPaperworkUsd);
     els.paperworkUsd.textContent =
@@ -1005,20 +1015,22 @@ function renderMetrics(latest) {
   if (els.miningBand) {
     els.miningBand.textContent = s.miningBand || "watching the miner desk";
   }
-  if (els.miningBand) {
-    els.miningBand.textContent = s.miningBand || "watching the miner desk";
-  if (els.exploreCount) {
-    els.exploreCount.textContent = s.exploreCount != null ? String(s.exploreCount) : "—";
+  if (els.x402Downloads) {
+    const downloads = Number(s.x402WeeklyDownloads);
+    els.x402Downloads.textContent = Number.isFinite(downloads)
+      ? `${fmtCompactNumber(downloads)} / wk`
+      : "—";
   }
-  if (els.exploreMeta) {
+  if (els.x402Meta) {
     const bits = [];
-    if (s.exploreAuthors != null) bits.push(`${s.exploreAuthors} creators`);
-    const media = s.exploreMedia || {};
-    for (const key of ["image", "video", "audio"]) {
-      if (media[key]) bits.push(`${media[key]} ${key}`);
+    if (s.x402Version) bits.push(`v${s.x402Version}`);
+    if (Array.isArray(s.x402PaymentMints) && s.x402PaymentMints.length) {
+      bits.push(s.x402PaymentMints.join(" / "));
     }
-    els.exploreMeta.textContent = bits.length ? bits.join(" · ") : "geoff.ai/explore";
-    els.exploreMeta.title = "Top board from public /api/explore/feed";
+    els.x402Meta.textContent = bits.length ? bits.join(" · ") : "wallet-funded API keys";
+    els.x402Meta.title = s.x402PeriodEnd
+      ? `npm last-week window ending ${s.x402PeriodEnd}`
+      : "StackNet x402 pay-as-you-go SDK";
   }
   if (els.subscriptionCount) {
     els.subscriptionCount.textContent =
@@ -1034,48 +1046,6 @@ function renderMetrics(latest) {
       : "no billing routes up yet";
     els.subscriptionMeta.title =
       "Public billing/plans/subscription route probe (API is auth-gated)";
-  }
-}
-}
-
-function renderExploreCue(board, events = []) {
-  if (!els.exploreCue) return;
-  const href = board?.url || "https://www.geoff.ai/explore";
-  if (els.exploreCueLink) els.exploreCueLink.href = href;
-
-  const recent = eventsInTrackWindow(events)
-    .filter((e) => e.kind === "explore")
-    .sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0));
-  const hit = recent[0];
-
-  if (hit) {
-    const added = hit.details?.added?.length || 0;
-    const titles = (hit.summary || "")
-      .match(/“([^”]+)”/g)
-      ?.map((t) => t.slice(1, -1))
-      .slice(0, 2);
-    const titleBit = titles?.length ? ` · ${titles.join(", ")}` : "";
-    els.exploreCue.textContent =
-      added > 0
-        ? `New stuff added · +${added}${titleBit}`
-        : hit.title || "Explore board moved";
-    els.exploreCue.classList.add("hot");
-    return;
-  }
-
-  els.exploreCue.classList.remove("hot");
-  if (board?.count != null) {
-    const media = board.mediaCounts || memory?.latest?.summary?.exploreMedia || {};
-    const mix = ["video", "image", "audio"]
-      .filter((k) => media[k])
-      .map((k) => `${media[k]} ${k}`)
-      .slice(0, 3)
-      .join(" · ");
-    els.exploreCue.textContent = mix
-      ? `Top ${board.count} · ${mix}`
-      : `No new posts in ${TRACK_HOURS}h · ${board.count} on the top board`;
-  } else {
-    els.exploreCue.textContent = "Watching for new posts…";
   }
 }
 
@@ -2041,7 +2011,6 @@ function applyPayload(payload) {
   renderHorsepower(briefing?.horsepower || null);
   renderTokenPlan(briefing?.tokenPlan || CLIENT_TOKEN_PLAN);
   renderDocsCue(briefing?.docsBoard || null, feedEvents);
-  renderExploreCue(briefing?.exploreBoard || null, feedEvents);
   renderLanesCue(briefing?.lanesBoard || null, latest, feedEvents);
   renderMaxCue(latest, feedEvents);
   renderAgentDesk(payload.agentDesk || briefing?.agentDesk || null);
