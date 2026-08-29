@@ -877,6 +877,10 @@ function wireProofPopups() {
   grid?.addEventListener("click", (e) => {
     const card = e.target.closest(".metric");
     if (!card) return;
+    if (card.dataset.proof && PROOFS[card.dataset.proof]) {
+      openProof(card.dataset.proof);
+      return;
+    }
     const ids = [...card.querySelectorAll("[id]")].map((x) => x.id);
     const key = CARD_PROOF_ORDER.find((k) => ids.includes(k));
     if (key) openProof(key);
