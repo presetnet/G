@@ -215,8 +215,7 @@ const els = {
   paperworkStatus: document.getElementById("paperworkStatus"),
   keysoldUsd: document.getElementById("keysoldUsd"),
   keysoldMeta: document.getElementById("keysoldMeta"),
-  trafficViews: document.getElementById("trafficViews"),
-  trafficMeta: document.getElementById("trafficMeta"),
+  trafficMini: document.getElementById("trafficMini"),
   settleBanner: document.getElementById("settleBanner"),
   miningClaims: document.getElementById("miningClaims"),
   miningBand: document.getElementById("miningBand"),
@@ -1118,24 +1117,20 @@ function renderKeySale(s) {
 }
 
 function renderTraffic(traffic) {
-  if (!els.trafficViews) return;
+  if (!els.trafficMini) return;
   const total = Number(traffic?.totalViews);
   const topPath = traffic?.topPath;
   const topViews = Number(traffic?.topPathViews);
 
-  els.trafficViews.textContent = Number.isFinite(total) ? fmtCompactNumber(total) : "—";
+  els.trafficMini.textContent = Number.isFinite(total) ? `views ${fmtCompactNumber(total)}` : "views —";
   if (topPath) {
-    els.trafficMeta.textContent = Number.isFinite(topViews)
-      ? `${topPath} · ${fmtCompactNumber(topViews)} top`
-      : topPath;
-    els.trafficViews.title = `Shared HTML page-view counter${traffic?.fallback ? " (local fallback)" : ""}. Counts root and .html route loads.`;
-    els.trafficMeta.title = els.trafficViews.title;
+    els.trafficMini.title = Number.isFinite(topViews)
+      ? `Shared page views${traffic?.fallback ? " (local fallback)" : ""} · top ${topPath} (${fmtCompactNumber(topViews)})`
+      : `Shared page views${traffic?.fallback ? " (local fallback)" : ""} · top ${topPath}`;
   } else {
-    els.trafficMeta.textContent = traffic?.fallback ? "this browser only" : "shared page views";
-    els.trafficViews.title = traffic?.fallback
+    els.trafficMini.title = traffic?.fallback
       ? "Local browser fallback counter while the shared endpoint is unavailable."
       : "Shared HTML page-view counter. Counts root and .html route loads.";
-    els.trafficMeta.title = els.trafficViews.title;
   }
 }
 
