@@ -277,8 +277,10 @@ async function sniffStacknetKeySale() {
     keysSold: Number.isFinite(keysSold) ? keysSold : null,
     priceUsd: isFiniteNumber(j.priceUsd) ? j.priceUsd : null,
     priceCents: isFiniteNumber(j.priceCents) ? j.priceCents : null,
-    tokenAllocation: isFiniteNumber(j.tokenAllocation) ? j.tokenAllocation : null,
-    tokenAllocationFormatted: j.tokenAllocationFormatted || null,
+    // NOTE: tokenAllocation in this response is NOT the per-key token grant.
+    // Docs (/aisp/node-keys) state each Node Key carries +1B inference tokens.
+    // The API's 15.6M figure is a sale-ticker unit, not the key grant — deliberately omitted
+    // to avoid misreading it as "15.6M tokens per key."
     nextHalvingDate: j.nextHalvingDate ?? null,
     saleStartDate: j.saleStartDate ?? null,
     docsUrl: "https://devconsole-indol.vercel.app/aisp/node-keys",
@@ -1572,7 +1574,6 @@ export async function runSniff() {
       keySaleDaysUntilHalving: bySource["stacknet.keysale"]?.daysUntilHalving ?? null,
       keySaleKeysSold: bySource["stacknet.keysale"]?.keysSold ?? null,
       keySalePriceUsd: bySource["stacknet.keysale"]?.priceUsd ?? null,
-      keySaleTokenAllocation: bySource["stacknet.keysale"]?.tokenAllocationFormatted ?? null,
       keySaleFingerprint: bySource["stacknet.keysale"]?.fingerprint ?? null,
       x402Version: bySource["stacknet.x402"]?.version ?? null,
       x402WeeklyDownloads: bySource["stacknet.x402"]?.weeklyDownloads ?? null,

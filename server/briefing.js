@@ -482,7 +482,7 @@ function userTakeForEvent(event) {
     case "metaproofs":
       return "Network metaproofs counter moved — public summary field only.";
     case "keysale":
-      return "Node-key sale moved — the network's revenue rails (public /api/v2/node-keys/pricing). Epoch, keys sold, key price, or the halving countdown changed.";
+      return "Node-key sale ticker moved — self-reported by StackNet (public /api/v2/node-keys/pricing), purchases unverified on-chain. Each key carries +1B inference tokens per docs.";
     case "docs":
       return "Public docs pages moved (intro / token-plan / MCP / features / Geoff Code / security).";
     case "explore":

@@ -764,14 +764,14 @@ export function translate(previous, current) {
             : epochBumped
               ? "Node-key sale epoch advanced"
               : "Node-key sale moved",
-          summary: bits.join(" · "),
+          summary: bits.join(" · ") + " Key-sale ticker as reported by StackNet; purchases unverified on-chain.",
           details: {
             saleActive: ksCurr.saleActive,
             keysSold: { from: ksPrev.keysSold, to: ksCurr.keysSold },
             priceUsd: { from: ksPrev.priceUsd, to: ksCurr.priceUsd },
             epoch: { from: ksPrev.epoch, to: ksCurr.epoch },
             daysUntilHalving: { from: ksPrev.daysUntilHalving, to: ksCurr.daysUntilHalving },
-            tokenAllocation: ksCurr.tokenAllocationFormatted,
+            unverified: "keysSold/price self-reported by StackNet; no on-chain purchase receipts yet.",
           },
         }),
       );
