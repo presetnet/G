@@ -1052,16 +1052,7 @@ function renderMetrics(latest) {
     els.miningClaims.title = `wPOND Mining Rewards desk · facet ${facet}\nClick for proof.`;
   }
   if (els.miningBand) {
-    const ageMs = Number(s.miningSurfaceAgeMs);
-    const ageBit = s.miningSurfaceCached && Number.isFinite(ageMs)
-      ? ` · cached ${Math.max(1, Math.round(ageMs / 3600000))}h ago`
-      : s.miningSurfaceCheckedAt
-        ? ` · refreshed ${new Date(s.miningSurfaceCheckedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
-        : "";
-    els.miningBand.textContent = `${s.miningBand || "watching the miner desk"}${ageBit}`;
-    els.miningBand.title = s.miningSurfaceCached
-      ? "Mining surface served from 4h cache. Use the refresh button to force a live recheck."
-      : "Mining surface checked live just now.";
+    els.miningBand.textContent = s.miningBand || "watching the miner desk";
   }
   if (els.x402Downloads) {
     const downloads = Number(s.x402WeeklyDownloads);
