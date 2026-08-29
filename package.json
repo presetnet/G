@@ -13,6 +13,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "express": "^5.1.0"
   }
 }
