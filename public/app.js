@@ -219,6 +219,7 @@ const els = {
   settleBanner: document.getElementById("settleBanner"),
   miningClaims: document.getElementById("miningClaims"),
   miningBand: document.getElementById("miningBand"),
+  miningRefreshBtn: document.getElementById("miningRefreshBtn"),
   oxAlphaSpec: document.getElementById("oxAlphaSpec"),
   oxAlphaMeta: document.getElementById("oxAlphaMeta"),
   syncStatus: document.getElementById("syncStatus"),
@@ -2204,6 +2205,26 @@ async function pollNow() {
   }
 }
 
+async function refreshMiningSurface() {
+  if (els.miningRefreshBtn) els.miningRefreshBtn.disabled = true;
+  try {
+    const res = await fetch("/api/poll", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ forceMiningSurface: true }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Refresh failed");
+    applyPayload(data);
+    setConnection("live", "live");
+  } catch (error) {
+    setConnection("error", "mining refresh failed");
+    console.error(error);
+  } finally {
+    if (els.miningRefreshBtn) els.miningRefreshBtn.disabled = false;
+  }
+}
+
 function connectStream() {
   if (mode === "vercel") return null;
   const source = new EventSource("/api/stream");
@@ -2280,6 +2301,7 @@ function startMatrix() {
 }
 
 els.pollBtn.addEventListener("click", pollNow);
+els.miningRefreshBtn?.addEventListener("click", refreshMiningSurface);
 hydrateIcons();
 startMatrix();
 // Paint the value sheet immediately — don't wait on a cold sniff.

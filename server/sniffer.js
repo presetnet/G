@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { loadMiningSurfaceCache, saveMiningSurfaceCache } from "./store.js";
 import {
   TOKEN_PLAN_URLS,
   FALLBACK_TOKEN_PLAN,
@@ -8,6 +9,7 @@ import {
 } from "./token-plan.js";
 
 const DEFAULT_TIMEOUT_MS = 18_000;
+const MINING_SURFACE_CACHE_MS = 4 * 60 * 60 * 1000;
 
 async function fetchJson(url, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   const controller = new AbortController();
@@ -445,7 +447,14 @@ const OPENCODE_REGISTRY_URL = "https://models.dev/api.json";
 const MINING_SURFACE_URL =
   process.env.MINING_SURFACE_URL || "https://wpond-mining-dashboard.vercel.app/";
 
-export async function sniffMiningSurface() {
+export async function sniffMiningSurface(force = false) {
+  if (!force) {
+    const cached = await loadMiningSurfaceCache().catch(() => null);
+    const cachedAt = cached?.cachedAt ? Date.parse(cached.cachedAt) : NaN;
+    if (cached?.source && Number.isFinite(cachedAt) && Date.now() - cachedAt < MINING_SURFACE_CACHE_MS) {
+      return { ...cached.source, cached: true, ageMs: Date.now() - cachedAt };
+    }
+  }
   try {
     const res = await fetchJson(MINING_SURFACE_URL, { timeoutMs: 9_000 });
     const text = res.text || "";
@@ -454,7 +463,7 @@ export async function sniffMiningSurface() {
     const facet =
       (text.match(/id="facetState"[^>]*>\s*([^<]{0,60})</i) || [])[1]?.trim() || null;
     const band = (text.match(/class="subtitle"[^>]*>\s*([^<]{0,160})</i) || [])[1]?.trim() || null;
-    return {
+    const source = {
       source: "surface.mining",
       ok: true,
       status: res.status,
@@ -467,8 +476,10 @@ export async function sniffMiningSurface() {
       fingerprint: simpleHash(`${res.status}:${text.length}:${title}:${claimsClass}:${facet}`),
       reason: null,
     };
+    await saveMiningSurfaceCache({ cachedAt: new Date().toISOString(), source }).catch(() => {});
+    return source;
   } catch (error) {
-    return {
+    const source = {
       source: "surface.mining",
       ok: false,
       status: 0,
@@ -481,6 +492,7 @@ export async function sniffMiningSurface() {
       fingerprint: null,
       reason: error?.message || String(error),
     };
+    return source;
   }
 }
 const OPENCODE_RELEASES_URL =
@@ -1447,7 +1459,7 @@ async function sniffGeoffTokenPlan() {
   }
 }
 
-export async function runSniff() {
+export async function runSniff({ forceMiningSurface = false } = {}) {
   const startedAt = new Date().toISOString();
   const settled = await Promise.allSettled([
     sniffGeoffVersion(),
@@ -1472,7 +1484,7 @@ export async function runSniff() {
     sniffOpencodeRegistry(),
     sniffOpencodeReleases(),
     sniffOpencodeGo(),
-    sniffMiningSurface(),
+    sniffMiningSurface(forceMiningSurface),
     sniffZenErrorShape(),
   ]);
 

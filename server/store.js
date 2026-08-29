@@ -31,6 +31,7 @@ const paths = {
   state: () => path.join(config.dataDir, "state.json"),
   dailyActivity: () => path.join(config.dataDir, "daily-activity.json"),
   traffic: () => path.join(config.dataDir, "traffic.json"),
+  miningSurfaceCache: () => path.join(config.dataDir, "mining-surface-cache.json"),
 };
 
 export async function loadState() {
@@ -136,6 +137,21 @@ export async function recordTraffic(route = "/") {
   };
   await writeJson(paths.traffic(), next);
   return next;
+}
+
+export async function loadMiningSurfaceCache() {
+  return readJson(paths.miningSurfaceCache(), null);
+}
+
+export async function saveMiningSurfaceCache(value) {
+  await writeJson(paths.miningSurfaceCache(), value);
+  return value;
+}
+
+export async function clearMiningSurfaceCache() {
+  try {
+    await fs.unlink(paths.miningSurfaceCache());
+  } catch {}
 }
 
 export async function loadSnapshots() {

@@ -52,6 +52,7 @@ app.post("/api/status", async (req, res) => {
       force: true,
       previous: req.body?.previous ?? null,
       knownEvents: Array.isArray(req.body?.events) ? req.body.events : [],
+      forceMiningSurface: Boolean(req.body?.forceMiningSurface),
     });
     res.json(payload);
   } catch (error) {
@@ -93,6 +94,7 @@ app.post("/api/poll", async (req, res) => {
       force: true,
       previous: req.body?.previous ?? null,
       knownEvents: Array.isArray(req.body?.events) ? req.body.events : [],
+      forceMiningSurface: Boolean(req.body?.forceMiningSurface),
     });
     res.json(payload);
   } catch (error) {

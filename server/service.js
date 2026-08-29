@@ -89,7 +89,7 @@ export async function getStoredPayload() {
  * Authoritative Vercel path: shared desk history + optional live sniff.
  * Never trusts browser localStorage as the source of truth.
  */
-export async function getSharedPayload({ sniffLive = true } = {}) {
+export async function getSharedPayload({ sniffLive = true, forceMiningSurface = false } = {}) {
   const shared = await loadSharedBundle();
   let latest = shared.latest;
   let newEvents = [];
@@ -99,7 +99,7 @@ export async function getSharedPayload({ sniffLive = true } = {}) {
   let persistError = null;
 
   if (sniffLive) {
-    const snapshot = await runSniff();
+    const snapshot = await runSniff({ forceMiningSurface });
     newEvents = translate(shared.latest, snapshot);
     events = pruneEvents([...newEvents, ...(shared.events || [])]);
     dailyActivity = upsertDailyActivity(shared.dailyActivity || [], newEvents, {
@@ -157,23 +157,25 @@ export async function getSharedPayload({ sniffLive = true } = {}) {
  * @param {object} options
  * @param {object|null} [options.previous] ignored on Vercel (shared desk is baseline)
  * @param {object[]} [options.knownEvents] ignored on Vercel
+ * @param {boolean} [options.forceMiningSurface] force a fresh mining-surface sniff
  * @param {boolean} [options.persist] write to local data/ store
  */
 export async function pollAndTranslate({
   previous = null,
   knownEvents = [],
+  forceMiningSurface = false,
   persist = !useSharedDesk(),
 } = {}) {
   if (useSharedDesk()) {
     // Shared Redis desk is authoritative — browser/local empty files must not replace it.
-    return getSharedPayload({ sniffLive: true });
+    return getSharedPayload({ sniffLive: true, forceMiningSurface });
   }
 
   const startedState = persist ? await loadState() : { startedAt: null, pollCount: 0 };
   if (!startedState.startedAt) startedState.startedAt = new Date().toISOString();
 
   const baseline = previous ?? (persist ? await loadLatestSnapshot() : null);
-  const snapshot = await runSniff();
+  const snapshot = await runSniff({ forceMiningSurface });
   const newEvents = translate(baseline, snapshot);
 
   let events;

@@ -24,13 +24,14 @@ export async function getDashboardPayload() {
   return getStoredPayload();
 }
 
-export async function pollOnce({ force = false, previous = null, knownEvents = [] } = {}) {
+export async function pollOnce({ force = false, previous = null, knownEvents = [], forceMiningSurface = false } = {}) {
   if (polling && !force) return getStoredPayload();
   polling = true;
   try {
     const payload = await pollAndTranslate({
       previous,
       knownEvents,
+      forceMiningSurface,
       persist: !process.env.VERCEL,
     });
     emit(payload);
