@@ -217,9 +217,6 @@ const els = {
   keysoldMeta: document.getElementById("keysoldMeta"),
   trafficMini: document.getElementById("trafficMini"),
   settleBanner: document.getElementById("settleBanner"),
-  miningClaims: document.getElementById("miningClaims"),
-  miningBand: document.getElementById("miningBand"),
-  miningRefreshBtn: document.getElementById("miningRefreshBtn"),
   oxAlphaSpec: document.getElementById("oxAlphaSpec"),
   oxAlphaMeta: document.getElementById("oxAlphaMeta"),
   syncStatus: document.getElementById("syncStatus"),
@@ -721,32 +718,6 @@ const PROOFS = {
       "curl -s https://registry.npmjs.org/@stacknet/x402payg/latest",
     ],
   },
-  miningClaims: {
-    title: "wPOND claims",
-    explain:
-      "Direct Solana RPC watch of the wPOND payout wallet and token account, using the 100M claim floor. Published archive totals are shown separately because its older 225M filter omits smaller claims.",
-    sources: ["surface.mining"],
-    fields: [
-      "miningPayoutCount",
-      "miningPayoutTotal",
-      "miningPayoutDate",
-      "miningPayoutMinimum",
-      "miningPayoutActivityCount",
-      "miningPayoutTruncated",
-      "miningPayoutWallet",
-      "miningPayoutTokenAccount",
-      "miningPayoutMint",
-      "miningPayouts",
-      "miningArchiveClaims",
-      "miningArchiveWallets",
-      "miningArchiveTotalWpond",
-      "miningArchiveMinimum",
-    ],
-    curls: [
-      "curl -s https://wpond-mining-dashboard.vercel.app/band-claims-archive.json",
-      `curl -s https://api.mainnet-beta.solana.com -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"getSignaturesForAddress","params":["2Ag1QgyyJj2nS6nD6SLbpAUFaWPhaDrmHwrGwWpMqV9K",{"limit":100}]}'`,
-    ],
-  },
 };
 
 const CARD_PROOF_ORDER = [
@@ -760,7 +731,6 @@ const CARD_PROOF_ORDER = [
   "keySale",
   "ghostCount",
   "fleetCount",
-  "miningClaims",
   "x402Downloads",
 ];
 
@@ -1055,38 +1025,6 @@ function renderMetrics(latest) {
     els.fleetLinesText.textContent = lines.length
       ? lines.slice(0, 5).join("·")
       : "—";
-  }
-  if (els.miningClaims) {
-    const payoutCount = Number(s.miningPayoutCount);
-    const payoutTotal = Number(s.miningPayoutTotal);
-    if (Number.isFinite(payoutCount) && payoutCount > 0) {
-      els.miningClaims.textContent = `${payoutCount}${s.miningPayoutTruncated ? "+" : ""} CLAIM${payoutCount === 1 ? "" : "S"}`;
-      els.miningClaims.style.color = "var(--heat-bright)";
-      els.miningClaims.title = `Direct Solana RPC: ${Number.isFinite(payoutTotal) ? payoutTotal.toLocaleString() : "?"} wPOND paid by ${s.miningPayoutWallet || "the payout wallet"}. Click for proof.`;
-    } else if (s.miningClaimsOn == null) {
-      els.miningClaims.textContent = "—";
-      els.miningClaims.style.color = "";
-    } else {
-      els.miningClaims.textContent = s.miningClaimsOn ? "OPEN" : "CLOSED";
-      els.miningClaims.style.color = s.miningClaimsOn
-        ? "var(--heat-bright)"
-        : "var(--muted)";
-      const facet = s.miningFacetState ? ` · ${s.miningFacetState}` : "";
-      els.miningClaims.title = `wPOND Mining Rewards desk · facet ${facet}\nClick for proof.`;
-    }
-  }
-  if (els.miningBand) {
-    const payoutCount = Number(s.miningPayoutCount);
-    const payoutTotal = Number(s.miningPayoutTotal);
-    const activityCount = Number(s.miningPayoutActivityCount);
-    const recipients = Array.isArray(s.miningPayouts)
-      ? [...new Set(s.miningPayouts.map((row) => row.recipient).filter(Boolean))]
-      : [];
-    els.miningBand.textContent = Number.isFinite(payoutCount) && payoutCount > 0
-      ? s.miningPayoutTruncated
-        ? `${fmtCompactNumber(payoutTotal)} verified · ${Number.isFinite(activityCount) ? `${activityCount}+` : "many"} tx · ${recipients.length} sampled wallets`
-        : `${Number.isFinite(payoutTotal) ? fmtCompactNumber(payoutTotal) : "?"} wPOND · ${s.miningPayoutDate || "latest batch"} · ${recipients.length} wallets`
-      : s.miningBand || "watching the miner desk";
   }
   if (els.x402Downloads) {
     const downloads = Number(s.x402WeeklyDownloads);
@@ -2239,27 +2177,6 @@ async function pollNow() {
   }
 }
 
-async function refreshMiningSurface(event) {
-  event?.stopPropagation();
-  if (els.miningRefreshBtn) els.miningRefreshBtn.disabled = true;
-  try {
-    const res = await fetch("/api/poll", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ forceMiningSurface: true }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Refresh failed");
-    applyPayload(data);
-    setConnection("live", "live");
-  } catch (error) {
-    setConnection("error", "mining refresh failed");
-    console.error(error);
-  } finally {
-    if (els.miningRefreshBtn) els.miningRefreshBtn.disabled = false;
-  }
-}
-
 function connectStream() {
   if (mode === "vercel") return null;
   const source = new EventSource("/api/stream");
@@ -2336,7 +2253,6 @@ function startMatrix() {
 }
 
 els.pollBtn.addEventListener("click", pollNow);
-els.miningRefreshBtn?.addEventListener("click", refreshMiningSurface);
 hydrateIcons();
 startMatrix();
 // Paint the value sheet immediately — don't wait on a cold sniff.

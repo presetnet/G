@@ -687,25 +687,6 @@ a.btn {
   background: #67e8f9;
 }
 
-.mini-btn {
-  margin-left: auto;
-  border: 1px solid rgba(103, 232, 249, 0.25);
-  background: rgba(103, 232, 249, 0.06);
-  color: #67e8f9;
-  border-radius: 999px;
-  padding: 0.22rem 0.5rem;
-  font-size: 0.55rem;
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-}
-
-.mini-btn:disabled {
-  opacity: 0.55;
-  cursor: wait;
-}
-
 @keyframes pulse-cyan {
   0% { box-shadow: 0 0 0 0 rgba(103, 232, 249, 0.4); }
   100% { box-shadow: 0 0 0 10px rgba(103, 232, 249, 0); }
