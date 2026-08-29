@@ -724,10 +724,28 @@ const PROOFS = {
   miningClaims: {
     title: "wPOND claims",
     explain:
-      "Live parse of the wPOND Mining Rewards desk: claim-facet ON/OFF state and the miner band text. When the facet flips open, this fires an event on the tape.",
+      "Direct Solana RPC watch of the wPOND payout wallet and token account, using the 100M claim floor. Published archive totals are shown separately because its older 225M filter omits smaller claims.",
     sources: ["surface.mining"],
-    fields: ["miningClaimsOn", "miningFacetState", "miningBand", "miningSurfaceTitle"],
-    curls: ["curl -s https://wpond-mining-dashboard.vercel.app/ | grep -E 'claims-|facetState|subtitle'"],
+    fields: [
+      "miningPayoutCount",
+      "miningPayoutTotal",
+      "miningPayoutDate",
+      "miningPayoutMinimum",
+      "miningPayoutActivityCount",
+      "miningPayoutTruncated",
+      "miningPayoutWallet",
+      "miningPayoutTokenAccount",
+      "miningPayoutMint",
+      "miningPayouts",
+      "miningArchiveClaims",
+      "miningArchiveWallets",
+      "miningArchiveTotalWpond",
+      "miningArchiveMinimum",
+    ],
+    curls: [
+      "curl -s https://wpond-mining-dashboard.vercel.app/band-claims-archive.json",
+      `curl -s https://api.mainnet-beta.solana.com -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"getSignaturesForAddress","params":["2Ag1QgyyJj2nS6nD6SLbpAUFaWPhaDrmHwrGwWpMqV9K",{"limit":100}]}'`,
+    ],
   },
 };
 
@@ -1039,7 +1057,13 @@ function renderMetrics(latest) {
       : "—";
   }
   if (els.miningClaims) {
-    if (s.miningClaimsOn == null) {
+    const payoutCount = Number(s.miningPayoutCount);
+    const payoutTotal = Number(s.miningPayoutTotal);
+    if (Number.isFinite(payoutCount) && payoutCount > 0) {
+      els.miningClaims.textContent = `${payoutCount}${s.miningPayoutTruncated ? "+" : ""} CLAIM${payoutCount === 1 ? "" : "S"}`;
+      els.miningClaims.style.color = "var(--heat-bright)";
+      els.miningClaims.title = `Direct Solana RPC: ${Number.isFinite(payoutTotal) ? payoutTotal.toLocaleString() : "?"} wPOND paid by ${s.miningPayoutWallet || "the payout wallet"}. Click for proof.`;
+    } else if (s.miningClaimsOn == null) {
       els.miningClaims.textContent = "—";
       els.miningClaims.style.color = "";
     } else {
@@ -1047,12 +1071,22 @@ function renderMetrics(latest) {
       els.miningClaims.style.color = s.miningClaimsOn
         ? "var(--heat-bright)"
         : "var(--muted)";
+      const facet = s.miningFacetState ? ` · ${s.miningFacetState}` : "";
+      els.miningClaims.title = `wPOND Mining Rewards desk · facet ${facet}\nClick for proof.`;
     }
-    const facet = s.miningFacetState ? ` · ${s.miningFacetState}` : "";
-    els.miningClaims.title = `wPOND Mining Rewards desk · facet ${facet}\nClick for proof.`;
   }
   if (els.miningBand) {
-    els.miningBand.textContent = s.miningBand || "watching the miner desk";
+    const payoutCount = Number(s.miningPayoutCount);
+    const payoutTotal = Number(s.miningPayoutTotal);
+    const activityCount = Number(s.miningPayoutActivityCount);
+    const recipients = Array.isArray(s.miningPayouts)
+      ? [...new Set(s.miningPayouts.map((row) => row.recipient).filter(Boolean))]
+      : [];
+    els.miningBand.textContent = Number.isFinite(payoutCount) && payoutCount > 0
+      ? s.miningPayoutTruncated
+        ? `${fmtCompactNumber(payoutTotal)} verified · ${Number.isFinite(activityCount) ? `${activityCount}+` : "many"} tx · ${recipients.length} sampled wallets`
+        : `${Number.isFinite(payoutTotal) ? fmtCompactNumber(payoutTotal) : "?"} wPOND · ${s.miningPayoutDate || "latest batch"} · ${recipients.length} wallets`
+      : s.miningBand || "watching the miner desk";
   }
   if (els.x402Downloads) {
     const downloads = Number(s.x402WeeklyDownloads);
@@ -2205,7 +2239,8 @@ async function pollNow() {
   }
 }
 
-async function refreshMiningSurface() {
+async function refreshMiningSurface(event) {
+  event?.stopPropagation();
   if (els.miningRefreshBtn) els.miningRefreshBtn.disabled = true;
   try {
     const res = await fetch("/api/poll", {

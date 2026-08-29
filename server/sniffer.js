@@ -446,17 +446,97 @@ export async function sniffOpencodeZen() {
 const OPENCODE_REGISTRY_URL = "https://models.dev/api.json";
 const MINING_SURFACE_URL =
   process.env.MINING_SURFACE_URL || "https://wpond-mining-dashboard.vercel.app/";
+const MINING_PAYOUT_WALLET = "AYg4dKoZJudVkD7Eu3ZaJjkzfoaATUqfiv8w8pS53opT";
+const MINING_PAYOUT_TOKEN_ACCOUNT = "2Ag1QgyyJj2nS6nD6SLbpAUFaWPhaDrmHwrGwWpMqV9K";
+const WPOND_MINT = "3JgFwoYV74f6LwWjQWnr3YDPFnmBdwQfNyubv99jqUoq";
+const MINING_CLAIM_MIN = 100_000_000;
+const MINING_TX_DECODE_LIMIT = 12;
+
+async function sniffMiningPayouts() {
+  const signatures = await solanaRpc("getSignaturesForAddress", [
+    MINING_PAYOUT_TOKEN_ACCOUNT,
+    { limit: 100, commitment: "confirmed" },
+  ]);
+  const successful = (Array.isArray(signatures) ? signatures : []).filter((row) => !row.err);
+  const latestActivityDay = successful[0]?.blockTime != null
+    ? new Date(successful[0].blockTime * 1000).toISOString().slice(0, 10)
+    : null;
+  const latestActivity = latestActivityDay
+    ? successful.filter(
+        (row) =>
+          row.blockTime != null &&
+          new Date(row.blockTime * 1000).toISOString().startsWith(latestActivityDay),
+      )
+    : [];
+  const payouts = [];
+  for (const row of latestActivity.slice(0, MINING_TX_DECODE_LIMIT)) {
+    const tx = await solanaRpc("getTransaction", [
+      row.signature,
+      { encoding: "jsonParsed", maxSupportedTransactionVersion: 0, commitment: "confirmed" },
+    ]);
+    if (!tx?.transaction?.message || tx.meta?.err) continue;
+    const keys = (tx.transaction.message.accountKeys || []).map((key) =>
+      typeof key === "string" ? key : key.pubkey,
+    );
+    const instructions = [
+      ...(tx.transaction.message.instructions || []),
+      ...((tx.meta?.innerInstructions || []).flatMap((group) => group.instructions || [])),
+    ];
+    for (const instruction of instructions) {
+      const info = instruction?.parsed?.info;
+      if (instruction?.parsed?.type !== "transfer" || info?.authority !== MINING_PAYOUT_WALLET) {
+        continue;
+      }
+      const accountIndex = keys.indexOf(info.destination);
+      const balance = (tx.meta?.postTokenBalances || []).find(
+        (entry) => entry.accountIndex === accountIndex && entry.mint === WPOND_MINT,
+      );
+      if (!balance) continue;
+      const decimals = Number(balance.uiTokenAmount?.decimals || 0);
+      const amount = Number(info.amount) / 10 ** decimals;
+      if (!Number.isFinite(amount) || amount < MINING_CLAIM_MIN) continue;
+      payouts.push({
+        signature: row.signature,
+        at: row.blockTime != null ? new Date(row.blockTime * 1000).toISOString() : null,
+        amount,
+        recipient: balance.owner || null,
+        destination: info.destination,
+      });
+    }
+  }
+  payouts.sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0));
+  const latestDay = payouts[0]?.at?.slice(0, 10) || null;
+  const latestBatch = latestDay ? payouts.filter((row) => row.at?.startsWith(latestDay)) : [];
+  return {
+    payouts,
+    latestDay,
+    latestBatch,
+    latestSignature: payouts[0]?.signature || null,
+    latestAt: payouts[0]?.at || null,
+    latestTotal: latestBatch.reduce((sum, row) => sum + row.amount, 0),
+    activityCount: latestActivity.length,
+    truncated: latestActivity.length > MINING_TX_DECODE_LIMIT,
+  };
+}
 
 export async function sniffMiningSurface(force = false) {
   if (!force) {
     const cached = await loadMiningSurfaceCache().catch(() => null);
     const cachedAt = cached?.cachedAt ? Date.parse(cached.cachedAt) : NaN;
-    if (cached?.source && Number.isFinite(cachedAt) && Date.now() - cachedAt < MINING_SURFACE_CACHE_MS) {
+    if (
+      cached?.source?.payoutWallet === MINING_PAYOUT_WALLET &&
+      Number.isFinite(cachedAt) &&
+      Date.now() - cachedAt < MINING_SURFACE_CACHE_MS
+    ) {
       return { ...cached.source, cached: true, ageMs: Date.now() - cachedAt };
     }
   }
   try {
-    const res = await fetchJson(MINING_SURFACE_URL, { timeoutMs: 9_000 });
+    const [res, archiveRes, payoutData] = await Promise.all([
+      fetchJson(MINING_SURFACE_URL, { timeoutMs: 9_000 }),
+      fetchJson(`${MINING_SURFACE_URL}band-claims-archive.json`, { timeoutMs: 18_000 }),
+      sniffMiningPayouts(),
+    ]);
     const text = res.text || "";
     const title = (text.match(/<title>([^<]{0,120})<\/title>/i) || [])[1] || null;
     const claimsClass = (text.match(/body class="[^"]*claims-(on|off)/i) || [])[1] || null;
@@ -473,7 +553,26 @@ export async function sniffMiningSurface(force = false) {
       claimsOn: claimsClass ? claimsClass.toLowerCase() === "on" : null,
       facetState: facet,
       band,
-      fingerprint: simpleHash(`${res.status}:${text.length}:${title}:${claimsClass}:${facet}`),
+      payoutWallet: MINING_PAYOUT_WALLET,
+      payoutTokenAccount: MINING_PAYOUT_TOKEN_ACCOUNT,
+      payoutMint: WPOND_MINT,
+      payoutMinimum: MINING_CLAIM_MIN,
+      payoutCount: payoutData.latestBatch.length,
+      payoutTotal: payoutData.latestTotal,
+      payoutDate: payoutData.latestDay,
+      payoutLatestAt: payoutData.latestAt,
+      payoutLatestSignature: payoutData.latestSignature,
+      payoutActivityCount: payoutData.activityCount,
+      payoutTruncated: payoutData.truncated,
+      payouts: payoutData.latestBatch,
+      archiveClaims: archiveRes.json?.summary?.totalClaims ?? null,
+      archiveWallets: archiveRes.json?.summary?.uniqueWallets ?? null,
+      archiveTotalWpond: archiveRes.json?.summary?.periods?.all?.totalWpond ?? null,
+      archiveGeneratedAt: archiveRes.json?.summary?.dateGenerated ?? null,
+      archiveMinimum: archiveRes.json?.summary?.claimBands?.normal?.[0] ?? null,
+      fingerprint: simpleHash(
+        `${res.status}:${text.length}:${title}:${claimsClass}:${facet}:${payoutData.latestSignature || "none"}`,
+      ),
       reason: null,
     };
     await saveMiningSurfaceCache({ cachedAt: new Date().toISOString(), source }).catch(() => {});
@@ -1639,6 +1738,23 @@ export async function runSniff({ forceMiningSurface = false } = {}) {
       miningClaimsOn: bySource["surface.mining"]?.claimsOn ?? null,
       miningFacetState: bySource["surface.mining"]?.facetState ?? null,
       miningBand: bySource["surface.mining"]?.band ?? null,
+      miningPayoutWallet: bySource["surface.mining"]?.payoutWallet ?? null,
+      miningPayoutTokenAccount: bySource["surface.mining"]?.payoutTokenAccount ?? null,
+      miningPayoutMint: bySource["surface.mining"]?.payoutMint ?? null,
+      miningPayoutMinimum: bySource["surface.mining"]?.payoutMinimum ?? null,
+      miningPayoutCount: bySource["surface.mining"]?.payoutCount ?? null,
+      miningPayoutTotal: bySource["surface.mining"]?.payoutTotal ?? null,
+      miningPayoutDate: bySource["surface.mining"]?.payoutDate ?? null,
+      miningPayoutLatestAt: bySource["surface.mining"]?.payoutLatestAt ?? null,
+      miningPayoutLatestSignature: bySource["surface.mining"]?.payoutLatestSignature ?? null,
+      miningPayoutActivityCount: bySource["surface.mining"]?.payoutActivityCount ?? null,
+      miningPayoutTruncated: Boolean(bySource["surface.mining"]?.payoutTruncated),
+      miningPayouts: bySource["surface.mining"]?.payouts ?? [],
+      miningArchiveClaims: bySource["surface.mining"]?.archiveClaims ?? null,
+      miningArchiveWallets: bySource["surface.mining"]?.archiveWallets ?? null,
+      miningArchiveTotalWpond: bySource["surface.mining"]?.archiveTotalWpond ?? null,
+      miningArchiveGeneratedAt: bySource["surface.mining"]?.archiveGeneratedAt ?? null,
+      miningArchiveMinimum: bySource["surface.mining"]?.archiveMinimum ?? null,
       zenErrShape: bySource["opencode.zenerr"]?.shape ?? null,
       zenErrLeakHit: Boolean(bySource["opencode.zenerr"]?.leakHit),
       catalogModels: bySource["geoff.catalog"]?.models?.length ?? null,

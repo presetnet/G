@@ -1066,7 +1066,26 @@ export function translate(previous, current) {
   const prevMine = prev["surface.mining"];
   const currMine = curr["surface.mining"];
   if (prevMine && currMine) {
-    if (!prevMine.ok && currMine.ok) {
+    if (
+      currMine.payoutLatestSignature &&
+      prevMine.payoutLatestSignature !== currMine.payoutLatestSignature
+    ) {
+      const recipients = new Set((currMine.payouts || []).map((row) => row.recipient).filter(Boolean));
+      const countLabel = `${currMine.payoutCount ?? recipients.size}${currMine.payoutTruncated ? "+" : ""}`;
+      events.push(
+        event({
+          kind: "zen",
+          rank: "spike",
+          title: "wPOND MINING PAYOUTS",
+          summary: `${countLabel} claims · ${Number(currMine.payoutTotal || 0).toLocaleString()} wPOND verified · ${recipients.size} wallets${currMine.payoutDate ? ` · ${currMine.payoutDate}` : ""}`,
+          details: {
+            payoutWallet: currMine.payoutWallet,
+            payoutMint: currMine.payoutMint,
+            payouts: currMine.payouts,
+          },
+        }),
+      );
+    } else if (!prevMine.ok && currMine.ok) {
       events.push(
         event({
           kind: "zen",
