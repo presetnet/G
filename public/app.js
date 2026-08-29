@@ -673,6 +673,24 @@ const PROOFS = {
       `curl -s https://api.mainnet-beta.solana.com -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"getBalance","params":["${
         lastLatest?.summary?.treasuryRpcAddress || "2W5gxAio1Bz76P58EaDtGC71MuyH4ZAdXHu3qqmeGy7g"
       }",{"commitment":"confirmed"}]}'`,
+      ],
+    },
+  keySale: {
+    title: "Node-key sale",
+    explain:
+      "Public pricing endpoint for the node-key sale. It is self-reported by StackNet, so the counter is useful for trend watching, but purchases are still unverified on-chain.",
+    sources: ["stacknet.keysale", "geoff.docs.pricing"],
+    fields: [
+      "keySaleActive",
+      "keySaleEpoch",
+      "keySaleDay",
+      "keySaleDaysUntilHalving",
+      "keySaleKeysSold",
+      "keySalePriceUsd",
+    ],
+    curls: [
+      `curl -s ${SN_BASE}/api/v2/node-keys/pricing`,
+      `curl -s https://devconsole-indol.vercel.app/aisp/node-keys`,
     ],
   },
   ghostCount: {
@@ -720,6 +738,7 @@ const CARD_PROOF_ORDER = [
   "modelCount",
   "pileValue",
   "paperworkUsd",
+  "keySale",
   "ghostCount",
   "fleetCount",
   "miningClaims",
