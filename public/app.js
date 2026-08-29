@@ -219,6 +219,7 @@ const els = {
   settleBanner: document.getElementById("settleBanner"),
   miningClaims: document.getElementById("miningClaims"),
   miningBand: document.getElementById("miningBand"),
+  miningFresh: document.getElementById("miningFresh"),
   miningRefreshBtn: document.getElementById("miningRefreshBtn"),
   oxAlphaSpec: document.getElementById("oxAlphaSpec"),
   oxAlphaMeta: document.getElementById("oxAlphaMeta"),
@@ -1052,16 +1053,21 @@ function renderMetrics(latest) {
     els.miningClaims.title = `wPOND Mining Rewards desk · facet ${facet}\nClick for proof.`;
   }
   if (els.miningBand) {
-    const ageMs = Number(s.miningSurfaceAgeMs);
-    const ageBit = s.miningSurfaceCached && Number.isFinite(ageMs)
-      ? ` · cached ${Math.max(1, Math.round(ageMs / 3600000))}h ago`
-      : s.miningSurfaceCheckedAt
-        ? ` · refreshed ${new Date(s.miningSurfaceCheckedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
-        : "";
-    els.miningBand.textContent = `${s.miningBand || "watching the miner desk"}${ageBit}`;
+    els.miningBand.textContent = s.miningBand || "watching the miner desk";
     els.miningBand.title = s.miningSurfaceCached
       ? "Mining surface served from 4h cache. Use the refresh button to force a live recheck."
       : "Mining surface checked live just now.";
+  }
+  if (els.miningFresh) {
+    if (s.miningSurfaceCheckedAt) {
+      const when = new Date(s.miningSurfaceCheckedAt);
+      const stamp = Number.isFinite(when.getTime())
+        ? when.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+        : "just now";
+      els.miningFresh.textContent = s.miningSurfaceCached ? `cached · ${stamp}` : `fresh · ${stamp}`;
+    } else {
+      els.miningFresh.textContent = "not checked yet";
+    }
   }
   if (els.x402Downloads) {
     const downloads = Number(s.x402WeeklyDownloads);
@@ -2216,7 +2222,9 @@ async function pollNow() {
 
 async function refreshMiningSurface() {
   if (els.miningRefreshBtn) els.miningRefreshBtn.disabled = true;
+  const prevLabel = els.miningRefreshBtn?.textContent;
   try {
+    if (els.miningRefreshBtn) els.miningRefreshBtn.textContent = "refreshing";
     const res = await fetch("/api/poll", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2226,11 +2234,13 @@ async function refreshMiningSurface() {
     if (!res.ok) throw new Error(data.error || "Refresh failed");
     applyPayload(data);
     setConnection("live", "live");
+    if (els.miningFresh) els.miningFresh.textContent = "fresh · just now";
   } catch (error) {
     setConnection("error", "mining refresh failed");
     console.error(error);
   } finally {
     if (els.miningRefreshBtn) els.miningRefreshBtn.disabled = false;
+    if (els.miningRefreshBtn && prevLabel) els.miningRefreshBtn.textContent = prevLabel;
   }
 }
 

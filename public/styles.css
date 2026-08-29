@@ -706,6 +706,16 @@ a.btn {
   cursor: wait;
 }
 
+.micro-note {
+  display: block;
+  margin-top: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 @keyframes pulse-cyan {
   0% { box-shadow: 0 0 0 0 rgba(103, 232, 249, 0.4); }
   100% { box-shadow: 0 0 0 10px rgba(103, 232, 249, 0); }
