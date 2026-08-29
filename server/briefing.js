@@ -481,6 +481,8 @@ function userTakeForEvent(event) {
       return "On-chain treasury pricing moved; usually not user-facing.";
     case "metaproofs":
       return "Network metaproofs counter moved — public summary field only.";
+    case "keysale":
+      return "Node-key sale moved — the network's revenue rails (public /api/v2/node-keys/pricing). Epoch, keys sold, key price, or the halving countdown changed.";
     case "docs":
       return "Public docs pages moved (intro / token-plan / MCP / features / Geoff Code / security).";
     case "explore":

@@ -261,6 +261,33 @@ async function sniffStacknetPile() {
   };
 }
 
+async function sniffStacknetKeySale() {
+  const res = await fetchJson(`${config.stacknetBaseUrl}/api/v2/node-keys/pricing`);
+  const j = res.json || {};
+  const keysSold = Number(j.keysSold);
+  return {
+    source: "stacknet.keysale",
+    ok: res.ok && Number.isFinite(keysSold),
+    status: res.status,
+    ms: res.ms,
+    saleActive: Boolean(j.saleActive),
+    epoch: isFiniteNumber(j.currentEpoch) ? j.currentEpoch : null,
+    day: isFiniteNumber(j.currentDay) ? j.currentDay : null,
+    daysUntilHalving: isFiniteNumber(j.daysUntilHalving) ? j.daysUntilHalving : null,
+    keysSold: Number.isFinite(keysSold) ? keysSold : null,
+    priceUsd: isFiniteNumber(j.priceUsd) ? j.priceUsd : null,
+    priceCents: isFiniteNumber(j.priceCents) ? j.priceCents : null,
+    tokenAllocation: isFiniteNumber(j.tokenAllocation) ? j.tokenAllocation : null,
+    tokenAllocationFormatted: j.tokenAllocationFormatted || null,
+    nextHalvingDate: j.nextHalvingDate ?? null,
+    saleStartDate: j.saleStartDate ?? null,
+    docsUrl: "https://devconsole-indol.vercel.app/aisp/node-keys",
+    fingerprint: simpleHash(
+      `${j.saleActive}|${j.currentEpoch ?? 0}|${j.currentDay ?? 0}|${keysSold || 0}|${j.priceUsd ?? 0}`,
+    ),
+  };
+}
+
 async function sniffStacknetX402() {
   const [latest, downloads] = await Promise.all([
     fetchJson("https://registry.npmjs.org/@stacknet/x402payg/latest"),
@@ -1434,6 +1461,7 @@ export async function runSniff() {
     sniffStacknetRoot(),
     sniffStacknetNetwork(),
     sniffStacknetPile(),
+    sniffStacknetKeySale(),
     sniffStacknetX402(),
     sniffStacknetNode(),
     sniffStacknetModels(),
@@ -1538,6 +1566,14 @@ export async function runSniff() {
       metaproofsPaidUsd: network.metaproofs?.paidPaperworkUsd ?? null,
       metaproofsOutstandingUsd: network.metaproofs?.outstandingUsd ?? null,
       pile: bySource["stacknet.pile"]?.pile ?? null,
+      keySaleActive: bySource["stacknet.keysale"]?.saleActive ?? null,
+      keySaleEpoch: bySource["stacknet.keysale"]?.epoch ?? null,
+      keySaleDay: bySource["stacknet.keysale"]?.day ?? null,
+      keySaleDaysUntilHalving: bySource["stacknet.keysale"]?.daysUntilHalving ?? null,
+      keySaleKeysSold: bySource["stacknet.keysale"]?.keysSold ?? null,
+      keySalePriceUsd: bySource["stacknet.keysale"]?.priceUsd ?? null,
+      keySaleTokenAllocation: bySource["stacknet.keysale"]?.tokenAllocationFormatted ?? null,
+      keySaleFingerprint: bySource["stacknet.keysale"]?.fingerprint ?? null,
       x402Version: bySource["stacknet.x402"]?.version ?? null,
       x402WeeklyDownloads: bySource["stacknet.x402"]?.weeklyDownloads ?? null,
       x402PeriodStart: bySource["stacknet.x402"]?.periodStart ?? null,

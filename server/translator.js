@@ -693,6 +693,7 @@ export function translate(previous, current) {
         title: firstPayment
           ? "FIRST METAPROOF PAPERWORK PAID"
           : "Metaproof paperwork moved",
+        surfaced: firstPayment,
         summary: [
           isNumber(pwPrev) && isNumber(pwCurr) && pwPrev !== pwCurr
             ? `booked $${fmtUsd(pwPrev)} → $${fmtUsd(pwCurr)}`
@@ -722,6 +723,56 @@ export function translate(previous, current) {
           title: "Metaproofs counter moved",
           summary: `Network metaproofs.total ${prevMeta} → ${currMeta}.`,
           details: { from: prevMeta, to: currMeta },
+        }),
+      );
+    }
+  }
+
+  // Node-key sale — the network's core revenue launch rails (public /api/v2/node-keys/pricing).
+  const ksPrev = prev["stacknet.keysale"];
+  const ksCurr = curr["stacknet.keysale"];
+  if (ksPrev?.ok && ksCurr?.ok) {
+    const keysPrev = Number(ksPrev.keysSold);
+    const keysCurr = Number(ksCurr.keysSold);
+    const pricePrev = Number(ksPrev.priceUsd);
+    const priceCurr = Number(ksCurr.priceUsd);
+    const epochPrev = Number(ksPrev.epoch);
+    const epochCurr = Number(ksCurr.epoch);
+    const halvePrev = Number(ksPrev.daysUntilHalving);
+    const halveCurr = Number(ksCurr.daysUntilHalving);
+    const kickoff = !ksPrev.saleActive && ksCurr.saleActive;
+    const epochBumped = Number.isFinite(epochCurr) && Number.isFinite(epochPrev) && epochCurr !== epochPrev;
+    const keysMoved = Number.isFinite(keysCurr) && Number.isFinite(keysPrev) && keysCurr !== keysPrev;
+    const priceMoved =
+      Number.isFinite(priceCurr) && Number.isFinite(pricePrev) && priceCurr !== pricePrev;
+    const halveMoved =
+      Number.isFinite(halveCurr) && Number.isFinite(halvePrev) && halveCurr !== halvePrev;
+
+    if (kickoff || epochBumped || keysMoved || priceMoved || halveMoved) {
+      const bits = [];
+      if (kickoff) bits.push("SALE WENT LIVE");
+      if (epochBumped) bits.push(`epoch ${epochPrev} → ${epochCurr}`);
+      if (keysMoved) bits.push(`${keysPrev} → ${keysCurr} keys sold`);
+      if (priceMoved) bits.push(`$${fmtUsd(pricePrev)} → $${fmtUsd(priceCurr)}/key`);
+      if (halveMoved) bits.push(`halving in ${halveCurr}d`);
+      events.push(
+        event({
+          kind: "keysale",
+          rank: kickoff ? "crazy" : epochBumped ? "spike" : "note",
+          title: kickoff
+            ? "NODE KEY SALE WENT LIVE"
+            : epochBumped
+              ? "Node-key sale epoch advanced"
+              : "Node-key sale moved",
+          summary: bits.join(" · "),
+          details: {
+            saleActive: ksCurr.saleActive,
+            keysSold: { from: ksPrev.keysSold, to: ksCurr.keysSold },
+            priceUsd: { from: ksPrev.priceUsd, to: ksCurr.priceUsd },
+            epoch: { from: ksPrev.epoch, to: ksCurr.epoch },
+            daysUntilHalving: { from: ksPrev.daysUntilHalving, to: ksCurr.daysUntilHalving },
+            tokenAllocation: ksCurr.tokenAllocationFormatted,
+          },
         }),
       );
     }
@@ -1351,6 +1402,7 @@ export function translate(previous, current) {
         event({
           kind: "solana",
           rank: funded ? "spike" : "note",
+          surfaced: funded,
           title: funded ? "Treasury wallet funded on-chain" : "Treasury balance moved on-chain",
           summary: `Independent Solana RPC: ${(chainPrev / 1e9).toFixed(9)} → ${(chainCurr / 1e9).toFixed(9)} SOL.`,
           details: { from: chainPrev, to: chainCurr, address: currChain.address },
@@ -1534,6 +1586,7 @@ function agentClusterEvent(events) {
       "fleet",
       "zen",
       "metaproofs",
+      "keysale",
     ].includes(e.kind),
   );
   if (surface.length < 2) return null;

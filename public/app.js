@@ -212,6 +212,8 @@ const els = {
   pileMeta: document.getElementById("pileMeta"),
   paperworkUsd: document.getElementById("paperworkUsd"),
   paperworkMeta: document.getElementById("paperworkMeta"),
+  paperworkStatus: document.getElementById("paperworkStatus"),
+  settleBanner: document.getElementById("settleBanner"),
   miningClaims: document.getElementById("miningClaims"),
   miningBand: document.getElementById("miningBand"),
   oxAlphaSpec: document.getElementById("oxAlphaSpec"),
@@ -319,6 +321,8 @@ const EVENT_ICONS = {
   pile: "layers",
   x402: "bolt",
   metaproofs: "layers",
+  keysale: "tag",
+  solana: "pulse",
 };
 
 let mode = "local";
@@ -883,6 +887,12 @@ function wireProofPopups() {
 }
 
 wireProofPopups();
+document.addEventListener("click", (e) => {
+  const dismiss = e.target.closest(".settle-dismiss");
+  if (!dismiss || !els.settleBanner) return;
+  e.preventDefault();
+  els.settleBanner.hidden = true;
+});
 fetchPaperworkHistory().then(() => {
   if (lastLatest) renderMetrics(lastLatest);
 });
@@ -975,6 +985,7 @@ function renderMetrics(latest) {
       .filter(Boolean)
       .join("\n");
   }
+  renderSettlementStatus(s);
   if (els.ghostCount) {
     const ghosts = Array.isArray(s.zenGhostIds) ? s.zenGhostIds : [];
     els.ghostCount.textContent = ghosts.length ? String(ghosts.length) : "0";
@@ -1046,6 +1057,35 @@ function renderMetrics(latest) {
       : "no billing routes up yet";
     els.subscriptionMeta.title =
       "Public billing/plans/subscription route probe (API is auth-gated)";
+  }
+}
+
+function renderSettlementStatus(s) {
+  if (!els.paperworkStatus) return;
+  const paid = Number(s.metaproofsPaidUsd);
+  const booked = Number(s.metaproofsPaperworkUsd);
+  const proofs = Number(s.metaproofsTotal);
+  const chainSol = Number(s.treasuryRpcSol ?? 0);
+  const sigs = Number(s.treasuryRpcSigCount ?? 0);
+  const hasAnyMoney =
+    (Number.isFinite(paid) && paid > 0) ||
+    (Number.isFinite(chainSol) && chainSol > 0) ||
+    (Number.isFinite(proofs) && proofs > 0 && Number.isFinite(booked) && booked > 0);
+  const settled = (Number.isFinite(paid) && paid > 0) || (Number.isFinite(sigs) && sigs > 0 && Number.isFinite(chainSol) && chainSol > 0);
+
+  els.paperworkStatus.hidden = false;
+  if (settled) {
+    els.paperworkStatus.className = "metric-pill fired";
+    els.paperworkStatus.textContent = "fired";
+    els.paperworkStatus.title = "Settlement observed — real payment(s) or on-chain treasury activity recorded.";
+  } else if (hasAnyMoney) {
+    els.paperworkStatus.className = "metric-pill paying";
+    els.paperworkStatus.textContent = "paying";
+    els.paperworkStatus.title = "Money booked on the ledger but no settled payment on the chain yet.";
+  } else {
+    els.paperworkStatus.className = "metric-pill armed";
+    els.paperworkStatus.textContent = "armed";
+    els.paperworkStatus.title = "Ledger armed — awaiting the first real settlement / on-chain funding.";
   }
 }
 
@@ -1827,6 +1867,7 @@ function renderFeed(events = [], { pollCount = 0 } = {}) {
   const { updates, queue, total } = splitDatasets(events);
   const recent = sortFeedRecent(updates).slice(0, FEED_RECENT_LIMIT);
   setFeedMeta({ surface: updates.length, queue: queue.length, pollCount });
+  renderSettleBanner(events);
 
   if (!recent.length) {
     els.feed.innerHTML = `<p class="empty">Surface quiet in ${TRACK_HOURS}h — no deploy / models / docs / pricing diffs. Live activity is queue/in-flight (${queue.length} edges below). Not a sync miss.</p>`;
@@ -1849,6 +1890,37 @@ function renderFeed(events = [], { pollCount = 0 } = {}) {
         .join("");
     }
   }
+}
+
+function renderSettleBanner(events = []) {
+  if (!els.settleBanner) return;
+  const surfaced = (Array.isArray(events) ? events : [])
+    .filter(
+      (e) =>
+        e &&
+        ((e.surfaced && ["metaproofs", "solana", "keysale"].includes(e.kind)) ||
+          (e.kind === "keysale" && e.rank === "crazy")),
+    )
+    .sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0));
+  const latest = surfaced[0];
+  if (!latest) {
+    els.settleBanner.hidden = true;
+    els.settleBanner.className = "settle-banner";
+    els.settleBanner.innerHTML = "";
+    return;
+  }
+  const rank = latest.rank === "crazy" ? "crazy" : "spike";
+  els.settleBanner.hidden = false;
+  els.settleBanner.className = `settle-banner ${escapeHtml(rank)}`;
+  els.settleBanner.innerHTML = `
+    <span class="settle-ico">${icon(EVENT_ICONS[latest.kind] || "activity")}</span>
+    <div>
+      <strong>${escapeHtml(latest.title)}</strong>
+      <p>${escapeHtml(latest.userTake || latest.summary)}</p>
+    </div>
+    <time datetime="${latest.at}">${fmtTime(latest.at)}</time>
+    <a class="settle-dismiss" href="#" role="button" aria-label="dismiss">×</a>
+  `;
 }
 
 function renderModelCards(models = []) {
