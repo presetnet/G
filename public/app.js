@@ -213,6 +213,8 @@ const els = {
   paperworkUsd: document.getElementById("paperworkUsd"),
   paperworkMeta: document.getElementById("paperworkMeta"),
   paperworkStatus: document.getElementById("paperworkStatus"),
+  keysoldUsd: document.getElementById("keysoldUsd"),
+  keysoldMeta: document.getElementById("keysoldMeta"),
   settleBanner: document.getElementById("settleBanner"),
   miningClaims: document.getElementById("miningClaims"),
   miningBand: document.getElementById("miningBand"),
@@ -986,6 +988,7 @@ function renderMetrics(latest) {
       .join("\n");
   }
   renderSettlementStatus(s);
+  renderKeySale(s);
   if (els.ghostCount) {
     const ghosts = Array.isArray(s.zenGhostIds) ? s.zenGhostIds : [];
     els.ghostCount.textContent = ghosts.length ? String(ghosts.length) : "0";
@@ -1087,6 +1090,29 @@ function renderSettlementStatus(s) {
     els.paperworkStatus.textContent = "armed";
     els.paperworkStatus.title = "Ledger armed — awaiting the first real settlement / on-chain funding.";
   }
+}
+
+function renderKeySale(s) {
+  if (!els.keysoldUsd) return;
+  const active = s.keySaleActive;
+  const price = Number(s.keySalePriceUsd);
+  const keys = Number(s.keySaleKeysSold);
+  const halving = Number(s.keySaleDaysUntilHalving);
+  if (!active || !Number.isFinite(keys)) {
+    els.keysoldUsd.textContent = "sale off";
+    els.keysoldMeta.textContent = "no active node-key sale";
+    els.keysoldUsd.title = "No active key sale detected from StackNet pricing probe.";
+    return;
+  }
+  els.keysoldUsd.textContent = Number.isFinite(price) ? `$${price.toFixed(2)}/key` : "—";
+  const bits = [];
+  bits.push(`${keys} sold`);
+  if (s.keySaleEpoch != null) bits.push(`epoch ${s.keySaleEpoch}`);
+  if (Number.isFinite(halving)) bits.push(`halving in ${halving}d`);
+  els.keysoldMeta.innerHTML = bits.join(" · ");
+  els.keysoldMeta.title =
+    "Node-key sale ticker as reported by StackNet (/api/v2/node-keys/pricing). Self-reported; purchases unverified on-chain. Prices rise per key. Each key carries +1B inference tokens per docs.";
+  els.keysoldUsd.title = els.keysoldMeta.title;
 }
 
 function renderDocsCue(board, events = []) {
