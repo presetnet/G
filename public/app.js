@@ -215,6 +215,8 @@ const els = {
   paperworkStatus: document.getElementById("paperworkStatus"),
   keysoldUsd: document.getElementById("keysoldUsd"),
   keysoldMeta: document.getElementById("keysoldMeta"),
+  trafficViews: document.getElementById("trafficViews"),
+  trafficMeta: document.getElementById("trafficMeta"),
   settleBanner: document.getElementById("settleBanner"),
   miningClaims: document.getElementById("miningClaims"),
   miningBand: document.getElementById("miningBand"),
@@ -1113,6 +1115,41 @@ function renderKeySale(s) {
   els.keysoldMeta.title =
     "Node-key sale ticker as reported by StackNet (/api/v2/node-keys/pricing). Self-reported; purchases unverified on-chain. Prices rise per key. Each key carries +1B inference tokens per docs.";
   els.keysoldUsd.title = els.keysoldMeta.title;
+}
+
+function renderTraffic(traffic) {
+  if (!els.trafficViews) return;
+  const total = Number(traffic?.totalViews);
+  const topPath = traffic?.topPath;
+  const topViews = Number(traffic?.topPathViews);
+
+  els.trafficViews.textContent = Number.isFinite(total) ? fmtCompactNumber(total) : "—";
+  if (topPath) {
+    els.trafficMeta.textContent = Number.isFinite(topViews)
+      ? `${topPath} · ${fmtCompactNumber(topViews)} top`
+      : topPath;
+    els.trafficViews.title = `Shared HTML page-view counter${traffic?.fallback ? " (local fallback)" : ""}. Counts root and .html route loads.`;
+    els.trafficMeta.title = els.trafficViews.title;
+  } else {
+    els.trafficMeta.textContent = traffic?.fallback ? "this browser only" : "shared page views";
+    els.trafficViews.title = traffic?.fallback
+      ? "Local browser fallback counter while the shared endpoint is unavailable."
+      : "Shared HTML page-view counter. Counts root and .html route loads.";
+    els.trafficMeta.title = els.trafficViews.title;
+  }
+}
+
+async function refreshTraffic() {
+  try {
+    const res = await fetch("/api/traffic", { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    renderTraffic(await res.json());
+  } catch {
+    const key = "gt.traffic.views";
+    const total = (Number(localStorage.getItem(key)) || 0) + 1;
+    localStorage.setItem(key, String(total));
+    renderTraffic({ totalViews: total, topPath: "this browser", topPathViews: total, fallback: true });
+  }
 }
 
 function renderDocsCue(board, events = []) {
@@ -2270,6 +2307,7 @@ async function boot() {
       setConnection("live", "live");
       connectStream();
     }
+    refreshTraffic().catch(() => {});
   } catch (error) {
     console.error(error);
     mode = "vercel";

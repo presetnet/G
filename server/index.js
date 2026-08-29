@@ -7,13 +7,31 @@ import {
   startPoller,
 } from "./poller.js";
 import { prettyCapability } from "./translator.js";
-import { loadSnapshots } from "./store.js";
+import { loadSnapshots, loadTraffic, recordTraffic } from "./store.js";
 import { publicConfig } from "./service.js";
 import { buildMarketPayload } from "./market.js";
 
 const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "2mb" }));
+
+app.use((req, res, next) => {
+  const shouldCount =
+    req.method === "GET" &&
+    !req.path.startsWith("/api/") &&
+    !req.path.startsWith("/_vercel/") &&
+    (req.path === "/" || req.path.endsWith(".html"));
+  if (!shouldCount) {
+    next();
+    return;
+  }
+  res.on("finish", () => {
+    if (res.statusCode >= 200 && res.statusCode < 400) {
+      recordTraffic(req.path).catch(() => {});
+    }
+  });
+  next();
+});
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "geoff-thermometer", mode: "local" });
@@ -125,6 +143,21 @@ app.get("/api/paperwork-history", async (_req, res) => {
   }
 });
 
+app.get("/api/traffic", async (_req, res) => {
+  try {
+    const traffic = await loadTraffic();
+    const entries = Object.entries(traffic.paths || {}).sort((a, b) => b[1] - a[1]);
+    const [topPath = null, topPathViews = 0] = entries[0] || [];
+    res.json({
+      ...traffic,
+      topPath,
+      topPathViews,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get("/api/market", async (_req, res) => {
   try {
     const payload = await buildMarketPayload();
@@ -169,4 +202,3 @@ server.on("error", (error) => {
   console.error("Server error:", error);
   process.exitCode = 1;
 });
-

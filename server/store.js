@@ -30,6 +30,7 @@ const paths = {
   latest: () => path.join(config.dataDir, "latest.json"),
   state: () => path.join(config.dataDir, "state.json"),
   dailyActivity: () => path.join(config.dataDir, "daily-activity.json"),
+  traffic: () => path.join(config.dataDir, "traffic.json"),
 };
 
 export async function loadState() {
@@ -111,6 +112,29 @@ export async function mergeAndSaveDailyActivity(rows = []) {
   const current = await loadDailyActivity();
   const next = mergeDailyActivity(current, rows, config.heatmapDays);
   await writeJson(paths.dailyActivity(), next);
+  return next;
+}
+
+export async function loadTraffic() {
+  return readJson(paths.traffic(), {
+    totalViews: 0,
+    paths: {},
+    lastViewedAt: null,
+  });
+}
+
+export async function recordTraffic(route = "/") {
+  const current = await loadTraffic();
+  const key = route || "/";
+  const next = {
+    totalViews: (Number(current.totalViews) || 0) + 1,
+    paths: {
+      ...(current.paths || {}),
+      [key]: (Number(current.paths?.[key]) || 0) + 1,
+    },
+    lastViewedAt: new Date().toISOString(),
+  };
+  await writeJson(paths.traffic(), next);
   return next;
 }
 
