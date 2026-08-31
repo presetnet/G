@@ -11,13 +11,34 @@ import {
 
 const DEFAULT_TIMEOUT_MS = 18_000;
 const MINING_SURFACE_CACHE_MS = 4 * 60 * 60 * 1000;
+const configuredOutboundConcurrency = Number(process.env.GT_MAX_OUTBOUND_CONCURRENCY || 3);
+const MAX_OUTBOUND_CONCURRENCY = Number.isFinite(configuredOutboundConcurrency)
+  ? Math.max(1, Math.floor(configuredOutboundConcurrency))
+  : 3;
+let outboundActive = 0;
+const outboundQueue = [];
+
+async function limitedFetch(...args) {
+  if (outboundActive >= MAX_OUTBOUND_CONCURRENCY) {
+    await new Promise((resolve) => outboundQueue.push(resolve));
+  } else {
+    outboundActive += 1;
+  }
+  try {
+    return await fetch(...args);
+  } finally {
+    const next = outboundQueue.shift();
+    if (next) next();
+    else outboundActive -= 1;
+  }
+}
 
 async function fetchJson(url, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const started = Date.now();
   try {
-    const res = await fetch(url, {
+    const res = await limitedFetch(url, {
       headers: {
         Accept: "application/json, text/html;q=0.8, */*;q=0.5",
         "User-Agent": "GeoffThermometer/1.0 (+local sniffer)",
@@ -865,7 +886,7 @@ async function solanaRpc(method, params = []) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
   try {
-    const res = await fetch(SOLANA_RPC_URL, {
+    const res = await limitedFetch(SOLANA_RPC_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
@@ -1247,7 +1268,7 @@ async function probeRoute(path) {
       const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
       let res;
       try {
-        res = await fetch(url, {
+        res = await limitedFetch(url, {
           method: "GET",
           redirect: "manual",
           headers: {

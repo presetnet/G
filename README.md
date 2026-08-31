@@ -26,7 +26,9 @@ The translator turns diffs into a readable feed and a **temperature** score (coo
 3. Output / static: `public` (see `vercel.json`)
 4. Deploy.
 
-On Vercel, history is **universal** — one Redis live desk for every browser (incognito included). `/api/status` and `/api/poll` read/write that desk instantly. Browser `localStorage` is never the source of truth.
+On Vercel, history is **universal** — one shared desk for every browser (incognito included). `/api/status`, `/api/poll`, and `/api/market` are read-only views of that desk. Browser traffic never triggers upstream probes.
+
+The `Live shared desk` GitHub workflow is the only automatic collector. It runs every 15 minutes, prevents overlapping runs, and caps outbound concurrency at three requests. The Vercel cron and public `/api/sniff` endpoint are disabled.
 
 Required on Vercel:
 - `UPSTASH_REDIS_REST_URL`
@@ -34,7 +36,9 @@ Required on Vercel:
 
 Optional:
 - `GEOFF_COOKIE` / `GEOFF_PREVIEW_CODE`
-- `POLL_INTERVAL_MS` (local only; Vercel caps at 15s)
+- `POLL_INTERVAL_MS` (local only)
+- `GT_ENABLE_POLLER=1` (explicitly enables automatic local polling; disabled by default)
+- `GT_MAX_OUTBOUND_CONCURRENCY` (default `3`)
 - `GEOFF_BASE_URL` / `STACKNET_BASE_URL`
 - `GT_GITHUB_TOKEN` (optional cold mirror to `gt-live`)
 - `CRON_SECRET` (protects `/api/tick`)
@@ -60,8 +64,8 @@ Home page stays the Geoff Thermometer. Use **Market deep dive** → `/market.htm
 ## API
 
 - `GET /api/health`
-- `GET /api/status` — stored snapshot (local) / fresh sniff (Vercel POST preferred)
-- `POST /api/poll` — `{ previous, events }` → latest snapshot + translated events
-- `GET /api/sniff` — raw snapshot
+- `GET /api/status` — stored shared snapshot
+- `POST /api/poll` — read-only stored snapshot refresh
+- `GET /api/sniff` — disabled (`410`)
 - `GET /api/stream` — SSE (local only)
-- `GET /api/market` — competitor catalog + live status intel
+- `GET /api/market` — stored/static competitor catalog
