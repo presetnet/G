@@ -1090,7 +1090,7 @@ function renderMetrics(latest) {
       const payout = Number.isFinite(min) && Number.isFinite(max)
         ? min === max ? `${min}x` : `${min}–${max}x`
         : "—";
-      return `<span class="trix-trait trait-${escapeHtml(item.key)}"><b>${escapeHtml(item.label)}</b><i>${odds}% · ${payout}</i></span>`;
+      return `<span class="trix-trait trait-${escapeHtml(item.key)}"><b>${escapeHtml(item.label)}</b><i><span>odds ${odds}%</span><span>payout ${payout}</span></i></span>`;
     }).join("");
     els.trixPackTraits.title =
       "Published Card outcome odds and live Base Pack payout bands. These are not actual minted-by-class counts.";

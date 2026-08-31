@@ -2828,6 +2828,10 @@ details[open] > .fold-summary::after {
   font-style: normal;
 }
 
+.trix-trait i span {
+  display: block;
+}
+
 .trix-trait.trait-mythic { border-color: #ef35df; }
 .trix-trait.trait-epic { border-color: #fff23d; }
 .trix-trait.trait-rare { border-color: #56e960; }

@@ -1654,11 +1654,11 @@ const MAX_TRIX_HISTORY_RECORDS = 2_000;
 const MAX_TRIX_HISTORY_IDS = 10_000;
 const TRIX_LAUNCH_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
 const TRIX_CARD_CLASSES = [
-  { key: "mythic", label: "Mythic", oddsBps: 4 },
-  { key: "epic", label: "Epic", oddsBps: 35 },
-  { key: "rare", label: "Rare", oddsBps: 200 },
-  { key: "uncommon", label: "Uncommon", oddsBps: 900 },
   { key: "common", label: "Common", oddsBps: 4_561 },
+  { key: "uncommon", label: "Uncommon", oddsBps: 900 },
+  { key: "rare", label: "Rare", oddsBps: 200 },
+  { key: "epic", label: "Epic", oddsBps: 35 },
+  { key: "mythic", label: "Mythic", oddsBps: 4 },
   { key: "trix", label: "Void", oddsBps: 4_300 },
 ];
 
