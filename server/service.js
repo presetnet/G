@@ -116,6 +116,8 @@ export function preserveTrixHistory(previous, current) {
       trixGeoffCount: trix.count,
       trixGeoffPaidSol: trix.paidSol,
       trixGeoffFingerprint: trix.fingerprint,
+      trixPacksMinted: trix.packs?.minted ?? null,
+      trixPacksFingerprint: trix.packs?.fingerprint ?? null,
     },
   };
 }

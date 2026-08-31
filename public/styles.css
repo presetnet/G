@@ -2788,6 +2788,53 @@ details[open] > .fold-summary::after {
   .story { grid-template-columns: 1fr; }
 }
 
+.trix-pack-metric {
+  grid-column: span 2;
+}
+
+.trix-pack-traits {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.22rem;
+  margin-top: 0.3rem;
+}
+
+.trix-trait {
+  min-width: 0;
+  border-left: 3px solid var(--muted);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 0.2rem 0.28rem;
+  font-family: var(--font-mono);
+}
+
+.trix-trait b,
+.trix-trait i {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trix-trait b {
+  color: var(--ink);
+  font-size: 0.55rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.trix-trait i {
+  color: var(--muted);
+  font-size: 0.53rem;
+  font-style: normal;
+}
+
+.trix-trait.trait-mythic { border-color: #ef35df; }
+.trix-trait.trait-epic { border-color: #fff23d; }
+.trix-trait.trait-rare { border-color: #56e960; }
+.trix-trait.trait-uncommon { border-color: #d8e2f0; }
+.trix-trait.trait-common { border-color: #f13b32; }
+.trix-trait.trait-trix { border-image: linear-gradient(180deg, #ef35df, #56e960) 1; }
+
 .metric-receipt {
   justify-self: start;
   color: var(--accent);

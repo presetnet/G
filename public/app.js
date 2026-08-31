@@ -217,6 +217,9 @@ const els = {
   trixGeoffCount: document.getElementById("trixGeoffCount"),
   trixGeoffMeta: document.getElementById("trixGeoffMeta"),
   trixGeoffReceipt: document.getElementById("trixGeoffReceipt"),
+  trixPacksMinted: document.getElementById("trixPacksMinted"),
+  trixPacksMeta: document.getElementById("trixPacksMeta"),
+  trixPackTraits: document.getElementById("trixPackTraits"),
   keysoldUsd: document.getElementById("keysoldUsd"),
   keysoldMeta: document.getElementById("keysoldMeta"),
   trafficMini: document.getElementById("trafficMini"),
@@ -1057,6 +1060,40 @@ function renderMetrics(latest) {
     const signature = trixGeoff?.latest?.txSignature;
     els.trixGeoffReceipt.hidden = !signature;
     if (signature) els.trixGeoffReceipt.href = `https://solscan.io/tx/${encodeURIComponent(signature)}`;
+  }
+  const trixPacks = trixGeoff?.packs;
+  if (els.trixPacksMinted) {
+    const minted = Number(trixPacks?.minted);
+    els.trixPacksMinted.textContent = Number.isFinite(minted)
+      ? `${minted.toLocaleString()} minted`
+      : "—";
+    els.trixPacksMinted.title =
+      "Pack mint count reported by TRIX /api/mkt/state; not independently verified token supply.";
+  }
+  if (els.trixPacksMeta) {
+    const bits = ["holders not published"];
+    if (trixPacks?.round != null) bits.push(`round ${trixPacks.round}`);
+    if (trixPacks?.roundStatus) bits.push(trixPacks.roundStatus);
+    els.trixPacksMeta.textContent = bits.join(" · ");
+    els.trixPacksMeta.title = trixPacks?.holderReason ||
+      "No public Pack/Card holder count or collection mint is available.";
+  }
+  if (els.trixPackTraits) {
+    const classes = Array.isArray(trixPacks?.classes) ? trixPacks.classes : [];
+    els.trixPackTraits.innerHTML = classes.map((item) => {
+      const odds = Number(item.oddsPercent).toLocaleString(undefined, {
+        minimumFractionDigits: item.oddsPercent < 1 ? 2 : 0,
+        maximumFractionDigits: 2,
+      });
+      const min = Number(item.payoutMin);
+      const max = Number(item.payoutMax);
+      const payout = Number.isFinite(min) && Number.isFinite(max)
+        ? min === max ? `${min}x` : `${min}–${max}x`
+        : "—";
+      return `<span class="trix-trait trait-${escapeHtml(item.key)}"><b>${escapeHtml(item.label)}</b><i>${odds}% · ${payout}</i></span>`;
+    }).join("");
+    els.trixPackTraits.title =
+      "Published Card outcome odds and live Base Pack payout bands. These are not actual minted-by-class counts.";
   }
   renderSettlementStatus(s);
   renderKeySale(s);

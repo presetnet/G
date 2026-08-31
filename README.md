@@ -16,6 +16,7 @@ Designed to deploy on **Vercel** with a **shared live desk** (same feed in every
 | Stacknet widgets | `/widgets` | public widget catalog |
 | Stacknet node | `/node` | node id / tasks |
 | Geoff catalogs | `/api/catalog/*` | optional auth cookie / preview code |
+| TRIX Packs | `/api/mkt/state` | API-reported Pack mints + published Card class schedule |
 
 The translator turns diffs into a readable feed and a **temperature** score (cool → blazing).
 

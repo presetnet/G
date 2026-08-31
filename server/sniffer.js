@@ -1653,6 +1653,14 @@ const TRIX_BASE_URL = "https://trix.market";
 const MAX_TRIX_HISTORY_RECORDS = 2_000;
 const MAX_TRIX_HISTORY_IDS = 10_000;
 const TRIX_LAUNCH_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
+const TRIX_CARD_CLASSES = [
+  { key: "mythic", label: "Mythic", oddsBps: 4 },
+  { key: "epic", label: "Epic", oddsBps: 35 },
+  { key: "rare", label: "Rare", oddsBps: 200 },
+  { key: "uncommon", label: "Uncommon", oddsBps: 900 },
+  { key: "common", label: "Common", oddsBps: 4_561 },
+  { key: "trix", label: "Void", oddsBps: 4_300 },
+];
 
 export function parseTrixGeoffRecords(posts = [], records = []) {
   const postById = new Map(posts.map((post) => [post.id, post]));
@@ -1684,10 +1692,84 @@ export function parseTrixGeoffRecords(posts = [], records = []) {
     .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
 }
 
+export function parseTrixPackMarket(state = null, { status = 0, ms = null } = {}) {
+  if (!state || typeof state !== "object") {
+    return {
+      ok: false,
+      status,
+      ms,
+      minted: null,
+      holders: null,
+      classes: [],
+      reason: "TRIX Pack market state unavailable.",
+    };
+  }
+  const levels = Array.isArray(state.levels) ? state.levels : [];
+  const base = levels.find((level) => level?.id === "base") || levels[0] || null;
+  const minted = levels.reduce((sum, level) => sum + (Number(level?.minted) || 0), 0);
+  const classes = TRIX_CARD_CLASSES.map((entry) => {
+    const band = Array.isArray(base?.bands?.[entry.key]) ? base.bands[entry.key] : [];
+    return {
+      ...entry,
+      oddsPercent: entry.oddsBps / 100,
+      payoutMin: Number.isFinite(Number(band[0])) ? Number(band[0]) : null,
+      payoutMax: Number.isFinite(Number(band[1])) ? Number(band[1]) : null,
+    };
+  });
+  const fingerprint = bodyHash(JSON.stringify({
+    round: state.round,
+    roundStatus: state.roundStatus,
+    tcg: state.tcg,
+    roundPacks: state.roundPacks,
+    levels: levels.map((level) => ({
+      id: level.id,
+      minted: level.minted,
+      available: level.available,
+      priceSol: level.priceSol,
+      bands: level.bands,
+    })),
+  }));
+  return {
+    ok: true,
+    status: status || 200,
+    ms,
+    round: Number(state.round) || null,
+    roundStatus: state.roundStatus || null,
+    tcg: Boolean(state.tcg),
+    minted,
+    roundPacks: Number(state.roundPacks) || 0,
+    stakedPacks: Number(state.agedPool?.stakedPacks) || 0,
+    holders: null,
+    holderReason: "TRIX does not publish a global Pack/Card holder count or collection mint.",
+    available: Number(base?.available) || 0,
+    basePriceSol: Number(base?.priceSol) || null,
+    basePriceUsd: Number(base?.priceUsd) || null,
+    classes,
+    levels: levels.map((level) => ({
+      id: level.id,
+      name: level.name,
+      minted: Number(level.minted) || 0,
+      available: Number(level.available) || 0,
+      priceSol: Number(level.priceSol) || null,
+      priceUsd: Number(level.priceUsd) || null,
+    })),
+    fingerprint,
+    checkedAt: new Date().toISOString(),
+    sourceUrl: `${TRIX_BASE_URL}/api/mkt/state`,
+    oddsSourceUrl: `${TRIX_BASE_URL}/assets/c-BkGleqvg.js`,
+    note: "Minted and market values are TRIX API-reported. Class odds come from the current TRIX frontend bundle; payout bands come from market state. They are schedules, not actual revealed-card counts.",
+    reason: null,
+  };
+}
+
 export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
   const started = Date.now();
-  const recentRes = await fetchJson(`${TRIX_BASE_URL}/api/meme-image/recent?limit=48`);
+  const [recentRes, packRes] = await Promise.all([
+    fetchJson(`${TRIX_BASE_URL}/api/meme-image/recent?limit=48`),
+    fetchJson(`${TRIX_BASE_URL}/api/mkt/state`),
+  ]);
   const recentRecords = Array.isArray(recentRes.json) ? recentRes.json : [];
+  const packs = parseTrixPackMarket(packRes.json, { status: packRes.status, ms: packRes.ms });
   const catalogAge = Date.now() - Date.parse(previous?.launchCatalogCheckedAt || 0);
   const refreshCatalog =
     !Array.isArray(previous?.tokenMints) ||
@@ -1760,6 +1842,7 @@ export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
     launchTotal,
     launchCatalogCheckedAt,
     backfillComplete: tokenMints.length > 0 && scannedTokenMints.length >= tokenMints.length,
+    packs,
     records: geoffRecords,
     latest,
     fingerprint: bodyHash(
