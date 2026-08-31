@@ -214,7 +214,6 @@ const els = {
   paperworkMeta: document.getElementById("paperworkMeta"),
   paperworkStatus: document.getElementById("paperworkStatus"),
   paperSupply: document.getElementById("paperSupply"),
-  paperTokenMeta: document.getElementById("paperTokenMeta"),
   trixGeoffCount: document.getElementById("trixGeoffCount"),
   trixGeoffMeta: document.getElementById("trixGeoffMeta"),
   trixGeoffReceipt: document.getElementById("trixGeoffReceipt"),
@@ -934,7 +933,6 @@ function renderMetrics(latest) {
       : [];
   const tokenOwner =
     s.tokenPressOwner || s.tokenPressAuthority || tokenSource?.owner || tokenSource?.authority || "unknown";
-  const tokenRowsStale = Boolean(s.tokenPressStale || tokenSource?.stale);
   if (els.stackVersion) els.stackVersion.innerHTML = (s.stacknetVersion ? '<span class="live-dot"></span>' : '') + (s.stacknetVersion || "—");
   if (els.stackHealth) els.stackHealth.textContent = s.stacknetStatus || "—";
   if (els.stackNodes) els.stackNodes.textContent =
@@ -1033,15 +1031,6 @@ function renderMetrics(latest) {
     els.paperSupply.title = paper
       ? `Global on-chain PAPER supply · mint ${paper.mint}`
       : "Waiting for PAPER supply data.";
-  }
-  if (els.paperTokenMeta) {
-    const balance = Number(paper?.balanceUi);
-    els.paperTokenMeta.textContent = paper
-      ? `${tokenRowsStale ? "last observed · " : ""}watched wallet holds ${Number.isFinite(balance) ? balance.toLocaleString(undefined, { maximumFractionDigits: 6 }) : "—"}`
-      : "watched wallet balance —";
-    els.paperTokenMeta.title = paper
-      ? `${tokenRowsStale ? "Last observed token data; current read unavailable.\n" : ""}Watched token-account owner: ${tokenOwner}\nPAPER mint authority: ${paper.mintAuthority || "unknown"}\nHolding a token account does not grant minting control.`
-      : "The watched wallet owner and mint authority are separate roles.";
   }
   const trixGeoff = latest?.sources?.["trix.geoff"];
   if (els.trixGeoffCount) {
