@@ -1628,6 +1628,83 @@ async function sniffGeoffTokenPlan() {
   }
 }
 
+const TRIX_BASE_URL = "https://trix.market";
+
+export function parseTrixGeoffRecords(posts = [], records = []) {
+  const postById = new Map(posts.map((post) => [post.id, post]));
+  const seen = new Set();
+  return records
+    .filter((record) => record?.generator === "geoff" && record.id && !seen.has(record.id))
+    .map((record) => {
+      seen.add(record.id);
+      const post = postById.get(record.postId) || null;
+      const feeLamports = Number(record.feeLamports);
+      return {
+        id: record.id,
+        createdAt: record.createdAt || post?.createdAt || null,
+        postId: record.postId || post?.id || null,
+        authorWallet: record.authorWallet || post?.payerWallet || null,
+        tokenMint: record.tokenMint || post?.memeTokenMint || null,
+        tokenSymbol: record.coinSymbol || post?.memeCoinSymbol || null,
+        imageUrl: record.imageUrl || post?.imageUrl || null,
+        txSignature: record.txSignature || null,
+        paidNetwork: record.paidNetwork || null,
+        feeLamports: Number.isFinite(feeLamports) ? feeLamports : null,
+        feeSol: Number.isFinite(feeLamports) ? feeLamports / 1e9 : null,
+      };
+    })
+    .filter(
+      (record) =>
+        record.txSignature && record.feeLamports > 0 && record.paidNetwork === "mainnet",
+    )
+    .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
+}
+
+async function sniffTrixGeoff() {
+  const started = Date.now();
+  const postsRes = await fetchJson(`${TRIX_BASE_URL}/api/posts?limit=50`);
+  const posts = Array.isArray(postsRes.json?.posts) ? postsRes.json.posts : [];
+  const tokenMints = [
+    ...new Set(
+      posts
+        .filter((post) => post?.memeGenerator === "geoff" && post.memeTokenMint)
+        .map((post) => post.memeTokenMint),
+    ),
+  ].slice(0, 5);
+  const settled = await Promise.allSettled(
+    tokenMints.map((mint) => fetchJson(`${TRIX_BASE_URL}/api/meme-image/token/${mint}`)),
+  );
+  const records = settled.flatMap((result) =>
+    result.status === "fulfilled" && Array.isArray(result.value.json) ? result.value.json : [],
+  );
+  const geoffRecords = parseTrixGeoffRecords(posts, records);
+  const latest = geoffRecords.find((record) => record.imageUrl) || geoffRecords[0] || null;
+  const paidLamports = geoffRecords.reduce((sum, record) => sum + (record.feeLamports || 0), 0);
+  const ok =
+    postsRes.ok &&
+    geoffRecords.length > 0 &&
+    tokenMints.length > 0 &&
+    settled.some((result) => result.status === "fulfilled" && result.value.ok);
+  return {
+    source: "trix.geoff",
+    ok,
+    status: ok ? 200 : postsRes.status || 0,
+    ms: Date.now() - started,
+    count: geoffRecords.length,
+    paidLamports,
+    paidSol: paidLamports / 1e9,
+    tokenMints,
+    records: geoffRecords.slice(0, 20),
+    latest,
+    fingerprint: bodyHash(
+      geoffRecords.map((record) => `${record.id}:${record.txSignature}:${record.feeLamports}`).join("|"),
+    ),
+    url: `${TRIX_BASE_URL}/`,
+    note: "TRIX public records label the provider as Geoff and report mainnet payment signatures. This does not independently establish geoff.ai operator identity or an NFT mint.",
+    reason: ok ? null : "No paid TRIX records labeled with the Geoff provider were resolved.",
+  };
+}
+
 export async function runSniff({ forceMiningSurface = false } = {}) {
   const startedAt = new Date().toISOString();
   const settled = await Promise.allSettled([
@@ -1641,6 +1718,7 @@ export async function runSniff({ forceMiningSurface = false } = {}) {
     sniffGeoffProductLanes(),
     sniffGeoffPublicSurfaces(),
     sniffGeoffSubscription(),
+    sniffTrixGeoff(),
     sniffStacknetHealth(),
     sniffStacknetRoot(),
     sniffStacknetNetwork(),
@@ -1856,6 +1934,9 @@ export async function runSniff({ forceMiningSurface = false } = {}) {
       publicSurfacesLive: bySource["geoff.public.surfaces"]?.liveCount ?? null,
       publicSurfacesTotal: bySource["geoff.public.surfaces"]?.total ?? null,
       publicSurfacesFingerprint: bySource["geoff.public.surfaces"]?.fingerprint ?? null,
+      trixGeoffCount: bySource["trix.geoff"]?.count ?? null,
+      trixGeoffPaidSol: bySource["trix.geoff"]?.paidSol ?? null,
+      trixGeoffFingerprint: bySource["trix.geoff"]?.fingerprint ?? null,
       subscriptionLiveCount: bySource["geoff.subscription"]?.liveCount ?? null,
       subscriptionTotal: bySource["geoff.subscription"]?.total ?? null,
       subscriptionFingerprint: bySource["geoff.subscription"]?.fingerprint ?? null,

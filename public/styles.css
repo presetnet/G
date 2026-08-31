@@ -2788,6 +2788,16 @@ details[open] > .fold-summary::after {
   .story { grid-template-columns: 1fr; }
 }
 
+.metric-receipt {
+  justify-self: start;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-decoration: none;
+}
+
+.metric-receipt:hover { text-decoration: underline; }
+
 @media (max-width: 520px) {
   .topbar {
     width: 100%;

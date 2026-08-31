@@ -215,6 +215,9 @@ const els = {
   paperworkStatus: document.getElementById("paperworkStatus"),
   paperSupply: document.getElementById("paperSupply"),
   paperTokenMeta: document.getElementById("paperTokenMeta"),
+  trixGeoffCount: document.getElementById("trixGeoffCount"),
+  trixGeoffMeta: document.getElementById("trixGeoffMeta"),
+  trixGeoffReceipt: document.getElementById("trixGeoffReceipt"),
   keysoldUsd: document.getElementById("keysoldUsd"),
   keysoldMeta: document.getElementById("keysoldMeta"),
   trafficMini: document.getElementById("trafficMini"),
@@ -329,6 +332,7 @@ const EVENT_ICONS = {
   metaproofs: "layers",
   keysale: "tag",
   solana: "pulse",
+  trixGeoff: "image",
 };
 
 let mode = "local";
@@ -1022,7 +1026,10 @@ function renderMetrics(latest) {
   const paper = tokenRows.find((token) => token.symbol === "PAPER") || null;
   if (els.paperSupply) {
     els.paperSupply.textContent = Number.isFinite(Number(paper?.supplyUi))
-      ? Number(paper.supplyUi).toLocaleString(undefined, { maximumFractionDigits: 6 })
+      ? Number(paper.supplyUi).toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
       : "—";
     els.paperSupply.title = paper
       ? `Global on-chain PAPER supply · mint ${paper.mint}`
@@ -1036,6 +1043,27 @@ function renderMetrics(latest) {
     els.paperTokenMeta.title = paper
       ? `${tokenRowsStale ? "Last observed token data; current read unavailable.\n" : ""}Watched token-account owner: ${tokenOwner}\nPAPER mint authority: ${paper.mintAuthority || "unknown"}\nHolding a token account does not grant minting control.`
       : "The watched wallet owner and mint authority are separate roles.";
+  }
+  const trixGeoff = latest?.sources?.["trix.geoff"];
+  if (els.trixGeoffCount) {
+    const count = Number(trixGeoff?.count);
+    els.trixGeoffCount.textContent = Number.isFinite(count) && count > 0 ? `${count} paid` : "—";
+    els.trixGeoffCount.title =
+      "Paid generations in the resolved TRIX public-record window where TRIX labels generator=geoff.";
+  }
+  if (els.trixGeoffMeta) {
+    const paidSol = Number(trixGeoff?.paidSol);
+    const latestFee = Number(trixGeoff?.latest?.feeSol);
+    els.trixGeoffMeta.textContent = Number.isFinite(paidSol) && paidSol > 0
+      ? `${paidSol.toFixed(3)} SOL observed${Number.isFinite(latestFee) ? ` · ${latestFee.toFixed(3)} each` : ""}`
+      : trixGeoff?.reason || "waiting for paid generations";
+    els.trixGeoffMeta.title =
+      "TRIX supplies the Geoff provider label, fee amount, network, and transaction signature. This does not independently prove geoff.ai operator identity or that the generated image was minted as an NFT.";
+  }
+  if (els.trixGeoffReceipt) {
+    const signature = trixGeoff?.latest?.txSignature;
+    els.trixGeoffReceipt.hidden = !signature;
+    if (signature) els.trixGeoffReceipt.href = `https://solscan.io/tx/${encodeURIComponent(signature)}`;
   }
   renderSettlementStatus(s);
   renderKeySale(s);

@@ -532,6 +532,34 @@ export function translate(previous, current) {
     );
   }
 
+  const prevTrix = prev["trix.geoff"];
+  const currTrix = curr["trix.geoff"];
+  if (prevTrix?.fingerprint && currTrix?.fingerprint && prevTrix.fingerprint !== currTrix.fingerprint) {
+    const previousIds = new Set((prevTrix.records || []).map((record) => record.id));
+    const added = (currTrix.records || []).filter((record) => !previousIds.has(record.id));
+    if (added.length) {
+      const paidSol = added.reduce((sum, record) => sum + (Number(record.feeSol) || 0), 0);
+      events.push(
+        event({
+          kind: "trixGeoff",
+          rank: "move",
+          title: "Paid Geoff generation recorded on TRIX",
+          summary: `${added.length} new TRIX record${added.length === 1 ? "" : "s"} labeled provider=geoff · ${paidSol.toFixed(3)} SOL reported · mainnet payment receipt${added.length === 1 ? "" : "s"}`,
+          details: {
+            records: added.map((record) => ({
+              id: record.id,
+              feeSol: record.feeSol,
+              txSignature: record.txSignature,
+              tokenMint: record.tokenMint,
+              postId: record.postId,
+            })),
+            evidenceBoundary: "TRIX attribution and payment metadata; not independent proof of geoff.ai identity or an NFT mint.",
+          },
+        }),
+      );
+    }
+  }
+
   // Max × Solana route table (public 307→connect proves the lanes exist).
   const prevMax = prev["geoff.max.solana"];
   const currMax = curr["geoff.max.solana"];

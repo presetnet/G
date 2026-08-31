@@ -720,6 +720,7 @@ const COVERAGE_LABELS = {
   "geoff.max.solana": "Max × Solana",
   "geoff.product.lanes": "Product lanes",
   "geoff.public.surfaces": "Public surfaces",
+  "trix.geoff": "TRIX · Geoff provider",
   "geoff.catalog": "Catalog (gated)",
 };
 
@@ -732,6 +733,7 @@ const COVERAGE_PRIORITY = [
   "geoff.explore",
   "geoff.product.lanes",
   "geoff.public.surfaces",
+  "trix.geoff",
   "geoff.max.solana",
   "stacknet.widgets",
   "geoff.version",
