@@ -858,6 +858,7 @@ a.btn {
 
 .metric {
   position: relative;
+  min-width: 0;
   border: 1px solid var(--line);
   background:
     linear-gradient(160deg, rgba(24, 24, 27, 0.96), rgba(11, 11, 14, 0.94));
@@ -2943,6 +2944,11 @@ details[open] > .fold-summary::after {
   .trix-pack-metric {
     grid-row: auto;
     min-height: 0;
+  }
+
+  .trix-pack-market,
+  .trix-pack-traits {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
