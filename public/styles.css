@@ -205,6 +205,94 @@ body { overflow-x: hidden; }
   line-height: 1.4;
 }
 
+.public-data-notice {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.24fr) 1fr;
+  gap: 1.15rem;
+  align-items: center;
+  margin: 0 0 1.15rem;
+  padding: 0.9rem 1rem;
+  overflow: hidden;
+  border: 1px solid rgba(255, 214, 10, 0.34);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(100deg, rgba(255, 214, 10, 0.1), transparent 38%),
+    rgba(17, 17, 20, 0.94);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 10px 32px rgba(0, 0, 0, 0.24);
+}
+
+.public-data-notice::after {
+  content: "PUBLIC / QUERYABLE / CHANGEABLE";
+  position: absolute;
+  top: 0.45rem;
+  right: 0.65rem;
+  color: rgba(255, 214, 10, 0.16);
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.16em;
+}
+
+.public-data-notice-label {
+  display: grid;
+  gap: 0.2rem;
+  align-content: center;
+  min-height: 3.6rem;
+  padding-right: 1rem;
+  border-right: 1px solid rgba(255, 214, 10, 0.22);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+
+.public-data-notice-label span {
+  color: var(--accent);
+  font-size: 0.58rem;
+  letter-spacing: 0.16em;
+}
+
+.public-data-notice-label strong {
+  color: var(--ink);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+}
+
+.public-data-notice-copy h2 {
+  margin: 0 0 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.public-data-notice-copy p {
+  max-width: 66rem;
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 600px) {
+  .public-data-notice {
+    grid-template-columns: 1fr;
+    gap: 0.65rem;
+    padding: 0.85rem;
+  }
+
+  .public-data-notice::after { display: none; }
+
+  .public-data-notice-label {
+    display: flex;
+    min-height: 0;
+    gap: 0.55rem;
+    padding: 0 0 0.55rem;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 214, 10, 0.22);
+  }
+}
+
 .gauge-inline {
   display: grid;
   grid-template-columns: 1fr auto auto;
