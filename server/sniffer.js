@@ -1651,6 +1651,7 @@ async function sniffGeoffTokenPlan() {
 
 const TRIX_BASE_URL = "https://trix.market";
 const MAX_TRIX_HISTORY_RECORDS = 2_000;
+const TRIX_LAUNCH_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
 
 export function parseTrixGeoffRecords(posts = [], records = []) {
   const postById = new Map(posts.map((post) => [post.id, post]));
@@ -1682,35 +1683,61 @@ export function parseTrixGeoffRecords(posts = [], records = []) {
     .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
 }
 
-export async function sniffTrixGeoff({ previous = null, postLimit = 200, maxMints = 5 } = {}) {
+export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
   const started = Date.now();
-  const postsRes = await fetchJson(`${TRIX_BASE_URL}/api/posts?limit=${postLimit}`);
-  const posts = Array.isArray(postsRes.json?.posts) ? postsRes.json.posts : [];
-  const tokenMints = [
-    ...new Set(
-      posts
-        .filter((post) => post?.memeGenerator === "geoff" && post.memeTokenMint)
-        .map((post) => post.memeTokenMint),
-    ),
-  ];
+  const recentRes = await fetchJson(`${TRIX_BASE_URL}/api/meme-image/recent?limit=48`);
+  const recentRecords = Array.isArray(recentRes.json) ? recentRes.json : [];
+  const catalogAge = Date.now() - Date.parse(previous?.launchCatalogCheckedAt || 0);
+  const refreshCatalog =
+    !Array.isArray(previous?.tokenMints) ||
+    previous.tokenMints.length < 100 ||
+    !Number.isFinite(catalogAge) ||
+    catalogAge >= TRIX_LAUNCH_CATALOG_TTL_MS;
+  let tokenMints = Array.isArray(previous?.tokenMints) ? previous.tokenMints : [];
+  let launchCatalogCheckedAt = previous?.launchCatalogCheckedAt || null;
+  let launchTotal = previous?.launchTotal || tokenMints.length;
+  if (refreshCatalog) {
+    const catalog = await Promise.allSettled([
+      fetchJson(`${TRIX_BASE_URL}/api/launches?limit=500&offset=0&sort=marketCap`),
+      fetchJson(`${TRIX_BASE_URL}/api/launches?limit=500&offset=500&sort=marketCap`),
+    ]);
+    const items = catalog.flatMap((result) =>
+      result.status === "fulfilled" && Array.isArray(result.value.json?.items)
+        ? result.value.json.items
+        : [],
+    );
+    const discoveredMints = items.map((item) => item?.mintAddress).filter(Boolean);
+    if (discoveredMints.length) {
+      tokenMints = [...new Set([...tokenMints, ...discoveredMints])];
+      launchTotal = Math.max(
+        tokenMints.length,
+        ...catalog.map((result) =>
+          result.status === "fulfilled" ? Number(result.value.json?.total) || 0 : 0,
+        ),
+      );
+      launchCatalogCheckedAt = new Date().toISOString();
+    }
+  }
   const previouslyScanned = new Set(previous?.scannedTokenMints || []);
   const unscanned = tokenMints.filter((mint) => !previouslyScanned.has(mint));
-  const selectedMints = [...new Set([...tokenMints.slice(0, 2), ...unscanned])]
-    .slice(0, Math.max(1, maxMints));
+  const selectedMints = unscanned.slice(0, Math.max(1, maxMints));
   const settled = await Promise.allSettled(
     selectedMints.map((mint) => fetchJson(`${TRIX_BASE_URL}/api/meme-image/token/${mint}`)),
   );
-  const records = settled.flatMap((result) =>
-    result.status === "fulfilled" && Array.isArray(result.value.json) ? result.value.json : [],
-  );
+  const records = [
+    ...recentRecords,
+    ...settled.flatMap((result) =>
+      result.status === "fulfilled" && Array.isArray(result.value.json) ? result.value.json : [],
+    ),
+  ];
   const resolvedTokenMints = selectedMints.filter((_, index) => {
     const result = settled[index];
     return result?.status === "fulfilled" && result.value.status < 500;
   });
-  const geoffRecords = parseTrixGeoffRecords(posts, records);
+  const geoffRecords = parseTrixGeoffRecords([], records);
   const latest = geoffRecords.find((record) => record.imageUrl) || geoffRecords[0] || null;
   const paidLamports = geoffRecords.reduce((sum, record) => sum + (record.feeLamports || 0), 0);
-  const ok = postsRes.ok && (
+  const ok = recentRes.ok && (
     selectedMints.length === 0 ||
     resolvedTokenMints.length > 0
   );
@@ -1720,7 +1747,7 @@ export async function sniffTrixGeoff({ previous = null, postLimit = 200, maxMint
   return {
     source: "trix.geoff",
     ok,
-    status: ok ? 200 : postsRes.status || 0,
+    status: ok ? 200 : recentRes.status || 0,
     ms: Date.now() - started,
     count: geoffRecords.length,
     paidLamports,
@@ -1728,6 +1755,10 @@ export async function sniffTrixGeoff({ previous = null, postLimit = 200, maxMint
     tokenMints,
     resolvedTokenMints,
     scannedTokenMints,
+    recentCount: recentRecords.length,
+    launchTotal,
+    launchCatalogCheckedAt,
+    backfillComplete: tokenMints.length > 0 && scannedTokenMints.length >= tokenMints.length,
     records: geoffRecords,
     latest,
     fingerprint: bodyHash(
@@ -1735,7 +1766,7 @@ export async function sniffTrixGeoff({ previous = null, postLimit = 200, maxMint
     ),
     url: `${TRIX_BASE_URL}/`,
     note: "TRIX public records label the provider as Geoff and report mainnet payment signatures. This does not independently establish geoff.ai operator identity or an NFT mint.",
-    reason: ok ? null : "TRIX public records could not be resolved.",
+    reason: ok ? null : "TRIX recent generations or historical token records could not be resolved.",
   };
 }
 

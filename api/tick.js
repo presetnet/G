@@ -96,7 +96,8 @@ export default async function handler(req, res) {
       previousTrix.fingerprint === currentTrix?.fingerprint &&
       (previousTrix.scannedTokenMints?.length || 0) ===
         (currentTrix?.scannedTokenMints?.length || 0) &&
-      (previousTrix.tokenMints?.length || 0) === (currentTrix?.tokenMints?.length || 0);
+      (previousTrix.tokenMints?.length || 0) === (currentTrix?.tokenMints?.length || 0) &&
+      previousTrix.launchCatalogCheckedAt === currentTrix?.launchCatalogCheckedAt;
     if (trixUnchanged) {
       res.status(200).json({
         ok: true,

@@ -1042,8 +1042,13 @@ function renderMetrics(latest) {
   if (els.trixGeoffMeta) {
     const paidSol = Number(trixGeoff?.paidSol);
     const latestFee = Number(trixGeoff?.latest?.feeSol);
+    const scannedMints = trixGeoff?.scannedTokenMints?.length || 0;
+    const launchTotal = Number(trixGeoff?.launchTotal);
+    const backfill = Number.isFinite(launchTotal) && scannedMints < launchTotal
+      ? ` · backfill ${scannedMints}/${launchTotal} mints`
+      : "";
     els.trixGeoffMeta.textContent = Number.isFinite(paidSol) && paidSol > 0
-      ? `${paidSol.toFixed(3)} SOL in observed history${Number.isFinite(latestFee) ? ` · latest ${latestFee.toFixed(3)} SOL` : ""}`
+      ? `${paidSol.toFixed(3)} SOL in observed history${Number.isFinite(latestFee) ? ` · latest ${latestFee.toFixed(3)} SOL` : ""}${backfill}`
       : trixGeoff?.reason || "waiting for paid generations";
     els.trixGeoffMeta.title =
       "TRIX supplies the Geoff provider label, fee amount, network, and transaction signature. This does not independently prove geoff.ai operator identity or that the generated image was minted as an NFT.";
