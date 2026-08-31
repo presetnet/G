@@ -1651,6 +1651,7 @@ async function sniffGeoffTokenPlan() {
 
 const TRIX_BASE_URL = "https://trix.market";
 const MAX_TRIX_HISTORY_RECORDS = 2_000;
+const MAX_TRIX_HISTORY_IDS = 10_000;
 const TRIX_LAUNCH_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
 
 export function parseTrixGeoffRecords(posts = [], records = []) {
@@ -1772,6 +1773,17 @@ export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
 
 export function mergeTrixGeoffHistory(previous = null, observed = null) {
   if (!observed) return previous;
+  const previousRecordIds = new Set(
+    previous?.recordIds?.length
+      ? previous.recordIds
+      : (previous?.records || []).map((record) => record?.id).filter(Boolean),
+  );
+  const newRecords = (observed.records || []).filter(
+    (record) => record?.id && !previousRecordIds.has(record.id),
+  );
+  const recordIds = [
+    ...new Set([...previousRecordIds, ...newRecords.map((record) => record.id)]),
+  ].slice(-MAX_TRIX_HISTORY_IDS);
   const byId = new Map();
   for (const record of [...(previous?.records || []), ...(observed.records || [])]) {
     const key = record?.id || record?.txSignature;
@@ -1780,7 +1792,20 @@ export function mergeTrixGeoffHistory(previous = null, observed = null) {
   const records = [...byId.values()]
     .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0))
     .slice(0, MAX_TRIX_HISTORY_RECORDS);
-  const paidLamports = records.reduce((sum, record) => sum + (Number(record.feeLamports) || 0), 0);
+  const previousCount = Number.isFinite(Number(previous?.count))
+    ? Math.max(Number(previous.count), previousRecordIds.size)
+    : previousRecordIds.size;
+  const count = previousCount + newRecords.length;
+  const previousPaidLamports = Number.isFinite(Number(previous?.paidLamports))
+    ? Number(previous.paidLamports)
+    : (previous?.records || []).reduce(
+        (sum, record) => sum + (Number(record.feeLamports) || 0),
+        0,
+      );
+  const paidLamports = previousPaidLamports + newRecords.reduce(
+    (sum, record) => sum + (Number(record.feeLamports) || 0),
+    0,
+  );
   const latest = records.find((record) => record.imageUrl) || records[0] || null;
   const tokenMints = [...new Set([...(previous?.tokenMints || []), ...(observed.tokenMints || [])])];
   const scannedTokenMints = [
@@ -1790,18 +1815,21 @@ export function mergeTrixGeoffHistory(previous = null, observed = null) {
     ...(previous || {}),
     ...observed,
     ok: observed.ok || Boolean(previous?.ok && records.length),
-    count: records.length,
+    count,
     paidLamports,
     paidSol: paidLamports / 1e9,
     tokenMints,
     scannedTokenMints,
+    recordIds,
     records,
     latest,
     observedCount: observed.records?.length || 0,
     checkedAt: new Date().toISOString(),
-    historyStartedAt: records.at(-1)?.createdAt || previous?.historyStartedAt || null,
+    historyStartedAt: [previous?.historyStartedAt, records.at(-1)?.createdAt]
+      .filter(Boolean)
+      .sort((a, b) => Date.parse(a) - Date.parse(b))[0] || null,
     fingerprint: bodyHash(
-      records.map((record) => `${record.id}:${record.txSignature}:${record.feeLamports}`).join("|"),
+      `${count}:${paidLamports}:${records[0]?.id || "none"}`,
     ),
     reason: observed.ok || records.length ? null : observed.reason,
   };
