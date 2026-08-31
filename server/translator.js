@@ -160,15 +160,11 @@ export function normalizeEvent(e) {
   if (!e || typeof e !== "object") return e;
   const rank = inferRank(e);
   const meta = RANK[rank] || RANK.note;
-  const heat =
-    typeof e.heat === "number" && e.heat >= 7
-      ? meta.heat
-      : (e.heat ?? meta.heat);
   return {
     ...e,
     rank,
     severity: meta.severity,
-    heat,
+    heat: meta.heat,
     vibe: vibeForRank(rank),
   };
 }
@@ -1843,6 +1839,7 @@ export function computeTemperature(events, latestSnapshot) {
   const meaningful = recent.filter(
     (e) =>
       (e.heat || 0) > 0 &&
+      e.rank !== "whisper" &&
       e.kind !== "baseline" &&
       e.kind !== "agentCluster" &&
       e.kind !== "agent", // in-flight / load / tasks = queue tape, not updates
