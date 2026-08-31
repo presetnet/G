@@ -498,6 +498,40 @@ export function translate(previous, current) {
     );
   }
 
+  const prevSurfaces = prev["geoff.public.surfaces"];
+  const currSurfaces = curr["geoff.public.surfaces"];
+  if (
+    prevSurfaces?.fingerprint &&
+    currSurfaces?.fingerprint &&
+    prevSurfaces.fingerprint !== currSurfaces.fingerprint
+  ) {
+    const changed = (currSurfaces.routes || []).filter((route) => {
+      const before = (prevSurfaces.routes || []).find((item) => item.id === route.id);
+      if (!before) return true;
+      if (before.status !== route.status) return true;
+      return route.id !== "home" && before.hash !== route.hash;
+    });
+    const statusMoved = changed.some((route) => {
+      const before = (prevSurfaces.routes || []).find((item) => item.id === route.id);
+      return before?.status !== route.status;
+    });
+    events.push(
+      event({
+        kind: "publicSurfaces",
+        rank: statusMoved ? "move" : "note",
+        title: statusMoved ? "Public Geoff route status moved" : "Public Geoff surface changed",
+        summary: changed.length
+          ? `${changed.map((route) => route.label || route.id).join(" · ")} changed · ${currSurfaces.liveCount ?? 0}/${currSurfaces.total ?? 5} answering`
+          : `${currSurfaces.liveCount ?? 0}/${currSurfaces.total ?? 5} public Geoff surfaces answering`,
+        details: {
+          pages: changed.map((route) => route.id),
+          from: prevSurfaces.fingerprint,
+          to: currSurfaces.fingerprint,
+        },
+      }),
+    );
+  }
+
   // Max × Solana route table (public 307→connect proves the lanes exist).
   const prevMax = prev["geoff.max.solana"];
   const currMax = curr["geoff.max.solana"];
@@ -1157,10 +1191,11 @@ export function translate(previous, current) {
     );
   }
 
-  // Token press — the minting authority's coins (PAPER, CCU, CUSD...).
+  // Token press — global supplies for token mints held by the watched owner wallet.
   const prevTok = prev["solana.tokens"];
   const currTok = curr["solana.tokens"];
   if (prevTok?.ok && currTok?.ok) {
+    const owner = currTok.owner || currTok.authority || "unknown";
     const before = new Map((prevTok.mints || []).map((m) => [m.mint, m]));
     for (const mint of currTok.mints || []) {
       const old = before.get(mint.mint);
@@ -1169,9 +1204,9 @@ export function translate(previous, current) {
           event({
             kind: "treasury",
             rank: "move",
-            title: `New coin under the Geoff authority: ${mint.symbol}`,
-            summary: `${mint.mint} · supply ${mint.supplyUi} · wallet holds ${mint.balanceUi}`,
-            details: mint,
+            title: `New token held by watched wallet: ${mint.symbol}`,
+            summary: `${mint.mint} · owner ${owner} · mint authority ${mint.mintAuthority || "unknown"} · supply ${mint.supplyUi} · wallet holds ${mint.balanceUi}`,
+            details: { ...mint, owner },
           }),
         );
         continue;
@@ -1184,10 +1219,16 @@ export function translate(previous, current) {
             rank: delta > 0 ? "spike" : "note",
             title:
               delta > 0
-                ? `The ${mint.symbol} printer runs: supply ${old.supplyUi} → ${mint.supplyUi}`
+                ? `${mint.symbol} supply increased: ${old.supplyUi} → ${mint.supplyUi}`
                 : `${mint.symbol} supply shrank: ${old.supplyUi} → ${mint.supplyUi}`,
-            summary: `authority ${currTok.authority}`,
-            details: { from: old.supplyUi, to: mint.supplyUi, mint: mint.mint },
+            summary: `watched owner ${owner} · mint authority ${mint.mintAuthority || "unknown"}`,
+            details: {
+              from: old.supplyUi,
+              to: mint.supplyUi,
+              mint: mint.mint,
+              owner,
+              mintAuthority: mint.mintAuthority || null,
+            },
           }),
         );
       }
@@ -1201,8 +1242,8 @@ export function translate(previous, current) {
           kind: "treasury",
           rank: "move",
           title: `Token account closed: ${m.symbol}`,
-          summary: `${m.mint} no longer under authority ${currTok.authority}`,
-          details: m,
+          summary: `${m.mint} no longer held by watched owner ${owner} · mint authority ${m.mintAuthority || "unknown"}`,
+          details: { ...m, owner },
         }),
       );
     }

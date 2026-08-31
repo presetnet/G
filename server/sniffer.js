@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { config } from "./config.js";
 import { loadMiningSurfaceCache, saveMiningSurfaceCache } from "./store.js";
 import {
@@ -35,6 +36,7 @@ async function fetchJson(url, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS } =
     return {
       ok: res.ok,
       status: res.status,
+      url: res.url,
       ms: Date.now() - started,
       json,
       text,
@@ -519,6 +521,10 @@ async function sniffMiningPayouts() {
   };
 }
 
+function bodyHash(input) {
+  return createHash("sha256").update(input || "", "utf8").digest("hex").slice(0, 16);
+}
+
 export async function sniffMiningSurface(force = false) {
   if (!force) {
     const cached = await loadMiningSurfaceCache().catch(() => null);
@@ -934,8 +940,10 @@ export async function sniffSolanaTreasury(address = DEFAULT_TREASURY_ADDRESS) {
   }
 }
 
-export const DEFAULT_TOKEN_AUTHORITY =
-  process.env.GEOFF_TOKEN_AUTHORITY || "D2KL4HWbc5URqBti9XLf2DwtiDYJs9wbX6z7tyWLoiH2";
+export const DEFAULT_TOKEN_OWNER =
+  process.env.GEOFF_TOKEN_OWNER ||
+  process.env.GEOFF_TOKEN_AUTHORITY ||
+  "D2KL4HWbc5URqBti9XLf2DwtiDYJs9wbX6z7tyWLoiH2";
 
 function symbolFromMint(mint) {
   const known = [
@@ -951,11 +959,11 @@ function symbolFromMint(mint) {
   return vanity ? vanity[0] : `${mint.slice(0, 4)}…`;
 }
 
-export async function sniffSolanaTokens(authority = DEFAULT_TOKEN_AUTHORITY) {
+export async function sniffSolanaTokens(owner = DEFAULT_TOKEN_OWNER) {
   const started = Date.now();
   try {
     const accountsRes = await solanaRpc("getTokenAccountsByOwner", [
-      authority,
+      owner,
       { programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" },
       { encoding: "jsonParsed" },
     ]);
@@ -989,7 +997,7 @@ export async function sniffSolanaTokens(authority = DEFAULT_TOKEN_AUTHORITY) {
       ok: true,
       status: 200,
       ms: Date.now() - started,
-      authority,
+      owner,
       mints: order,
       fingerprint: simpleHash(
         order.map((m) => `${m.mint}:${m.supplyUi}`).join("|"),
@@ -1002,7 +1010,7 @@ export async function sniffSolanaTokens(authority = DEFAULT_TOKEN_AUTHORITY) {
       ok: false,
       status: 0,
       ms: Date.now() - started,
-      authority,
+      owner,
       mints: [],
       fingerprint: null,
       reason: error?.message || String(error),
@@ -1391,6 +1399,68 @@ async function sniffGeoffProductLanes() {
   };
 }
 
+const PUBLIC_SURFACE_ROUTES = [
+  { id: "home", path: "/", label: "home" },
+  { id: "explore", path: "/explore", label: "explore" },
+  { id: "music", path: "/music", label: "music" },
+  { id: "image", path: "/image", label: "image" },
+  { id: "video", path: "/video", label: "video" },
+];
+
+async function sniffGeoffPublicSurfaces() {
+  const started = Date.now();
+  const settled = await Promise.allSettled(
+    PUBLIC_SURFACE_ROUTES.map(async (route) => {
+      const res = await fetchJson(`${config.geoffBaseUrl}${route.path}`, {
+        headers: { Accept: "text/html" },
+      });
+      return {
+        ...route,
+        url: res.url || `${config.geoffBaseUrl}${route.path}`,
+        ok: res.ok,
+        status: res.status,
+        ms: res.ms,
+        bytes: Buffer.byteLength(res.text || "", "utf8"),
+        hash: bodyHash(res.text),
+        note: "Geoff",
+      };
+    }),
+  );
+  const routes = settled.map((result, index) =>
+    result.status === "fulfilled"
+      ? result.value
+      : {
+          ...PUBLIC_SURFACE_ROUTES[index],
+          url: `${config.geoffBaseUrl}${PUBLIC_SURFACE_ROUTES[index].path}`,
+          ok: false,
+          status: 0,
+          ms: null,
+          bytes: 0,
+          hash: null,
+          note: "Geoff",
+          error: result.reason?.message || String(result.reason),
+        },
+  );
+  const live = routes.filter((route) => route.ok);
+  const fingerprint = bodyHash(
+    routes
+      .map((route) => `${route.id}:${route.status}:${route.id === "home" ? "dynamic" : route.hash || "none"}`)
+      .join("|"),
+  );
+  return {
+    source: "geoff.public.surfaces",
+    ok: live.length === routes.length,
+    status: live.length === routes.length ? 200 : live.length ? 207 : 0,
+    ms: Date.now() - started,
+    liveCount: live.length,
+    total: routes.length,
+    fingerprint,
+    routes,
+    note: "Public HTML response probe. Stable hashes mean stable response bodies, not ownership or partnership.",
+    reason: live.length === routes.length ? null : `${live.length}/${routes.length} public Geoff surfaces answered`,
+  };
+}
+
 /** Auth-gated billing / subscription shells on geoff.ai — public route probe only. */
 const SUBSCRIPTION_ROUTES = [
   { id: "account", path: "/account", label: "Account" },
@@ -1569,6 +1639,7 @@ export async function runSniff({ forceMiningSurface = false } = {}) {
     sniffGeoffExplore(),
     sniffGeoffMaxSolana(),
     sniffGeoffProductLanes(),
+    sniffGeoffPublicSurfaces(),
     sniffGeoffSubscription(),
     sniffStacknetHealth(),
     sniffStacknetRoot(),
@@ -1619,7 +1690,7 @@ export async function runSniff({ forceMiningSurface = false } = {}) {
       source: "solana.tokens",
       ok: false,
       status: 0,
-      authority: DEFAULT_TOKEN_AUTHORITY,
+      owner: DEFAULT_TOKEN_OWNER,
       mints: [],
       reason: error?.message || String(error),
     });
@@ -1701,7 +1772,7 @@ export async function runSniff({ forceMiningSurface = false } = {}) {
       treasuryRpcSigCount: bySource["solana.treasury"]?.sigCount ?? null,
       treasuryLatestActivityAt: bySource["solana.treasury"]?.latestActivityAt ?? null,
       tokenPress: bySource["solana.tokens"]?.mints ?? [],
-      tokenPressAuthority: bySource["solana.tokens"]?.authority ?? null,
+      tokenPressOwner: bySource["solana.tokens"]?.owner ?? null,
       tokenPressFingerprint: bySource["solana.tokens"]?.fingerprint ?? null,
       zenModelCount: bySource["opencode.zen"]?.count ?? null,
       zenFreeCount: bySource["opencode.zen"]?.freeCount ?? null,
@@ -1781,6 +1852,9 @@ export async function runSniff({ forceMiningSurface = false } = {}) {
       productLanesTotal: bySource["geoff.product.lanes"]?.total ?? null,
       productLanesLabels: bySource["geoff.product.lanes"]?.liveLabels ?? null,
       productLanesFingerprint: bySource["geoff.product.lanes"]?.fingerprint ?? null,
+      publicSurfacesLive: bySource["geoff.public.surfaces"]?.liveCount ?? null,
+      publicSurfacesTotal: bySource["geoff.public.surfaces"]?.total ?? null,
+      publicSurfacesFingerprint: bySource["geoff.public.surfaces"]?.fingerprint ?? null,
       subscriptionLiveCount: bySource["geoff.subscription"]?.liveCount ?? null,
       subscriptionTotal: bySource["geoff.subscription"]?.total ?? null,
       subscriptionFingerprint: bySource["geoff.subscription"]?.fingerprint ?? null,

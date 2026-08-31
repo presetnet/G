@@ -34,7 +34,14 @@ app.use((req, res, next) => {
 });
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, service: "geoff-thermometer", mode: "local" });
+  const cfg = publicConfig();
+  res.json({
+    ok: true,
+    service: "geoff-thermometer",
+    mode: cfg.mode,
+    sharedStore: cfg.sharedStore,
+    sharedStoreUrl: cfg.sharedStoreUrl,
+  });
 });
 
 app.get("/api/status", async (_req, res) => {

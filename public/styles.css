@@ -2788,6 +2788,22 @@ details[open] > .fold-summary::after {
   .story { grid-template-columns: 1fr; }
 }
 
+@media (max-width: 520px) {
+  .topbar {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .top-actions #trustMode,
+  .top-actions #trafficMini,
+  .top-actions .btn-market {
+    display: none;
+  }
+  .gauge-inline {
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
+
 /* ---- mode switch + pickle watch page ---- */
 .mode-switch {
   display: inline-flex;
@@ -3346,6 +3362,72 @@ details[open] > .fold-summary::after {
 .metric .zen-err-status.baselined { color: var(--accent); }
 .metric .zen-err-status.cached { color: var(--muted); }
 .metric .zen-err-status.leak { color: var(--danger); }
+
+/* ---- public surface probe log ---- */
+.probe-panel {
+  margin-top: 0.8rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  border-color: rgba(74, 222, 128, 0.22);
+}
+
+.probe-table-wrap {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: auto;
+  border: 1px solid rgba(74, 222, 128, 0.16);
+  border-radius: var(--radius-sm);
+  background: rgba(3, 12, 8, 0.72);
+}
+
+.probe-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.probe-table th,
+.probe-table td {
+  padding: 0.58rem 0.72rem;
+  border-bottom: 1px solid rgba(74, 222, 128, 0.1);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.probe-table th {
+  color: var(--accent);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.probe-table td {
+  color: rgba(226, 232, 240, 0.82);
+}
+
+.probe-table tr:last-child td { border-bottom: 0; }
+.probe-table code { color: var(--green-bright); font: inherit; }
+.probe-status.ok { color: var(--green-bright); }
+.probe-status.bad { color: var(--danger); }
+
+.probe-note {
+  margin: 0.65rem 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .probe-table { font-size: 0.68rem; }
+  .probe-table th,
+  .probe-table td { padding: 0.5rem 0.6rem; }
+}
 
 /* ===== PICKLE WATCH — REDESIGNED ===== */
 

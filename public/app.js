@@ -213,6 +213,8 @@ const els = {
   paperworkUsd: document.getElementById("paperworkUsd"),
   paperworkMeta: document.getElementById("paperworkMeta"),
   paperworkStatus: document.getElementById("paperworkStatus"),
+  paperSupply: document.getElementById("paperSupply"),
+  paperTokenMeta: document.getElementById("paperTokenMeta"),
   keysoldUsd: document.getElementById("keysoldUsd"),
   keysoldMeta: document.getElementById("keysoldMeta"),
   trafficMini: document.getElementById("trafficMini"),
@@ -235,6 +237,8 @@ const els = {
   docsCueLink: document.getElementById("docsCueLink"),
   lanesCue: document.getElementById("lanesCue"),
   lanesCueLink: document.getElementById("lanesCueLink"),
+  probeMeta: document.getElementById("probeMeta"),
+  probeLog: document.getElementById("probeLog"),
   maxCue: document.getElementById("maxCue"),
   maxCueLink: document.getElementById("maxCueLink"),
   story: document.getElementById("story"),
@@ -289,6 +293,7 @@ const PIECE_ICONS = {
   docs: "book",
   explore: "spark",
   productLanes: "layers",
+  publicSurfaces: "activity",
   maxSolana: "bolt",
 };
 const CAP_ICONS = {
@@ -344,6 +349,7 @@ function emptyMemory() {
     agentSamples: [],
     dailyActivity: [],
     dailyIngestedIds: [],
+    probeSamples: [],
     pollCount: 0,
   };
 }
@@ -377,6 +383,7 @@ function loadMemory() {
       dailyIngestedIds: Array.isArray(raw.dailyIngestedIds)
         ? raw.dailyIngestedIds.slice(0, MAX_DAILY_INGEST_IDS)
         : [],
+      probeSamples: Array.isArray(raw.probeSamples) ? raw.probeSamples.slice(0, 3) : [],
     };
     // First visit after upgrade: seed cubes from whatever 72h events we still hold.
     if (!mem.dailyActivity.length && mem.events.length) {
@@ -992,13 +999,38 @@ function renderMetrics(latest) {
         s.treasuryAddress ? ` · ${s.treasuryAddress}` : ""
       }`,
       press.length
-        ? `Mint-authority tokens — INTERNAL TEST SCRIPT, microscopic float, zero liquidity. Do NOT buy any of these: ${press
+        ? `Tokens held by watched owner ${s.tokenPressOwner || s.tokenPressAuthority || "unknown"} — holding token accounts does not grant minting control. INTERNAL TEST SCRIPT, microscopic float, zero liquidity. Do NOT buy: ${press
             .map((p) => `${p.symbol}=${p.supplyUi}`)
+            .join(", ")}`
+        : null,
+      press.length
+        ? `Separate mint authorities: ${press
+            .map((p) => `${p.symbol}=${p.mintAuthority || "unknown"}`)
             .join(", ")}`
         : null,
     ]
       .filter(Boolean)
       .join("\n");
+  }
+  const paper = Array.isArray(s.tokenPress)
+    ? s.tokenPress.find((token) => token.symbol === "PAPER")
+    : null;
+  if (els.paperSupply) {
+    els.paperSupply.textContent = Number.isFinite(Number(paper?.supplyUi))
+      ? Number(paper.supplyUi).toLocaleString(undefined, { maximumFractionDigits: 6 })
+      : "—";
+    els.paperSupply.title = paper
+      ? `Global on-chain PAPER supply · mint ${paper.mint}`
+      : "Waiting for PAPER supply data.";
+  }
+  if (els.paperTokenMeta) {
+    const balance = Number(paper?.balanceUi);
+    els.paperTokenMeta.textContent = paper
+      ? `watched wallet holds ${Number.isFinite(balance) ? balance.toLocaleString(undefined, { maximumFractionDigits: 6 }) : "—"}`
+      : "watched wallet balance —";
+    els.paperTokenMeta.title = paper
+      ? `Watched token-account owner: ${s.tokenPressOwner || s.tokenPressAuthority || "unknown"}\nPAPER mint authority: ${paper.mintAuthority || "unknown"}\nHolding a token account does not grant minting control.`
+      : "The watched wallet owner and mint authority are separate roles.";
   }
   renderSettlementStatus(s);
   renderKeySale(s);
@@ -1209,6 +1241,58 @@ function renderLanesCue(board, latest, events = []) {
     return;
   }
   els.lanesCue.textContent = "Probing product lanes…";
+}
+
+function recordProbeSample(latest) {
+  const source = latest?.sources?.["geoff.public.surfaces"];
+  if (!Array.isArray(source?.routes) || !source.routes.length) return;
+  const at = latest.takenAt || new Date().toISOString();
+  if (memory.probeSamples?.some((sample) => sample.at === at)) return;
+  const routes = source.routes.map((route) => ({
+    id: route.id,
+    label: route.label || route.id,
+    status: route.status ?? 0,
+    ms: route.ms ?? null,
+    bytes: route.bytes ?? 0,
+    hash: route.hash || null,
+    note: route.note || "Geoff",
+  }));
+  memory.probeSamples = [{ at, routes }, ...(memory.probeSamples || [])].slice(0, 3);
+}
+
+function renderProbeLog() {
+  if (!els.probeLog) return;
+  const order = ["video", "image", "music", "explore", "home"];
+  const rows = (memory.probeSamples || []).flatMap((sample) =>
+    [...(sample.routes || [])]
+      .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
+      .map((route) => ({ ...route, at: sample.at })),
+  );
+  if (!rows.length) {
+    els.probeLog.innerHTML = '<tr><td colspan="7">waiting for first surface probe…</td></tr>';
+    return;
+  }
+  const live = rows.slice(0, 5).filter((route) => route.status === 200).length;
+  if (els.probeMeta) els.probeMeta.textContent = `${live}/5 live · ${memory.probeSamples.length} cycles`;
+  els.probeLog.innerHTML = rows
+    .map((route) => {
+      const time = new Date(route.at).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      const statusClass = route.status === 200 ? "ok" : "bad";
+      return `<tr>
+        <td>${escapeHtml(time)}</td>
+        <td>${escapeHtml(route.label)}</td>
+        <td class="probe-status ${statusClass}">${escapeHtml(route.status)}</td>
+        <td>${route.ms == null ? "—" : escapeHtml(route.ms)}</td>
+        <td>${Number(route.bytes || 0).toLocaleString()}</td>
+        <td><code>${escapeHtml(route.hash || "—")}</code></td>
+        <td>${escapeHtml(route.note || "Geoff")}</td>
+      </tr>`;
+    })
+    .join("");
 }
 
 function renderMaxCue(latest, events = []) {
@@ -2117,6 +2201,7 @@ function applyPayload(payload) {
     memory.dailyActivity = mergeDailyActivity(memory.dailyActivity || [], incomingDaily, HEATMAP_DAYS);
   }
   memory.latest = payload.latest || memory.latest;
+  recordProbeSample(payload.latest);
   // Rebuild pump-tape queue dots from stored agent edges when browser samples were wiped.
   const derived = agentSamplesFromEvents(memory.events);
   if (derived.length > (memory.agentSamples?.length || 0)) {
@@ -2138,6 +2223,7 @@ function applyPayload(payload) {
   renderTokenPlan(briefing?.tokenPlan || CLIENT_TOKEN_PLAN);
   renderDocsCue(briefing?.docsBoard || null, feedEvents);
   renderLanesCue(briefing?.lanesBoard || null, latest, feedEvents);
+  renderProbeLog();
   renderMaxCue(latest, feedEvents);
   renderAgentDesk(payload.agentDesk || briefing?.agentDesk || null);
   renderPumpTape(feedEvents, memory.agentSamples || []);

@@ -130,6 +130,14 @@
           <em id="paperworkMeta">—</em>
           <span id="paperworkStatus" class="metric-pill armed" hidden>armed</span>
         </article>
+        <article class="metric" style="--i:3.1">
+          <div class="metric-top">
+            <span class="ico-wrap" data-icon="layers"></span>
+            <span class="k">PAPER supply <span class="pill as-reported">on-chain</span></span>
+          </div>
+          <strong id="paperSupply">—</strong>
+          <em id="paperTokenMeta">watched wallet balance —</em>
+        </article>
         <article id="keySale" data-proof="keySale" class="metric" style="--i:3.25">
           <div class="metric-top">
             <span class="ico-wrap" data-icon="tag"></span>
@@ -247,6 +255,26 @@
             >open HQ</a
           >
         </section>
+      </section>
+
+      <section class="panel probe-panel" aria-label="Public Geoff surface probe log">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="ico-wrap sm" data-icon="activity"></span>
+            <h2>Public surface probe log</h2>
+          </div>
+          <p id="probeMeta">home · explore · music · image · video</p>
+        </div>
+        <p class="feed-hint">HTTP response watch · latest three polling cycles</p>
+        <div class="probe-table-wrap">
+          <table class="probe-table">
+            <thead>
+              <tr><th>Time</th><th>Page</th><th>ST</th><th>MS</th><th>Bytes</th><th>Hash</th><th>Note</th></tr>
+            </thead>
+            <tbody id="probeLog"><tr><td colspan="7">waiting for first surface probe…</td></tr></tbody>
+          </table>
+        </div>
+        <p class="probe-note">Note = target host is www.geoff.ai. A 200 and stable hash confirm a served response only; they do not prove ownership, integration, or partnership. The MFT post is contextual material; this probe does not test MFT, MetaVault, or Trix.</p>
       </section>
 
       <p class="deck-label"><span>04</span> Heat · proof in cubes</p>
