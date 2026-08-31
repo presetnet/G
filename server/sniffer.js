@@ -1693,7 +1693,14 @@ export function parseTrixGeoffRecords(posts = [], records = []) {
 }
 
 export function parseTrixPackMarket(state = null, { status = 0, ms = null } = {}) {
-  if (!state || typeof state !== "object") {
+  if (
+    !state ||
+    typeof state !== "object" ||
+    status < 200 ||
+    status >= 300 ||
+    !Array.isArray(state.levels) ||
+    state.levels.length === 0
+  ) {
     return {
       ok: false,
       status,
@@ -1701,7 +1708,8 @@ export function parseTrixPackMarket(state = null, { status = 0, ms = null } = {}
       minted: null,
       holders: null,
       classes: [],
-      reason: "TRIX Pack market state unavailable.",
+      checkedAt: new Date().toISOString(),
+      reason: state?.message || "TRIX Pack market state unavailable.",
     };
   }
   const levels = Array.isArray(state.levels) ? state.levels : [];
@@ -1894,6 +1902,21 @@ export function mergeTrixGeoffHistory(previous = null, observed = null) {
   const scannedTokenMints = [
     ...new Set([...(previous?.scannedTokenMints || []), ...(observed.scannedTokenMints || [])]),
   ];
+  const previousPacksValid =
+    previous?.packs?.ok &&
+    previous.packs.status >= 200 &&
+    previous.packs.status < 300 &&
+    Number(previous.packs.minted) > 0;
+  const packs = observed.packs?.ok
+    ? observed.packs
+    : previousPacksValid
+      ? {
+          ...previous.packs,
+          stale: true,
+          lastAttemptAt: observed.packs?.checkedAt || new Date().toISOString(),
+          lastError: observed.packs?.reason || "Current TRIX Pack read failed.",
+        }
+      : observed.packs;
   return {
     ...(previous || {}),
     ...observed,
@@ -1903,6 +1926,7 @@ export function mergeTrixGeoffHistory(previous = null, observed = null) {
     paidSol: paidLamports / 1e9,
     tokenMints,
     scannedTokenMints,
+    packs,
     recordIds,
     records,
     latest,

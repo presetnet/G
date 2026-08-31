@@ -1064,7 +1064,9 @@ function renderMetrics(latest) {
   const trixPacks = trixGeoff?.packs;
   if (els.trixPacksMinted) {
     const minted = Number(trixPacks?.minted);
-    els.trixPacksMinted.textContent = Number.isFinite(minted)
+    const validPackCount =
+      trixPacks?.ok && trixPacks.status >= 200 && trixPacks.status < 300 && minted > 0;
+    els.trixPacksMinted.textContent = validPackCount
       ? `${minted.toLocaleString()} minted`
       : "—";
     els.trixPacksMinted.title =
@@ -1072,8 +1074,10 @@ function renderMetrics(latest) {
   }
   if (els.trixPacksMeta) {
     const bits = ["holders not published"];
+    if (trixPacks?.stale) bits.unshift("last valid reading");
     if (trixPacks?.round != null) bits.push(`round ${trixPacks.round}`);
     if (trixPacks?.roundStatus) bits.push(trixPacks.roundStatus);
+    if (!trixPacks?.ok && trixPacks?.reason) bits.push("market read failed");
     els.trixPacksMeta.textContent = bits.join(" · ");
     els.trixPacksMeta.title = trixPacks?.holderReason ||
       "No public Pack/Card holder count or collection mint is available.";
