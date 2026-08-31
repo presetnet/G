@@ -120,6 +120,25 @@ async function redisCommand(command) {
   return body.result;
 }
 
+export async function acquireSharedLock(name, ttlSeconds = 70) {
+  if (!redisUrl() || !redisToken()) return null;
+  const key = `${REDIS_KEY}:lock:${name}`;
+  const token = `${Date.now()}:${Math.random().toString(36).slice(2)}`;
+  const result = await redisCommand(["SET", key, token, "NX", "EX", ttlSeconds]);
+  return result === "OK" ? { key, token } : null;
+}
+
+export async function releaseSharedLock(lock) {
+  if (!lock) return;
+  await redisCommand([
+    "EVAL",
+    "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+    "1",
+    lock.key,
+    lock.token,
+  ]);
+}
+
 async function loadFromRedis() {
   if (!redisUrl() || !redisToken()) return null;
   const raw = await redisCommand(["GET", REDIS_KEY]);
@@ -215,7 +234,7 @@ export async function loadSharedBundle() {
   return githubBundle.latest || githubBundle.events?.length ? githubBundle : emptyBundle();
 }
 
-export async function saveSharedBundle(bundle, { message } = {}) {
+export async function saveSharedBundle(bundle, { message, mirrorGithub = true } = {}) {
   const cfg = sharedStoreConfig();
   if (!cfg.writable) {
     throw new Error("No Redis/GitHub credentials — cannot write shared desk");
@@ -225,7 +244,7 @@ export async function saveSharedBundle(bundle, { message } = {}) {
   if (cfg.redis) {
     saved = await saveToRedis(bundle);
     // Best-effort mirror; never block the hot path on GitHub latency
-    saveToGithub(saved, message).catch(() => {});
+    if (mirrorGithub) saveToGithub(saved, message).catch(() => {});
     return saved;
   }
 

@@ -1650,6 +1650,7 @@ async function sniffGeoffTokenPlan() {
 }
 
 const TRIX_BASE_URL = "https://trix.market";
+const MAX_TRIX_HISTORY_RECORDS = 2_000;
 
 export function parseTrixGeoffRecords(posts = [], records = []) {
   const postById = new Map(posts.map((post) => [post.id, post]));
@@ -1681,9 +1682,9 @@ export function parseTrixGeoffRecords(posts = [], records = []) {
     .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
 }
 
-async function sniffTrixGeoff() {
+export async function sniffTrixGeoff({ previous = null, postLimit = 200, maxMints = 5 } = {}) {
   const started = Date.now();
-  const postsRes = await fetchJson(`${TRIX_BASE_URL}/api/posts?limit=50`);
+  const postsRes = await fetchJson(`${TRIX_BASE_URL}/api/posts?limit=${postLimit}`);
   const posts = Array.isArray(postsRes.json?.posts) ? postsRes.json.posts : [];
   const tokenMints = [
     ...new Set(
@@ -1691,21 +1692,35 @@ async function sniffTrixGeoff() {
         .filter((post) => post?.memeGenerator === "geoff" && post.memeTokenMint)
         .map((post) => post.memeTokenMint),
     ),
-  ].slice(0, 5);
+  ];
+  const previouslyScanned = new Set(previous?.scannedTokenMints || []);
+  const unscanned = tokenMints.filter((mint) => !previouslyScanned.has(mint));
+  const cursor = Number.isInteger(previous?.scanCursor) ? previous.scanCursor : 0;
+  const rotating = tokenMints.length
+    ? [...tokenMints.slice(cursor), ...tokenMints.slice(0, cursor)]
+    : [];
+  const selectedMints = [...new Set([...tokenMints.slice(0, 2), ...unscanned, ...rotating])]
+    .slice(0, Math.max(1, maxMints));
   const settled = await Promise.allSettled(
-    tokenMints.map((mint) => fetchJson(`${TRIX_BASE_URL}/api/meme-image/token/${mint}`)),
+    selectedMints.map((mint) => fetchJson(`${TRIX_BASE_URL}/api/meme-image/token/${mint}`)),
   );
   const records = settled.flatMap((result) =>
     result.status === "fulfilled" && Array.isArray(result.value.json) ? result.value.json : [],
   );
+  const resolvedTokenMints = selectedMints.filter((_, index) => {
+    const result = settled[index];
+    return result?.status === "fulfilled" && result.value.status < 500;
+  });
   const geoffRecords = parseTrixGeoffRecords(posts, records);
   const latest = geoffRecords.find((record) => record.imageUrl) || geoffRecords[0] || null;
   const paidLamports = geoffRecords.reduce((sum, record) => sum + (record.feeLamports || 0), 0);
-  const ok =
-    postsRes.ok &&
-    geoffRecords.length > 0 &&
-    tokenMints.length > 0 &&
-    settled.some((result) => result.status === "fulfilled" && result.value.ok);
+  const ok = postsRes.ok && (
+    selectedMints.length === 0 ||
+    resolvedTokenMints.length > 0
+  );
+  const scannedTokenMints = [
+    ...new Set([...(previous?.scannedTokenMints || []), ...resolvedTokenMints]),
+  ];
   return {
     source: "trix.geoff",
     ok,
@@ -1715,18 +1730,58 @@ async function sniffTrixGeoff() {
     paidLamports,
     paidSol: paidLamports / 1e9,
     tokenMints,
-    records: geoffRecords.slice(0, 20),
+    resolvedTokenMints,
+    scannedTokenMints,
+    scanCursor: tokenMints.length ? (cursor + Math.max(1, selectedMints.length - 2)) % tokenMints.length : 0,
+    records: geoffRecords,
     latest,
     fingerprint: bodyHash(
       geoffRecords.map((record) => `${record.id}:${record.txSignature}:${record.feeLamports}`).join("|"),
     ),
     url: `${TRIX_BASE_URL}/`,
     note: "TRIX public records label the provider as Geoff and report mainnet payment signatures. This does not independently establish geoff.ai operator identity or an NFT mint.",
-    reason: ok ? null : "No paid TRIX records labeled with the Geoff provider were resolved.",
+    reason: ok ? null : "TRIX public records could not be resolved.",
   };
 }
 
-export async function runSniff({ forceMiningSurface = false } = {}) {
+export function mergeTrixGeoffHistory(previous = null, observed = null) {
+  if (!observed) return previous;
+  const byId = new Map();
+  for (const record of [...(previous?.records || []), ...(observed.records || [])]) {
+    const key = record?.id || record?.txSignature;
+    if (key) byId.set(key, record);
+  }
+  const records = [...byId.values()]
+    .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0))
+    .slice(0, MAX_TRIX_HISTORY_RECORDS);
+  const paidLamports = records.reduce((sum, record) => sum + (Number(record.feeLamports) || 0), 0);
+  const latest = records.find((record) => record.imageUrl) || records[0] || null;
+  const tokenMints = [...new Set([...(previous?.tokenMints || []), ...(observed.tokenMints || [])])];
+  const scannedTokenMints = [
+    ...new Set([...(previous?.scannedTokenMints || []), ...(observed.scannedTokenMints || [])]),
+  ];
+  return {
+    ...(previous || {}),
+    ...observed,
+    ok: observed.ok || Boolean(previous?.ok && records.length),
+    count: records.length,
+    paidLamports,
+    paidSol: paidLamports / 1e9,
+    tokenMints,
+    scannedTokenMints,
+    records,
+    latest,
+    observedCount: observed.records?.length || 0,
+    checkedAt: new Date().toISOString(),
+    historyStartedAt: records.at(-1)?.createdAt || previous?.historyStartedAt || null,
+    fingerprint: bodyHash(
+      records.map((record) => `${record.id}:${record.txSignature}:${record.feeLamports}`).join("|"),
+    ),
+    reason: observed.ok || records.length ? null : observed.reason,
+  };
+}
+
+export async function runSniff({ forceMiningSurface = false, previous = null } = {}) {
   const startedAt = new Date().toISOString();
   const settled = await Promise.allSettled([
     sniffGeoffVersion(),
@@ -1739,7 +1794,7 @@ export async function runSniff({ forceMiningSurface = false } = {}) {
     sniffGeoffProductLanes(),
     sniffGeoffPublicSurfaces(),
     sniffGeoffSubscription(),
-    sniffTrixGeoff(),
+    sniffTrixGeoff({ previous: previous?.sources?.["trix.geoff"] || null }),
     sniffStacknetHealth(),
     sniffStacknetRoot(),
     sniffStacknetNetwork(),

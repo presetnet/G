@@ -1,7 +1,7 @@
 import { config } from "./config.js";
 import { compileBriefing } from "./briefing.js";
 import { upsertDailyActivity } from "./daily-activity.js";
-import { runSniff } from "./sniffer.js";
+import { mergeTrixGeoffHistory, runSniff } from "./sniffer.js";
 import {
   loadSharedBundle,
   pruneEvents,
@@ -33,7 +33,7 @@ export function publicConfig() {
   const shared = sharedStoreConfig();
   const sharedDesk = useSharedDesk();
   return {
-    // Shared desk: snappier refresh so every browser stays in lockstep
+    // Shared desk reads are cheap and never trigger upstream collection.
     pollIntervalMs: sharedDesk ? Math.min(config.pollIntervalMs, 15_000) : config.pollIntervalMs,
     geoffBaseUrl: config.geoffBaseUrl,
     stacknetBaseUrl: config.stacknetBaseUrl,
@@ -104,6 +104,22 @@ export function preserveLastKnownTokenPress(previous, current) {
   };
 }
 
+export function preserveTrixHistory(previous, current) {
+  const observed = current?.sources?.["trix.geoff"];
+  if (!observed) return current;
+  const trix = mergeTrixGeoffHistory(previous?.sources?.["trix.geoff"], observed);
+  return {
+    ...current,
+    sources: { ...(current.sources || {}), "trix.geoff": trix },
+    summary: {
+      ...(current.summary || {}),
+      trixGeoffCount: trix.count,
+      trixGeoffPaidSol: trix.paidSol,
+      trixGeoffFingerprint: trix.fingerprint,
+    },
+  };
+}
+
 export async function getStoredPayload() {
   if (useSharedDesk()) {
     return getSharedPayload({ sniffLive: false });
@@ -139,9 +155,12 @@ export async function getSharedPayload({ sniffLive = true, forceMiningSurface = 
   let persistError = null;
 
   if (sniffLive) {
-    const snapshot = preserveLastKnownTokenPress(
+    const snapshot = preserveTrixHistory(
       shared.latest,
-      await runSniff({ forceMiningSurface }),
+      preserveLastKnownTokenPress(
+        shared.latest,
+        await runSniff({ forceMiningSurface, previous: shared.latest }),
+      ),
     );
     newEvents = translate(shared.latest, snapshot);
     events = pruneEvents([...newEvents, ...(shared.events || [])]);
@@ -150,8 +169,7 @@ export async function getSharedPayload({ sniffLive = true, forceMiningSurface = 
     });
     latest = snapshot;
 
-    // Persist whenever we can write — visitor polls keep the shared desk fresh
-    // even before GitHub Actions workflow scope is granted.
+    // This live path is reserved for explicit internal callers; public routes use sniffLive=false.
     if (sharedStoreConfig().writable) {
       try {
         const temperature = computeTemperature(events, snapshot);
@@ -218,9 +236,12 @@ export async function pollAndTranslate({
   if (!startedState.startedAt) startedState.startedAt = new Date().toISOString();
 
   const baseline = previous ?? (persist ? await loadLatestSnapshot() : null);
-  const snapshot = preserveLastKnownTokenPress(
+  const snapshot = preserveTrixHistory(
     baseline,
-    await runSniff({ forceMiningSurface }),
+    preserveLastKnownTokenPress(
+      baseline,
+      await runSniff({ forceMiningSurface, previous: baseline }),
+    ),
   );
   const newEvents = translate(baseline, snapshot);
 

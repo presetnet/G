@@ -1037,13 +1037,13 @@ function renderMetrics(latest) {
     const count = Number(trixGeoff?.count);
     els.trixGeoffCount.textContent = Number.isFinite(count) && count > 0 ? `${count} paid` : "—";
     els.trixGeoffCount.title =
-      "Paid generations in the resolved TRIX public-record window where TRIX labels generator=geoff.";
+      "Deduplicated paid-generation history observed where TRIX labels generator=geoff.";
   }
   if (els.trixGeoffMeta) {
     const paidSol = Number(trixGeoff?.paidSol);
     const latestFee = Number(trixGeoff?.latest?.feeSol);
     els.trixGeoffMeta.textContent = Number.isFinite(paidSol) && paidSol > 0
-      ? `${paidSol.toFixed(3)} SOL observed${Number.isFinite(latestFee) ? ` · ${latestFee.toFixed(3)} each` : ""}`
+      ? `${paidSol.toFixed(3)} SOL in observed history${Number.isFinite(latestFee) ? ` · latest ${latestFee.toFixed(3)} SOL` : ""}`
       : trixGeoff?.reason || "waiting for paid generations";
     els.trixGeoffMeta.title =
       "TRIX supplies the Geoff provider label, fee amount, network, and transaction signature. This does not independently prove geoff.ai operator identity or that the generated image was minted as an NFT.";
@@ -2379,13 +2379,16 @@ async function boot() {
 
   try {
     if (mode === "vercel") {
-      // Production browsers read the shared desk once. They never trigger live sniffing.
+      // Production browsers only read the shared desk. They never trigger upstream sniffing.
       try {
         const status = await fetch("/api/status", { cache: "no-store" }).then((r) => r.json());
         if (!status.error) {
           applyPayload(status);
           setConnection("live", "live");
         }
+        setInterval(() => {
+          if (document.visibilityState === "visible") pollNow();
+        }, 60_000);
       } catch {
         setConnection("error", "shared desk unavailable");
       }
