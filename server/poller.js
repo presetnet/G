@@ -53,7 +53,7 @@ export async function pollOnce({ force = false, previous = null, knownEvents = [
 }
 
 export function startPoller() {
-  if (timer || process.env.VERCEL) return;
+  if (timer || process.env.VERCEL || process.env.GT_ENABLE_POLLER !== "1") return;
   pollOnce().catch(() => {});
   timer = setInterval(() => {
     pollOnce().catch(() => {});

@@ -1,4 +1,4 @@
-import { pollAndTranslate, publicConfig } from "../server/service.js";
+import { getStoredPayload, publicConfig } from "../server/service.js";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -11,8 +11,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Browser previous/events are ignored on Vercel — shared desk is authoritative.
-    const payload = await pollAndTranslate({ persist: !process.env.VERCEL });
+    // Public refreshes only read the shared desk. Live sniffing is protected/manual only.
+    const payload = await getStoredPayload();
     res.status(200).json(payload);
   } catch (error) {
     res.status(500).json({ error: error.message, config: publicConfig() });

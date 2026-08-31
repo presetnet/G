@@ -337,7 +337,6 @@ const EVENT_ICONS = {
 
 let mode = "local";
 let memory = loadMemory();
-let pollTimer = null;
 // Persist upgrade seed (72h events → day cubes) so a refresh keeps the map.
 try {
   if (memory.dailyActivity?.length) saveMemory();
@@ -2279,11 +2278,13 @@ function applyPayload(payload) {
 async function pollNow() {
   els.pollBtn.disabled = true;
   try {
-    const res = await fetch("/api/poll", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
+    const res = mode === "vercel"
+      ? await fetch("/api/status", { cache: "no-store" })
+      : await fetch("/api/poll", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Poll failed");
     applyPayload(data);
@@ -2311,14 +2312,6 @@ function connectStream() {
   });
   source.onerror = () => setConnection("error", "reconnecting");
   return source;
-}
-
-function startClientPolling(intervalMs = 15_000) {
-  if (pollTimer) clearInterval(pollTimer);
-  const ms = Math.max(8_000, Number(intervalMs) || 15_000);
-  pollTimer = setInterval(() => {
-    pollNow().catch(() => {});
-  }, ms);
 }
 
 function startMatrix() {
@@ -2397,19 +2390,16 @@ async function boot() {
 
   try {
     if (mode === "vercel") {
-      // Universal desk first — same JSON for every browser — then keep polling.
+      // Production browsers read the shared desk once. They never trigger live sniffing.
       try {
         const status = await fetch("/api/status", { cache: "no-store" }).then((r) => r.json());
         if (!status.error) {
           applyPayload(status);
           setConnection("live", "live");
-          startClientPolling(status.config?.pollIntervalMs);
         }
       } catch {
-        /* fall through to poll */
+        setConnection("error", "shared desk unavailable");
       }
-      await pollNow();
-      startClientPolling(15_000);
     } else {
       const status = await fetch("/api/status").then((r) => r.json());
       mode = status.config?.mode || mode;
@@ -2421,8 +2411,7 @@ async function boot() {
   } catch (error) {
     console.error(error);
     mode = "vercel";
-    await pollNow();
-    startClientPolling();
+    setConnection("error", "shared desk unavailable");
   }
 }
 

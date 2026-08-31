@@ -1,11 +1,5 @@
 {
   "framework": null,
-  "crons": [
-    {
-      "path": "/api/tick",
-      "schedule": "0 0 * * *"
-    }
-  ],
   "functions": {
     "api/**/*.js": {
       "maxDuration": 60,

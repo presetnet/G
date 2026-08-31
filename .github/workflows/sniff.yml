@@ -1,12 +1,10 @@
 name: Sniff
 on:
-  schedule:
-    - cron: '0 */6 * * *'
   workflow_dispatch:
 
 jobs:
   sniff:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger sniff
-        run: curl -sS -m 60 https://www.aisp.live/api/sniff
+      - name: Public sniff disabled
+        run: echo "Use the protected Live shared desk workflow for an intentional one-off tick."

@@ -3,13 +3,12 @@ import { config } from "./config.js";
 import {
   getDashboardPayload,
   onUpdate,
-  pollOnce,
   startPoller,
 } from "./poller.js";
 import { prettyCapability } from "./translator.js";
 import { loadSnapshots, loadTraffic, recordTraffic } from "./store.js";
 import { publicConfig } from "./service.js";
-import { buildMarketPayload } from "./market.js";
+import { buildStoredMarketPayload } from "./market.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -55,12 +54,7 @@ app.get("/api/status", async (_req, res) => {
 
 app.post("/api/status", async (req, res) => {
   try {
-    const payload = await pollOnce({
-      force: true,
-      previous: req.body?.previous ?? null,
-      knownEvents: Array.isArray(req.body?.events) ? req.body.events : [],
-      forceMiningSurface: Boolean(req.body?.forceMiningSurface),
-    });
+    const payload = await getDashboardPayload();
     res.json(payload);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -87,22 +81,12 @@ app.get("/api/snapshot", async (_req, res) => {
 });
 
 app.get("/api/sniff", async (_req, res) => {
-  try {
-    const payload = await pollOnce({ force: true });
-    res.json({ latest: payload.latest });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  res.status(410).json({ error: "Public live sniffing is disabled." });
 });
 
 app.post("/api/poll", async (req, res) => {
   try {
-    const payload = await pollOnce({
-      force: true,
-      previous: req.body?.previous ?? null,
-      knownEvents: Array.isArray(req.body?.events) ? req.body.events : [],
-      forceMiningSurface: Boolean(req.body?.forceMiningSurface),
-    });
+    const payload = await getDashboardPayload();
     res.json(payload);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -169,7 +153,8 @@ app.get("/api/traffic", async (_req, res) => {
 
 app.get("/api/market", async (_req, res) => {
   try {
-    const payload = await buildMarketPayload();
+    const stored = await getDashboardPayload();
+    const payload = buildStoredMarketPayload(stored.latest);
     res.json(payload);
   } catch (error) {
     res.status(500).json({ error: error.message });

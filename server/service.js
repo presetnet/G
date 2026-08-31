@@ -106,7 +106,7 @@ export function preserveLastKnownTokenPress(previous, current) {
 
 export async function getStoredPayload() {
   if (useSharedDesk()) {
-    return getSharedPayload({ sniffLive: true });
+    return getSharedPayload({ sniffLive: false });
   }
 
   const [latest, events, state, dailyActivity] = await Promise.all([

@@ -89,6 +89,23 @@ function enrichCatalog(catalog, tokenPlan) {
   return { ...catalog, vendors, dimensions };
 }
 
+export function buildStoredMarketPayload(geoffSnap = null) {
+  const tokenPlan = pickTokenPlan(geoffSnap);
+  const catalog = enrichCatalog(marketCatalog, tokenPlan);
+  return {
+    takenAt: geoffSnap?.takenAt || null,
+    catalog,
+    tokenPlan,
+    live: {},
+    scraped: {},
+    scorecard: [],
+    manifesto: [],
+    frameCards: [],
+    inventories: [],
+    compareHints: ["Stored dashboard data only; browser-triggered market scraping is disabled."],
+  };
+}
+
 export async function buildMarketPayload() {
   const geoffSnap = await runSniff().catch(() => null);
   const intel = await scrapeMarketIntel(geoffSnap);
