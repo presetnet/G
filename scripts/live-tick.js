@@ -12,11 +12,12 @@ import {
   saveSharedBundle,
 } from "../server/shared-store.js";
 import { runSniff } from "../server/sniffer.js";
+import { preserveLastKnownTokenPress } from "../server/service.js";
 import { computeTemperature, translate } from "../server/translator.js";
 
 async function main() {
   const previous = await loadSharedBundle();
-  const snapshot = await runSniff();
+  const snapshot = preserveLastKnownTokenPress(previous.latest, await runSniff());
   const newEvents = translate(previous.latest, snapshot);
   const events = pruneEvents([...newEvents, ...(previous.events || [])]);
   const dailyActivity = upsertDailyActivity(previous.dailyActivity || [], newEvents, {

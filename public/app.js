@@ -923,6 +923,15 @@ setInterval(() => fetchPaperworkHistory(true), 5 * 60 * 1000);
 function renderMetrics(latest) {
   lastLatest = latest ?? null;
   const s = latest?.summary ?? {};
+  const tokenSource = latest?.sources?.["solana.tokens"];
+  const tokenRows = Array.isArray(s.tokenPress) && s.tokenPress.length
+    ? s.tokenPress
+    : Array.isArray(tokenSource?.mints)
+      ? tokenSource.mints
+      : [];
+  const tokenOwner =
+    s.tokenPressOwner || s.tokenPressAuthority || tokenSource?.owner || tokenSource?.authority || "unknown";
+  const tokenRowsStale = Boolean(s.tokenPressStale || tokenSource?.stale);
   if (els.stackVersion) els.stackVersion.innerHTML = (s.stacknetVersion ? '<span class="live-dot"></span>' : '') + (s.stacknetVersion || "—");
   if (els.stackHealth) els.stackHealth.textContent = s.stacknetStatus || "—";
   if (els.stackNodes) els.stackNodes.textContent =
@@ -986,9 +995,7 @@ function renderMetrics(latest) {
     }
     if (!bits.length && s.solPriceUsd != null)
       bits.push(`SOL $${Number(s.solPriceUsd).toFixed(2)}`);
-    const press = Array.isArray(s.tokenPress)
-      ? s.tokenPress.filter((t) => t.symbol && !["USDC", "mSOL"].includes(t.symbol))
-      : [];
+    const press = tokenRows.filter((t) => t.symbol && !["USDC", "mSOL"].includes(t.symbol));
     if (press.length) bits.push(`press ${press.map((p) => p.symbol).join("·")}`);
     const d24 = paperworkVelocity(pwHistoryCache.series, 24 * 3600e3);
     if (d24 != null && Math.abs(d24) > 0.5)
@@ -999,7 +1006,7 @@ function renderMetrics(latest) {
         s.treasuryAddress ? ` · ${s.treasuryAddress}` : ""
       }`,
       press.length
-        ? `Tokens held by watched owner ${s.tokenPressOwner || s.tokenPressAuthority || "unknown"} — holding token accounts does not grant minting control. INTERNAL TEST SCRIPT, microscopic float, zero liquidity. Do NOT buy: ${press
+        ? `Tokens held by watched owner ${tokenOwner} — holding token accounts does not grant minting control. INTERNAL TEST SCRIPT, microscopic float, zero liquidity. Do NOT buy: ${press
             .map((p) => `${p.symbol}=${p.supplyUi}`)
             .join(", ")}`
         : null,
@@ -1012,9 +1019,7 @@ function renderMetrics(latest) {
       .filter(Boolean)
       .join("\n");
   }
-  const paper = Array.isArray(s.tokenPress)
-    ? s.tokenPress.find((token) => token.symbol === "PAPER")
-    : null;
+  const paper = tokenRows.find((token) => token.symbol === "PAPER") || null;
   if (els.paperSupply) {
     els.paperSupply.textContent = Number.isFinite(Number(paper?.supplyUi))
       ? Number(paper.supplyUi).toLocaleString(undefined, { maximumFractionDigits: 6 })
@@ -1026,10 +1031,10 @@ function renderMetrics(latest) {
   if (els.paperTokenMeta) {
     const balance = Number(paper?.balanceUi);
     els.paperTokenMeta.textContent = paper
-      ? `watched wallet holds ${Number.isFinite(balance) ? balance.toLocaleString(undefined, { maximumFractionDigits: 6 }) : "—"}`
+      ? `${tokenRowsStale ? "last observed · " : ""}watched wallet holds ${Number.isFinite(balance) ? balance.toLocaleString(undefined, { maximumFractionDigits: 6 }) : "—"}`
       : "watched wallet balance —";
     els.paperTokenMeta.title = paper
-      ? `Watched token-account owner: ${s.tokenPressOwner || s.tokenPressAuthority || "unknown"}\nPAPER mint authority: ${paper.mintAuthority || "unknown"}\nHolding a token account does not grant minting control.`
+      ? `${tokenRowsStale ? "Last observed token data; current read unavailable.\n" : ""}Watched token-account owner: ${tokenOwner}\nPAPER mint authority: ${paper.mintAuthority || "unknown"}\nHolding a token account does not grant minting control.`
       : "The watched wallet owner and mint authority are separate roles.";
   }
   renderSettlementStatus(s);

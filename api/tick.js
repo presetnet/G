@@ -9,7 +9,7 @@ import {
 } from "../server/shared-store.js";
 import { runSniff } from "../server/sniffer.js";
 import { computeTemperature, translate } from "../server/translator.js";
-import { publicConfig } from "../server/service.js";
+import { preserveLastKnownTokenPress, publicConfig } from "../server/service.js";
 
 function authorized(req) {
   const secret = process.env.CRON_SECRET || process.env.GT_TICK_SECRET || "";
@@ -45,7 +45,7 @@ export default async function handler(req, res) {
 
   try {
     const previous = await loadSharedBundle();
-    const snapshot = await runSniff();
+    const snapshot = preserveLastKnownTokenPress(previous.latest, await runSniff());
     const newEvents = translate(previous.latest, snapshot);
     const events = pruneEvents([...newEvents, ...(previous.events || [])]);
     const dailyActivity = upsertDailyActivity(previous.dailyActivity || [], newEvents, {

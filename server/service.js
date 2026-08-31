@@ -64,6 +64,46 @@ function withBriefing(payload) {
   };
 }
 
+export function preserveLastKnownTokenPress(previous, current) {
+  const currentSource = current?.sources?.["solana.tokens"];
+  if (Array.isArray(currentSource?.mints) && currentSource.mints.length) return current;
+
+  const previousSource = previous?.sources?.["solana.tokens"];
+  if (!Array.isArray(previousSource?.mints) || !previousSource.mints.length) return current;
+
+  const owner =
+    previousSource.owner ||
+    previousSource.authority ||
+    previous?.summary?.tokenPressOwner ||
+    previous?.summary?.tokenPressAuthority ||
+    null;
+  const retainedSource = {
+    ...previousSource,
+    ...currentSource,
+    ok: false,
+    stale: true,
+    owner,
+    mints: previousSource.mints,
+    fingerprint: previousSource.fingerprint || null,
+    reason: currentSource?.reason || "Current token read unavailable; showing last observed values.",
+  };
+
+  return {
+    ...current,
+    sources: {
+      ...(current?.sources || {}),
+      "solana.tokens": retainedSource,
+    },
+    summary: {
+      ...(current?.summary || {}),
+      tokenPress: retainedSource.mints,
+      tokenPressOwner: owner,
+      tokenPressStale: true,
+      tokenPressFingerprint: retainedSource.fingerprint,
+    },
+  };
+}
+
 export async function getStoredPayload() {
   if (useSharedDesk()) {
     return getSharedPayload({ sniffLive: true });
@@ -99,7 +139,10 @@ export async function getSharedPayload({ sniffLive = true, forceMiningSurface = 
   let persistError = null;
 
   if (sniffLive) {
-    const snapshot = await runSniff({ forceMiningSurface });
+    const snapshot = preserveLastKnownTokenPress(
+      shared.latest,
+      await runSniff({ forceMiningSurface }),
+    );
     newEvents = translate(shared.latest, snapshot);
     events = pruneEvents([...newEvents, ...(shared.events || [])]);
     dailyActivity = upsertDailyActivity(shared.dailyActivity || [], newEvents, {
@@ -175,7 +218,10 @@ export async function pollAndTranslate({
   if (!startedState.startedAt) startedState.startedAt = new Date().toISOString();
 
   const baseline = previous ?? (persist ? await loadLatestSnapshot() : null);
-  const snapshot = await runSniff({ forceMiningSurface });
+  const snapshot = preserveLastKnownTokenPress(
+    baseline,
+    await runSniff({ forceMiningSurface }),
+  );
   const newEvents = translate(baseline, snapshot);
 
   let events;

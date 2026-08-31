@@ -1773,6 +1773,7 @@ export async function runSniff({ forceMiningSurface = false } = {}) {
       treasuryLatestActivityAt: bySource["solana.treasury"]?.latestActivityAt ?? null,
       tokenPress: bySource["solana.tokens"]?.mints ?? [],
       tokenPressOwner: bySource["solana.tokens"]?.owner ?? null,
+      tokenPressStale: Boolean(bySource["solana.tokens"]?.stale),
       tokenPressFingerprint: bySource["solana.tokens"]?.fingerprint ?? null,
       zenModelCount: bySource["opencode.zen"]?.count ?? null,
       zenFreeCount: bySource["opencode.zen"]?.freeCount ?? null,
