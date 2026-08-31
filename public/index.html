@@ -167,6 +167,14 @@
           <strong id="trixPacksMinted">—</strong>
           <em id="trixPacksMeta">holders not publicly published</em>
           <div id="trixPackTraits" class="trix-pack-traits" aria-label="Published Card outcome schedule"></div>
+          <details class="trix-pack-method">
+            <summary>How this pull is read</summary>
+            <div>
+              <p><a href="https://trix.market/api/mkt/state" target="_blank" rel="noopener noreferrer">Market-state JSON ↗</a>: minted is the sum of <code>levels[].minted</code>; Base availability is <code>levels[id="base"].available</code>.</p>
+              <p><a href="https://trix.market/api/mkt/g" target="_blank" rel="noopener noreferrer">Genesis-state JSON ↗</a>: the separately reported value is <code>cap</code>.</p>
+              <p>These are live API labels and observations, not independently verified supply ceilings. Values and field meaning may change.</p>
+            </div>
+          </details>
         </article>
         <article id="keySale" data-proof="keySale" class="metric" style="--i:3.25">
           <div class="metric-top">
