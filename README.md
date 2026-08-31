@@ -28,20 +28,21 @@ The translator turns diffs into a readable feed and a **temperature** score (coo
 
 On Vercel, history is **universal** — one shared desk for every browser (incognito included). `/api/status`, `/api/poll`, and `/api/market` are read-only views of that desk. Browser traffic never triggers upstream probes.
 
-The protected Vercel `/api/tick` cron is the only automatic collector. It runs a lightweight TRIX pass every minute and substitutes one full pass every 15 minutes. Each lightweight pass makes one posts request plus at most five token-record requests, protected by a Redis lease. It rotates through up to 200 recent Geoff-tagged mints and deduplicates up to 2,000 paid records into retained observed history. Browser refreshes only read the shared Redis desk; the public `/api/sniff` endpoint is disabled. The GitHub workflow is manual recovery only.
+The protected Vercel `/api/tick` cron is the only automatic collector. It runs a lightweight TRIX pass every minute and substitutes one full pass every 15 minutes. Each lightweight pass makes one posts request plus at most five token-record requests. It backfills up to 200 recent Geoff-tagged mints and deduplicates up to 2,000 paid records into retained observed history. Redis is the preferred shared desk; the GitHub `gt-live` branch is the fallback and only receives minute writes when TRIX data or backfill progress changes. Browser refreshes only read the shared desk; the public `/api/sniff` endpoint is disabled. The GitHub workflow is manual recovery only.
 
 Required on Vercel:
-- `UPSTASH_REDIS_REST_URL`
-- `UPSTASH_REDIS_REST_TOKEN`
 - `CRON_SECRET` (protects `/api/tick`)
+- `GT_GITHUB_TOKEN` when Redis is not configured
 
 Optional:
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
 - `GEOFF_COOKIE` / `GEOFF_PREVIEW_CODE`
 - `POLL_INTERVAL_MS` (local only)
 - `GT_ENABLE_POLLER=1` (explicitly enables automatic local polling; disabled by default)
 - `GT_MAX_OUTBOUND_CONCURRENCY` (default `3`)
 - `GEOFF_BASE_URL` / `STACKNET_BASE_URL`
-- `GT_GITHUB_TOKEN` (optional cold mirror to `gt-live`)
+- `GT_GITHUB_TOKEN` (GitHub shared desk or optional Redis cold mirror)
 - `GT_REDIS_KEY` (default `gt:live:desk`)
 
 ## Local

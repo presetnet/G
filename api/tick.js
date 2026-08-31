@@ -56,14 +56,6 @@ export default async function handler(req, res) {
     : new Date().getUTCMinutes() % 15 === 0
       ? "full"
       : "trix";
-  if (profile === "trix" && !store.redis) {
-    res.status(503).json({
-      error: "Minute-level TRIX collection requires the Redis shared store.",
-      config: publicConfig(),
-    });
-    return;
-  }
-
   let lock = null;
   try {
     lock = store.redis ? await acquireSharedLock("collector") : null;
@@ -98,6 +90,23 @@ export default async function handler(req, res) {
         summary: { ...(base.summary || {}) },
       });
     }
+    const previousTrix = previous.latest?.sources?.["trix.geoff"];
+    const currentTrix = snapshot.sources?.["trix.geoff"];
+    const trixUnchanged = profile === "trix" && previousTrix &&
+      previousTrix.fingerprint === currentTrix?.fingerprint &&
+      (previousTrix.scannedTokenMints?.length || 0) ===
+        (currentTrix?.scannedTokenMints?.length || 0) &&
+      (previousTrix.tokenMints?.length || 0) === (currentTrix?.tokenMints?.length || 0);
+    if (trixUnchanged) {
+      res.status(200).json({
+        ok: true,
+        profile,
+        changed: false,
+        updatedAt: previous.updatedAt,
+        config: publicConfig(),
+      });
+      return;
+    }
     const newEvents = translate(previous.latest, snapshot);
     const events = pruneEvents([...newEvents, ...(previous.events || [])]);
     const dailyActivity = upsertDailyActivity(previous.dailyActivity || [], newEvents, {
@@ -127,6 +136,7 @@ export default async function handler(req, res) {
     res.status(200).json({
       ok: true,
       profile,
+      changed: true,
       newEvents: newEvents.length,
       events: saved.events.length,
       temperature: temperature.value,

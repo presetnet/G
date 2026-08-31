@@ -1695,11 +1695,7 @@ export async function sniffTrixGeoff({ previous = null, postLimit = 200, maxMint
   ];
   const previouslyScanned = new Set(previous?.scannedTokenMints || []);
   const unscanned = tokenMints.filter((mint) => !previouslyScanned.has(mint));
-  const cursor = Number.isInteger(previous?.scanCursor) ? previous.scanCursor : 0;
-  const rotating = tokenMints.length
-    ? [...tokenMints.slice(cursor), ...tokenMints.slice(0, cursor)]
-    : [];
-  const selectedMints = [...new Set([...tokenMints.slice(0, 2), ...unscanned, ...rotating])]
+  const selectedMints = [...new Set([...tokenMints.slice(0, 2), ...unscanned])]
     .slice(0, Math.max(1, maxMints));
   const settled = await Promise.allSettled(
     selectedMints.map((mint) => fetchJson(`${TRIX_BASE_URL}/api/meme-image/token/${mint}`)),
@@ -1732,7 +1728,6 @@ export async function sniffTrixGeoff({ previous = null, postLimit = 200, maxMint
     tokenMints,
     resolvedTokenMints,
     scannedTokenMints,
-    scanCursor: tokenMints.length ? (cursor + Math.max(1, selectedMints.length - 2)) % tokenMints.length : 0,
     records: geoffRecords,
     latest,
     fingerprint: bodyHash(
