@@ -1765,7 +1765,7 @@ export function parseTrixPackMarket(state = null, { status = 0, ms = null } = {}
     checkedAt: new Date().toISOString(),
     sourceUrl: `${TRIX_BASE_URL}/api/mkt/state`,
     oddsSourceUrl: `${TRIX_BASE_URL}/assets/c-BkGleqvg.js`,
-    note: "Minted and market values are TRIX API-reported. Class odds come from the current TRIX frontend bundle; payout bands come from market state. They are schedules, not actual revealed-card counts.",
+    note: "Minted and market values are TRIX API-reported. Class odds come from the current TRIX frontend bundle. Market-state bands are gross reward multiples of Pack USD price before reward shares, not actual revealed-card counts or direct owner payouts.",
     reason: null,
   };
 }

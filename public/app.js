@@ -1091,13 +1091,13 @@ function renderMetrics(latest) {
       });
       const min = Number(item.payoutMin);
       const max = Number(item.payoutMax);
-      const payout = Number.isFinite(min) && Number.isFinite(max)
+      const multiple = Number.isFinite(min) && Number.isFinite(max)
         ? min === max ? `${min}x` : `${min}–${max}x`
         : "—";
-      return `<span class="trix-trait trait-${escapeHtml(item.key)}"><b>${escapeHtml(item.label)}</b><i><span>odds ${odds}%</span><span>payout ${payout}</span></i></span>`;
+      return `<span class="trix-trait trait-${escapeHtml(item.key)}"><b>${escapeHtml(item.label)}</b><i><span>odds ${odds}%</span><span>gross ${multiple}</span></i></span>`;
     }).join("");
     els.trixPackTraits.title =
-      "Published Card outcome odds and live Base Pack payout bands. These are not actual minted-by-class counts.";
+      "Gross reward multiplier applies to Pack USD price before owner, creator, and meme-pool shares. Early claims may pay less than the owner's full share.";
   }
   renderSettlementStatus(s);
   renderKeySale(s);
