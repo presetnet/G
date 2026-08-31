@@ -172,8 +172,8 @@ async function loadFromGithub() {
     if (res.status === 404) return emptyBundle();
     if (!res.ok) throw new Error(`github contents HTTP ${res.status}`);
     return normalizeBundle(await res.json());
-  } catch {
-    return emptyBundle();
+  } catch (error) {
+    throw new Error(`Unable to load shared GitHub desk: ${error?.message || error}`);
   }
 }
 
