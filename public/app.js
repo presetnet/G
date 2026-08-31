@@ -1093,18 +1093,33 @@ function renderMetrics(latest) {
     const formatUsd = (value) => hasNumber(value)
       ? `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
       : "—";
+    const preorderCap = hasNumber(trixPacks?.genesisCap)
+      ? Math.min(20, Math.max(1, Math.floor(Number(trixPacks.genesisCap))))
+      : null;
+    const priceStat = (id, label) => {
+      const level = levels.get(id);
+      const hasReportedMints = Number(level?.minted) > 0;
+      return {
+        label: hasReportedMints ? `${label} API quote` : `${label} sale price`,
+        value: hasReportedMints ? formatUsd(level?.priceUsd) : "N/A",
+        muted: true,
+      };
+    };
     const stats = [
-      ["available", formatCount(trixPacks?.available)],
-      [trixPacks?.genesisStale ? "API cap*" : "API cap", formatCount(trixPacks?.genesisCap)],
-      ["Base", formatUsd(levels.get("base")?.priceUsd)],
-      ["Viral", formatUsd(levels.get("viral")?.priceUsd)],
-      ["Hype", formatUsd(levels.get("hype")?.priceUsd)],
+      { label: "Packs left", value: formatCount(trixPacks?.available) },
+      {
+        label: trixPacks?.genesisStale ? "Max per buy*" : "Max per buy",
+        value: preorderCap == null ? "—" : formatCount(preorderCap),
+      },
+      priceStat("base", "Base"),
+      priceStat("viral", "Viral"),
+      priceStat("hype", "Hype"),
     ];
-    els.trixPackMarket.innerHTML = stats.map(([label, value]) =>
-      `<span><b>${escapeHtml(label)}</b><i>${escapeHtml(value)}</i></span>`,
+    els.trixPackMarket.innerHTML = stats.map(({ label, value, muted }) =>
+      `<span${muted ? ' class="unverified-price"' : ""}><b>${escapeHtml(label)}</b><i>${escapeHtml(value)}</i></span>`,
     ).join("");
     els.trixPackMarket.title =
-      "Live TRIX API fields. Available and cap are source labels, not independently verified maximum supply. An asterisk marks a retained last-valid cap.";
+      "Available is TRIX-reported primary-sale inventory. Per buy is the preorder request limit. Prices are current API quotes, not verified realized sales; levels with zero reported mints show N/A. An asterisk marks a retained last-valid limit.";
   }
   if (els.trixPackTraits) {
     const classes = Array.isArray(trixPacks?.classes) ? trixPacks.classes : [];

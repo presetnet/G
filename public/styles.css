@@ -2919,6 +2919,24 @@ details[open] > .fold-summary::after {
   font-weight: 600;
 }
 
+.trix-pack-market .unverified-price {
+  border-color: rgba(161, 161, 170, 0.2);
+  background: rgba(161, 161, 170, 0.025);
+}
+
+.trix-pack-market .unverified-price b,
+.trix-pack-market .unverified-price i {
+  color: rgba(161, 161, 170, 0.62);
+}
+
+.trix-pack-market-note {
+  margin: 0.28rem 0 0;
+  color: rgba(161, 161, 170, 0.72);
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  line-height: 1.35;
+}
+
 .trix-pack-traits {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
