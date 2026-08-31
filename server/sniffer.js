@@ -1692,7 +1692,10 @@ export function parseTrixGeoffRecords(posts = [], records = []) {
     .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
 }
 
-export function parseTrixPackMarket(state = null, { status = 0, ms = null } = {}) {
+export function parseTrixPackMarket(
+  state = null,
+  { status = 0, ms = null, genesis = null, genesisStatus = 0 } = {},
+) {
   if (
     !state ||
     typeof state !== "object" ||
@@ -1714,6 +1717,9 @@ export function parseTrixPackMarket(state = null, { status = 0, ms = null } = {}
   }
   const levels = Array.isArray(state.levels) ? state.levels : [];
   const base = levels.find((level) => level?.id === "base") || levels[0] || null;
+  const genesisOk = Boolean(
+    genesis && typeof genesis === "object" && genesisStatus >= 200 && genesisStatus < 300,
+  );
   const minted = levels.reduce((sum, level) => sum + (Number(level?.minted) || 0), 0);
   const classes = TRIX_CARD_CLASSES.map((entry) => {
     const band = Array.isArray(base?.bands?.[entry.key]) ? base.bands[entry.key] : [];
@@ -1729,11 +1735,18 @@ export function parseTrixPackMarket(state = null, { status = 0, ms = null } = {}
     roundStatus: state.roundStatus,
     tcg: state.tcg,
     roundPacks: state.roundPacks,
+    genesis: genesisOk ? {
+      round: genesis.round,
+      status: genesis.status,
+      cap: genesis.cap,
+      isGenesis: genesis.isGenesis,
+    } : null,
     levels: levels.map((level) => ({
       id: level.id,
       minted: level.minted,
       available: level.available,
       priceSol: level.priceSol,
+      priceUsd: level.priceUsd,
       bands: level.bands,
     })),
   }));
@@ -1747,6 +1760,12 @@ export function parseTrixPackMarket(state = null, { status = 0, ms = null } = {}
     minted,
     roundPacks: Number(state.roundPacks) || 0,
     stakedPacks: Number(state.agedPool?.stakedPacks) || 0,
+    genesisOk,
+    genesisStatus,
+    genesisCap: genesisOk && Number.isFinite(Number(genesis.cap)) ? Number(genesis.cap) : null,
+    genesisRound: genesisOk ? Number(genesis.round) || null : null,
+    genesisMarketStatus: genesisOk ? genesis.status || null : null,
+    isGenesis: genesisOk ? Boolean(genesis.isGenesis) : null,
     holders: null,
     holderReason: "TRIX does not publish a global Pack/Card holder count or collection mint.",
     available: Number(base?.available) || 0,
@@ -1764,6 +1783,7 @@ export function parseTrixPackMarket(state = null, { status = 0, ms = null } = {}
     fingerprint,
     checkedAt: new Date().toISOString(),
     sourceUrl: `${TRIX_BASE_URL}/api/mkt/state`,
+    genesisSourceUrl: `${TRIX_BASE_URL}/api/mkt/g`,
     oddsSourceUrl: `${TRIX_BASE_URL}/assets/c-BkGleqvg.js`,
     note: "Minted and market values are TRIX API-reported. Class odds come from the current TRIX frontend bundle. Market-state bands are gross reward multiples of Pack USD price before reward shares, not actual revealed-card counts or direct owner payouts.",
     reason: null,
@@ -1772,12 +1792,18 @@ export function parseTrixPackMarket(state = null, { status = 0, ms = null } = {}
 
 export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
   const started = Date.now();
-  const [recentRes, packRes] = await Promise.all([
+  const [recentRes, packRes, genesisRes] = await Promise.all([
     fetchJson(`${TRIX_BASE_URL}/api/meme-image/recent?limit=48`),
     fetchJson(`${TRIX_BASE_URL}/api/mkt/state`),
+    fetchJson(`${TRIX_BASE_URL}/api/mkt/g`),
   ]);
   const recentRecords = Array.isArray(recentRes.json) ? recentRes.json : [];
-  const packs = parseTrixPackMarket(packRes.json, { status: packRes.status, ms: packRes.ms });
+  const packs = parseTrixPackMarket(packRes.json, {
+    status: packRes.status,
+    ms: packRes.ms,
+    genesis: genesisRes.json,
+    genesisStatus: genesisRes.status,
+  });
   const catalogAge = Date.now() - Date.parse(previous?.launchCatalogCheckedAt || 0);
   const refreshCatalog =
     !Array.isArray(previous?.tokenMints) ||
@@ -1908,7 +1934,16 @@ export function mergeTrixGeoffHistory(previous = null, observed = null) {
     previous.packs.status < 300 &&
     Number(previous.packs.minted) > 0;
   const packs = observed.packs?.ok
-    ? observed.packs
+    ? !observed.packs.genesisOk && previousPacksValid && previous.packs.genesisCap != null
+      ? {
+          ...observed.packs,
+          genesisCap: previous.packs.genesisCap,
+          genesisRound: previous.packs.genesisRound,
+          genesisMarketStatus: previous.packs.genesisMarketStatus,
+          isGenesis: previous.packs.isGenesis,
+          genesisStale: true,
+        }
+      : observed.packs
     : previousPacksValid
       ? {
           ...previous.packs,

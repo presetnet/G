@@ -219,6 +219,7 @@ const els = {
   trixGeoffReceipt: document.getElementById("trixGeoffReceipt"),
   trixPacksMinted: document.getElementById("trixPacksMinted"),
   trixPacksMeta: document.getElementById("trixPacksMeta"),
+  trixPackMarket: document.getElementById("trixPackMarket"),
   trixPackTraits: document.getElementById("trixPackTraits"),
   keysoldUsd: document.getElementById("keysoldUsd"),
   keysoldMeta: document.getElementById("keysoldMeta"),
@@ -1081,6 +1082,29 @@ function renderMetrics(latest) {
     els.trixPacksMeta.textContent = bits.join(" · ");
     els.trixPacksMeta.title = trixPacks?.holderReason ||
       "No public Pack/Card holder count or collection mint is available.";
+  }
+  if (els.trixPackMarket) {
+    const levels = new Map((trixPacks?.levels || []).map((level) => [level.id, level]));
+    const hasNumber = (value) => value !== null && value !== undefined && value !== "" &&
+      Number.isFinite(Number(value));
+    const formatCount = (value) => hasNumber(value)
+      ? Number(value).toLocaleString()
+      : "—";
+    const formatUsd = (value) => hasNumber(value)
+      ? `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+      : "—";
+    const stats = [
+      ["available", formatCount(trixPacks?.available)],
+      [trixPacks?.genesisStale ? "API cap*" : "API cap", formatCount(trixPacks?.genesisCap)],
+      ["Base", formatUsd(levels.get("base")?.priceUsd)],
+      ["Viral", formatUsd(levels.get("viral")?.priceUsd)],
+      ["Hype", formatUsd(levels.get("hype")?.priceUsd)],
+    ];
+    els.trixPackMarket.innerHTML = stats.map(([label, value]) =>
+      `<span><b>${escapeHtml(label)}</b><i>${escapeHtml(value)}</i></span>`,
+    ).join("");
+    els.trixPackMarket.title =
+      "Live TRIX API fields. Available and cap are source labels, not independently verified maximum supply. An asterisk marks a retained last-valid cap.";
   }
   if (els.trixPackTraits) {
     const classes = Array.isArray(trixPacks?.classes) ? trixPacks.classes : [];

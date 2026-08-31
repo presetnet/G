@@ -2880,6 +2880,45 @@ details[open] > .fold-summary::after {
   grid-column: span 2;
 }
 
+.trix-pack-market {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.22rem;
+  margin-top: 0.35rem;
+}
+
+.trix-pack-market > span {
+  min-width: 0;
+  padding: 0.2rem 0.28rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: rgba(255, 214, 10, 0.035);
+  font-family: var(--font-mono);
+}
+
+.trix-pack-market b,
+.trix-pack-market i {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trix-pack-market b {
+  color: var(--muted);
+  font-size: 0.5rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.trix-pack-market i {
+  color: var(--ink);
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 600;
+}
+
 .trix-pack-traits {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
