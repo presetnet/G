@@ -2878,6 +2878,8 @@ details[open] > .fold-summary::after {
 
 .trix-pack-metric {
   grid-column: span 2;
+  grid-row: span 2;
+  min-height: 13.65rem;
 }
 
 .trix-pack-market {
@@ -2935,6 +2937,13 @@ details[open] > .fold-summary::after {
   font-family: var(--font-mono);
   font-size: 0.5rem;
   line-height: 1.35;
+}
+
+@media (max-width: 760px) {
+  .trix-pack-metric {
+    grid-row: auto;
+    min-height: 0;
+  }
 }
 
 .trix-pack-traits {

@@ -227,8 +227,6 @@ const els = {
   settleBanner: document.getElementById("settleBanner"),
   oxAlphaSpec: document.getElementById("oxAlphaSpec"),
   oxAlphaMeta: document.getElementById("oxAlphaMeta"),
-  syncStatus: document.getElementById("syncStatus"),
-  syncMeta: document.getElementById("syncMeta"),
   zenErrStatus: document.getElementById("zenErrStatus"),
   zenErrMeta: document.getElementById("zenErrMeta"),
   ghostCount: document.getElementById("ghostCount"),
