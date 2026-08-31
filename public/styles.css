@@ -2927,44 +2927,6 @@ details[open] > .fold-summary::after {
 .trix-trait.trait-common { border-color: #f13b32; }
 .trix-trait.trait-trix { border-image: linear-gradient(180deg, #ef35df, #56e960) 1; }
 
-.trix-pack-method {
-  margin-top: 0.35rem;
-  padding-top: 0.35rem;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 0.57rem;
-  line-height: 1.45;
-}
-
-.trix-pack-method summary {
-  width: max-content;
-  max-width: 100%;
-  color: var(--accent);
-  cursor: pointer;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.trix-pack-method div {
-  display: grid;
-  gap: 0.3rem;
-  margin-top: 0.4rem;
-}
-
-.trix-pack-method p { margin: 0; }
-
-.trix-pack-method a {
-  color: var(--ink);
-  text-underline-offset: 2px;
-}
-
-.trix-pack-method code {
-  color: var(--green-bright);
-  overflow-wrap: anywhere;
-}
-
 .metric-receipt {
   justify-self: start;
   color: var(--accent);
