@@ -121,12 +121,25 @@ function groupCapabilities(capabilities = []) {
 }
 
 function healthStory(summary) {
-  const healthy = summary.stacknetStatus === "healthy";
-  if (!healthy) {
+  const checkedAt = Date.parse(summary.stacknetCheckedAt || "");
+  const stale = !Number.isFinite(checkedAt) || Date.now() - checkedAt > 3 * 60_000;
+  if (stale) {
     return {
       tone: "warn",
-      headline: "Network needs attention",
-      sentence: "Stacknet isn’t reporting healthy right now — generation may be flaky.",
+      headline: "Stacknet telemetry stale",
+      sentence: "No successful minute sample arrived in the last three minutes. Displayed operational values may be stale.",
+    };
+  }
+
+  const healthy = summary.stacknetStatus === "healthy" || summary.stacknetStatus === "ok";
+  if (!healthy) {
+    const unavailable = !summary.stacknetStatus || summary.stacknetStatus.startsWith("unreachable");
+    return {
+      tone: "warn",
+      headline: unavailable ? "Stacknet telemetry unavailable" : `Stacknet reports ${summary.stacknetStatus}`,
+      sentence: unavailable
+        ? "The latest minute probe could not confirm public Stacknet health. Last observed values may be stale."
+        : `Public /health currently reports ${summary.stacknetStatus}. Generation may be flaky.`,
     };
   }
 
@@ -145,6 +158,16 @@ function healthStory(summary) {
       headline: `Queue live · ${q}`,
       sentence:
         "Public /health shows work on the wire. Surface stays quiet until deploy / models / docs / explore / Max×Solana actually change.",
+    };
+  }
+
+  if (typeof inFlight !== "number") {
+    const load = typeof summary.averageLoad === "number" ? summary.averageLoad : "unknown";
+    return {
+      tone: "good",
+      headline: `Stacknet online · load ${load}`,
+      sentence:
+        "Minute probe is fresh. Public /health reports OK, but it no longer publishes in-flight queue counters and public /node is unavailable.",
     };
   }
 
@@ -222,8 +245,8 @@ function pieceNetwork(summary) {
     id: "network",
     title: "The network",
     plain: "Stacknet — shared computers that run AI jobs",
-    status: summary.stacknetStatus === "healthy" ? "Healthy" : summary.stacknetStatus || "Unknown",
-    tone: summary.stacknetStatus === "healthy" ? "good" : "warn",
+    status: ["healthy", "ok"].includes(summary.stacknetStatus) ? "Healthy" : summary.stacknetStatus || "Unknown",
+    tone: ["healthy", "ok"].includes(summary.stacknetStatus) ? "good" : "warn",
     meaning: `${nodeBit} online with ${gpuBit}. From public /network/summary — not estimated.`,
     facts: [
       summary.stacknetVersion ? `Software ${summary.stacknetVersion}` : "Version unknown",
@@ -778,7 +801,11 @@ function buildCoverage(latest, summary) {
   }
   notes.push("Temperature + ranks are derived from public diffs — not a physical sensor.");
   notes.push("Model roles marked guessed when /v1/models has no description.");
-  notes.push("Queue desk uses /health in_flight + /node task_count only.");
+  notes.push(
+    typeof summary.inFlight === "number" || typeof summary.taskCount === "number"
+      ? "Queue desk uses public /health in_flight + /node task_count only."
+      : "Current public Stacknet responses do not publish in_flight or task_count; no stale queue value is retained.",
+  );
 
   return {
     live: summary.healthySources ?? rows.filter((r) => r.state === "live").length,

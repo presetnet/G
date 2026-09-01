@@ -878,12 +878,14 @@ export function translate(previous, current) {
       }),
     );
   } else if (prevHealth && currHealth && prevHealth !== currHealth) {
-    const bad = currHealth !== "healthy";
+    const healthyStatuses = new Set(["healthy", "ok"]);
+    const bad = !healthyStatuses.has(currHealth);
+    const recovered = !healthyStatuses.has(prevHealth) && healthyStatuses.has(currHealth);
     events.push(
       event({
         kind: "health",
         rank: bad ? "spike" : "note",
-        title: bad ? "Network health degraded" : "Network health recovered",
+        title: bad ? "Network health degraded" : recovered ? "Network health recovered" : "Health label changed",
         summary: `Status went ${prevHealth} → ${currHealth}.`,
         details: { from: prevHealth, to: currHealth },
       }),

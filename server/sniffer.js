@@ -2249,14 +2249,6 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
   }
 
   const bySource = Object.fromEntries(sources.map((s) => [s.source, s]));
-  const network = bySource["stacknet.network"] ?? {};
-  const fleet = fleetTaxonomy(network.models || []);
-  const vramPct =
-    isFiniteNumber(network.totalVramGb) &&
-    network.totalVramGb > 0 &&
-    isFiniteNumber(network.availableVramGb)
-      ? Math.round((network.availableVramGb / network.totalVramGb) * 100)
-      : null;
 
   return {
     id: `snap_${Date.now().toString(36)}`,
@@ -2267,40 +2259,8 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
       geoffDeployId: bySource["geoff.deploy"]?.deployId ?? null,
       chunkHash: bySource["geoff.deploy"]?.chunks?.hash ?? null,
       chunkCount: bySource["geoff.deploy"]?.chunks?.count ?? null,
-      stacknetVersion: bySource["stacknet.health"]?.version ?? bySource["stacknet.root"]?.version ?? null,
-      stacknetStatus: bySource["stacknet.health"]?.statusText
-        ?? (bySource["stacknet.health"]?.reachable === false
-          ? `unreachable (${bySource["stacknet.health"]?.httpError || "error"})`
-          : null),
-      mcpContract: bySource["stacknet.health"]?.remoteMcp?.contract_id ?? null,
-      mcpOnHealth: Boolean(bySource["stacknet.health"]?.remoteMcp?.contract_id),
-      inFlight: bySource["stacknet.health"]?.inFlight ?? null,
-      maxInFlight: bySource["stacknet.health"]?.maxInFlight ?? null,
-      taskCount: bySource["stacknet.node"]?.taskCount ?? null,
-      nodeId: bySource["stacknet.node"]?.nodeId ?? bySource["stacknet.health"]?.nodeId ?? null,
-      nodes: network.availableNodes ?? null,
-      totalNodes: network.totalNodes ?? null,
-      gpus: network.totalGpus ?? null,
-      vramGb: network.totalVramGb ?? null,
-      availableVramGb: network.availableVramGb ?? null,
-      vramAvailablePct: vramPct,
-      averageLoad: network.averageLoad ?? null,
-      models: network.totalModels ?? null,
-      apiModels: bySource["stacknet.models"]?.count ?? null,
+      ...summarizeStacknet(bySource, startedAt),
       widgets: bySource["stacknet.widgets"]?.count ?? null,
-      capabilities: network.capabilities?.length ?? null,
-      solPriceUsd: network.treasury?.solPriceUsd ?? null,
-      treasuryAddress: network.treasury?.treasuryAddress ?? null,
-      treasuryCluster: network.treasury?.cluster ?? null,
-      treasuryStaleSeconds: network.treasury?.staleSeconds ?? null,
-      treasuryTotalUsd: network.treasury?.totalUsd ?? null,
-      treasuryReceivableUsd: network.treasury?.receivableUsd ?? null,
-      treasuryPending: network.treasury?.pendingObligations ?? null,
-      treasuryWarnings: network.treasury?.warnings?.length ?? 0,
-      metaproofsTotal: network.metaproofs?.total ?? null,
-      metaproofsPaperworkUsd: network.metaproofs?.totalPaperworkUsd ?? null,
-      metaproofsPaidUsd: network.metaproofs?.paidPaperworkUsd ?? null,
-      metaproofsOutstandingUsd: network.metaproofs?.outstandingUsd ?? null,
       pile: bySource["stacknet.pile"]?.pile ?? null,
       keySaleActive: bySource["stacknet.keysale"]?.saleActive ?? null,
       keySaleEpoch: bySource["stacknet.keysale"]?.epoch ?? null,
@@ -2315,8 +2275,6 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
       x402PeriodEnd: bySource["stacknet.x402"]?.periodEnd ?? null,
       x402PaymentMints: bySource["stacknet.x402"]?.paymentMints ?? [],
       x402Fingerprint: bySource["stacknet.x402"]?.fingerprint ?? null,
-      fleetBases: fleet.bases,
-      fleetLines: fleet.lines,
       treasuryRpcOk: Boolean(bySource["solana.treasury"]?.ok),
       treasuryRpcAddress: bySource["solana.treasury"]?.address ?? null,
       treasuryRpcLamports: bySource["solana.treasury"]?.lamports ?? null,
@@ -2429,6 +2387,93 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
         ms: s.ms ?? null,
       })),
     },
+  };
+}
+
+export async function sniffStacknetMinute() {
+  const takenAt = new Date().toISOString();
+  const started = Date.now();
+  const settled = await Promise.allSettled([
+    sniffStacknetHealth(),
+    sniffStacknetRoot(),
+    sniffStacknetNetwork(),
+    sniffStacknetNode(),
+    sniffStacknetModels(),
+  ]);
+  const fallbackSources = [
+    "stacknet.health",
+    "stacknet.root",
+    "stacknet.network",
+    "stacknet.node",
+    "stacknet.models",
+  ];
+  const sources = settled.map((result, index) => ({
+    ...(result.status === "fulfilled"
+      ? result.value
+      : {
+          source: fallbackSources[index],
+          ok: false,
+          status: 0,
+          error: result.reason?.message || String(result.reason),
+        }),
+    checkedAt: takenAt,
+  }));
+  const bySource = Object.fromEntries(sources.map((source) => [source.source, source]));
+  return {
+    takenAt,
+    durationMs: Date.now() - started,
+    sources: bySource,
+    summary: summarizeStacknet(bySource, takenAt),
+  };
+}
+
+function summarizeStacknet(bySource, checkedAt = null) {
+  const health = bySource["stacknet.health"] ?? {};
+  const network = bySource["stacknet.network"] ?? {};
+  const fleet = fleetTaxonomy(network.models || []);
+  const vramPct =
+    isFiniteNumber(network.totalVramGb) &&
+    network.totalVramGb > 0 &&
+    isFiniteNumber(network.availableVramGb)
+      ? Math.round((network.availableVramGb / network.totalVramGb) * 100)
+      : null;
+  return {
+    stacknetCheckedAt: checkedAt,
+    stacknetVersion: health.version ?? bySource["stacknet.root"]?.version ?? null,
+    stacknetStatus: health.statusText
+      ?? (health.reachable === false
+        ? `unreachable (${health.httpError || "error"})`
+        : null),
+    mcpContract: health.remoteMcp?.contract_id ?? null,
+    mcpOnHealth: Boolean(health.remoteMcp?.contract_id),
+    inFlight: health.inFlight ?? null,
+    maxInFlight: health.maxInFlight ?? null,
+    taskCount: bySource["stacknet.node"]?.taskCount ?? null,
+    nodeId: bySource["stacknet.node"]?.nodeId ?? health.nodeId ?? null,
+    nodes: network.availableNodes ?? null,
+    totalNodes: network.totalNodes ?? null,
+    gpus: network.totalGpus ?? null,
+    vramGb: network.totalVramGb ?? null,
+    availableVramGb: network.availableVramGb ?? null,
+    vramAvailablePct: vramPct,
+    averageLoad: network.averageLoad ?? null,
+    models: network.totalModels ?? null,
+    apiModels: bySource["stacknet.models"]?.count ?? null,
+    capabilities: network.capabilities?.length ?? null,
+    solPriceUsd: network.treasury?.solPriceUsd ?? null,
+    treasuryAddress: network.treasury?.treasuryAddress ?? null,
+    treasuryCluster: network.treasury?.cluster ?? null,
+    treasuryStaleSeconds: network.treasury?.staleSeconds ?? null,
+    treasuryTotalUsd: network.treasury?.totalUsd ?? null,
+    treasuryReceivableUsd: network.treasury?.receivableUsd ?? null,
+    treasuryPending: network.treasury?.pendingObligations ?? null,
+    treasuryWarnings: network.treasury?.warnings?.length ?? 0,
+    metaproofsTotal: network.metaproofs?.total ?? null,
+    metaproofsPaperworkUsd: network.metaproofs?.totalPaperworkUsd ?? null,
+    metaproofsPaidUsd: network.metaproofs?.paidPaperworkUsd ?? null,
+    metaproofsOutstandingUsd: network.metaproofs?.outstandingUsd ?? null,
+    fleetBases: fleet.bases,
+    fleetLines: fleet.lines,
   };
 }
 

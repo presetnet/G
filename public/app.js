@@ -623,7 +623,7 @@ const PROOFS = {
   stackVersion: {
     title: "Stacknet version",
     explain:
-      "Self-reported by StackNet's own health and root endpoints. We display exactly what they publish — nothing inferred.",
+      "Self-reported by StackNet's own health and root endpoints. Missing version or queue fields mean the current public response does not publish them; old values are not retained.",
     sources: ["stacknet.health", "stacknet.root"],
     fields: ["stacknetVersion", "mcpContract", "nodeId", "inFlight", "maxInFlight"],
     curls: [`curl -s ${SN_BASE}/health`, `curl -s ${SN_BASE}/`],
@@ -631,7 +631,7 @@ const PROOFS = {
   stackNodes: {
     title: "Nodes & GPUs",
     explain:
-      "Live capacity counters from StackNet's public network map — their own numbers, re-sniffed every poll cycle.",
+      "Live capacity counters from StackNet's public network map — their own numbers, re-sniffed by the minute collector. The public /node route may be unavailable.",
     sources: ["stacknet.network", "stacknet.node"],
     fields: ["nodes", "totalNodes", "gpus", "taskCount", "averageLoad"],
     curls: [`curl -s ${SN_BASE}/network/summary`, `curl -s ${SN_BASE}/node`],

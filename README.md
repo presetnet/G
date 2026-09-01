@@ -10,11 +10,11 @@ Designed to deploy on **Vercel** with a **shared live desk** (same feed in every
 | --- | --- | --- |
 | geoff.ai build | `/api/version` | `buildId` |
 | geoff.ai deploy | HTML | Vercel `dpl_*` + chunk fingerprint |
-| Stacknet health | `/health` | version, status, MCP contract, in-flight |
+| Stacknet health | `/health` | public status; version and in-flight when published |
 | Stacknet network | `/network/summary` | nodes, GPUs, VRAM, models, capabilities, SOL |
 | Stacknet models | `/v1/models` | OpenAI-compatible model cards + caps |
 | Stacknet widgets | `/widgets` | public widget catalog |
-| Stacknet node | `/node` | node id / tasks |
+| Stacknet node | `/node` | node id / tasks when the public route is available |
 | Geoff catalogs | `/api/catalog/*` | optional auth cookie / preview code |
 | Geoff docs | 24 representative live pages | Body fingerprints across Introduction, Geoff Code, API Reference, and Token Plan; 70 linked pages inventoried |
 | TRIX Packs | `/api/mkt/state`, `/api/mkt/g` + Solana RPC | API-reported Pack mints, Genesis status, observed Base payment maxima, Card odds, and gross reward multiples |

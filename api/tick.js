@@ -9,7 +9,7 @@ import {
   saveSharedBundle,
   sharedStoreConfig,
 } from "../server/shared-store.js";
-import { runSniff, sniffTrixGeoff } from "../server/sniffer.js";
+import { runSniff, sniffStacknetMinute, sniffTrixGeoff } from "../server/sniffer.js";
 import { computeTemperature, translate } from "../server/translator.js";
 import {
   preserveLastKnownTokenPress,
@@ -75,39 +75,30 @@ export default async function handler(req, res) {
         ),
       );
     } else {
-      const observed = await sniffTrixGeoff({
-        previous: previous.latest?.sources?.["trix.geoff"] || null,
-      });
+      const [observed, stacknet] = await Promise.all([
+        sniffTrixGeoff({
+          previous: previous.latest?.sources?.["trix.geoff"] || null,
+        }),
+        sniffStacknetMinute(),
+      ]);
       const base = previous.latest || {
-        takenAt: new Date().toISOString(),
-        durationMs: observed.ms,
+        takenAt: stacknet.takenAt,
+        durationMs: Math.max(observed.ms || 0, stacknet.durationMs || 0),
         sources: {},
         summary: {},
       };
       snapshot = preserveTrixHistory(previous.latest, {
         ...base,
-        sources: { ...(base.sources || {}), "trix.geoff": observed },
-        summary: { ...(base.summary || {}) },
+        id: `snap_${Date.now().toString(36)}`,
+        takenAt: stacknet.takenAt,
+        durationMs: Math.max(observed.ms || 0, stacknet.durationMs || 0),
+        sources: {
+          ...(base.sources || {}),
+          ...stacknet.sources,
+          "trix.geoff": observed,
+        },
+        summary: { ...(base.summary || {}), ...stacknet.summary },
       });
-    }
-    const previousTrix = previous.latest?.sources?.["trix.geoff"];
-    const currentTrix = snapshot.sources?.["trix.geoff"];
-    const trixUnchanged = profile === "trix" && previousTrix &&
-      previousTrix.fingerprint === currentTrix?.fingerprint &&
-      (previousTrix.scannedTokenMints?.length || 0) ===
-        (currentTrix?.scannedTokenMints?.length || 0) &&
-      (previousTrix.tokenMints?.length || 0) === (currentTrix?.tokenMints?.length || 0) &&
-      previousTrix.launchCatalogCheckedAt === currentTrix?.launchCatalogCheckedAt &&
-      previousTrix.packs?.fingerprint === currentTrix?.packs?.fingerprint;
-    if (trixUnchanged) {
-      res.status(200).json({
-        ok: true,
-        profile,
-        changed: false,
-        updatedAt: previous.updatedAt,
-        config: publicConfig(),
-      });
-      return;
     }
     const newEvents = translate(previous.latest, snapshot);
     const events = pruneEvents([...newEvents, ...(previous.events || [])]);
@@ -124,6 +115,7 @@ export default async function handler(req, res) {
           startedAt: previous.state?.startedAt || new Date().toISOString(),
           lastPollAt: profile === "full" ? snapshot.takenAt : previous.state?.lastPollAt || null,
           lastTrixPollAt: snapshot.sources?.["trix.geoff"]?.checkedAt || new Date().toISOString(),
+          lastStacknetPollAt: snapshot.summary?.stacknetCheckedAt || null,
           lastError: null,
           pollCount: (previous.state?.pollCount || 0) + 1,
           temperature: temperature.value,
