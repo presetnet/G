@@ -5,6 +5,7 @@ export const CLIENT_TOKEN_PLAN = {
   kicker: "Value sheet · docs.geoff.ai",
   model:
     "One monthly token pool. Shared across text, speech, video, image, music, code, and files — no per-modality nickel-and-dime.",
+  unfilteredNote: "Unfiltered requests such as NSFW use 10x tokens.",
   scraped: false,
   wins: [
     {
@@ -17,7 +18,7 @@ export const CLIENT_TOKEN_PLAN = {
     },
     {
       k: "Published sheet",
-      v: "Seats, RPM/TPM, and yield estimates on docs.geoff.ai. Receipts, not vibes.",
+      v: "Plan prices, token pools, and RPM/TPM limits are published on docs.geoff.ai.",
     },
     {
       k: "MoM unlock",
@@ -35,9 +36,6 @@ export const CLIENT_TOKEN_PLAN = {
       outputTpm: "50K",
       badge: "Start",
       pitch: "Full multimodal stack at coffee-money.",
-      images: "~1,000",
-      videos5s: "~30",
-      songs: "~50",
     },
     {
       id: "pro",
@@ -48,10 +46,7 @@ export const CLIENT_TOKEN_PLAN = {
       inputTpm: "500K",
       outputTpm: "200K",
       badge: "Daily",
-      pitch: "~13× the images. Memory that sticks.",
-      images: "~13,300",
-      videos5s: "~400",
-      songs: "~660",
+      pitch: "More usage, memory, and extended creation.",
     },
     {
       id: "max",
@@ -64,9 +59,6 @@ export const CLIENT_TOKEN_PLAN = {
       badge: "Power",
       highlighted: true,
       pitch: "MoM + train-your-own. The Geoff edge.",
-      images: "~46,000",
-      videos5s: "~1,400",
-      songs: "~2,300",
     },
     {
       id: "turbo",
@@ -78,26 +70,15 @@ export const CLIENT_TOKEN_PLAN = {
       outputTpm: "2M",
       badge: "All gas",
       pitch: "Multi-agent + unfiltered. Ceiling removed.",
-      images: "~133,000",
-      videos5s: "~4,000",
-      songs: "~6,600",
     },
   ],
-  estimates: {
-    note: "Docs: approximate output if you spend the entire monthly balance on one capability",
-    perImageTokens: "~150K tokens per image",
-    perVideo5sTokens: "~5M tokens per 5-sec video",
-    perSongTokens: "~3M tokens per song",
-    nsfwNote: "Unfiltered requests such as NSFW use 10× tokens",
-  },
+  estimates: null,
   matrix: [
     { label: "Chat on web, iOS, Android, desktop", levels: ["yes", "yes", "yes", "yes"] },
     { label: "Create music, videos, and images", levels: ["yes", "yes", "yes", "yes"] },
-    { label: "Generate code and visualize data", levels: ["yes", "yes", "yes", "yes"] },
-    { label: "Write, edit, and create content", levels: ["yes", "yes", "yes", "yes"] },
-    { label: "Analyze text and images", levels: ["yes", "yes", "yes", "yes"] },
+    { label: "Code generation and execution", levels: ["yes", "yes", "yes", "yes"] },
+    { label: "Content writing and analysis", levels: ["yes", "yes", "yes", "yes"] },
     { label: "Search the web", levels: ["yes", "yes", "yes", "yes"] },
-    { label: "Create files and execute code", levels: ["yes", "yes", "yes", "yes"] },
     { label: "Extended thinking for complex work", levels: ["yes", "yes", "yes", "yes"] },
     { label: "End-to-end encryption", levels: ["yes", "yes", "yes", "yes"] },
     { label: "Memory across conversations", levels: ["no", "yes", "yes", "yes"] },
@@ -111,6 +92,6 @@ export const CLIENT_TOKEN_PLAN = {
   ],
   sourceUrls: {
     overview: "https://docs.geoff.ai/token-plan/overview",
-    pricing: "https://docs.geoff.ai/token-plan/pricing",
+    usage: "https://docs.geoff.ai/token-plan/usage",
   },
 };

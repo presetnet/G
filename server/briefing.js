@@ -37,9 +37,10 @@ const CAPABILITY_GROUPS = [
 
 const MODEL_ROLE = {
   magma: { role: "Creative powerhouse", use: "Music, media, agents, and multimodal making." },
+  "magma-2.1": { role: "Agentic multimodal layer", use: "1M-context long-horizon coding, media, and tool workflows." },
   preview: { role: "Everyday multimodal", use: "Chat, code, images, and tool use." },
-  pyro: { role: "Companion reasoning brain", use: "Multimodal chat with deep reasoning." },
-  "pyro:max": { role: "Max reasoning lane", use: "1M-context pyro-class multimodal chat." },
+  pyro: { role: "Agentic coding layer", use: "1M-context code, refactoring, tools, and structured output." },
+  "pyro:max": { role: "Pyro Max API card", use: "1M-context multimodal reasoning as described by the live API card; not a current docs layer." },
   "pyro-magma": { role: "Pyro × Magma blend", use: "Network-listed pyro/magma hybrid id." },
   "pyro-preview": { role: "Pyro preview lane", use: "Preview-tier pyro family id." },
   "stack-chat": { role: "Chat specialist", use: "Conversation-focused replies." },
@@ -152,11 +153,10 @@ function healthStory(summary) {
   const maxLive = summary.maxSolanaLive;
   const lanesLive = summary.productLanesLive;
   const gamedayBits = [];
-  if (typeof docsN === "number" && docsN > 0) gamedayBits.push(`${docsN} docs watched`);
+  if (typeof docsN === "number" && docsN > 0) gamedayBits.push(`${docsN} representative docs watched`);
   if (typeof exploreN === "number" && exploreN > 0) gamedayBits.push(`Explore ${exploreN}`);
   if (typeof lanesLive === "number" && lanesLive > 0) gamedayBits.push(`${lanesLive} product lanes`);
   else if (maxLive) gamedayBits.push("Max×Solana live");
-  if (summary.mcpToolsDoc) gamedayBits.push(`MCP ${summary.mcpToolsDoc}`);
 
   const tempHint =
     summary._temperatureLabel === "blazing"
@@ -266,7 +266,7 @@ function pieceTools(summary, capabilityGroups = [], widgets = []) {
       onGroups.length ? `Active lanes: ${onGroups.join(", ")}` : "No capability lanes detected",
       summary.mcpContract
         ? "Agent plug-in contract (MCP) published on /health"
-        : "MCP contract not on /health — see public docs.geoff.ai/mcp (fingerprinted)",
+        : "MCP contract not on /health — Geoff Code MCP docs are fingerprinted separately",
     ],
   };
 }
@@ -326,13 +326,13 @@ function pieceProductLanes(summary, lanesSrc = null) {
   return {
     id: "productLanes",
     title: "Product lanes",
-    plain: "HQ · Studio · Skills · Code · Claw · Social · Max — docs-allowlisted shells",
+    plain: "Legacy app-route watch — independent from the rewritten docs surface",
     status:
       typeof live === "number"
         ? `${live}${total != null ? `/${total}` : ""} lanes answering`
         : "Product lanes not probed yet",
     tone: live > 0 ? "good" : "muted",
-    meaning: "Public 307→/connect on docs-backed paths. Catch-all connect alone is not proof of a product.",
+    meaning: "Public 307→/connect on historically watched paths. Current docs no longer substantiate these as product pages.",
     facts: [
       labels.length ? `Live: ${labels.join(" · ")}` : "Waiting for first lane probe",
       "Separate from Max×Solana nested routes (/max/solana/*)",
@@ -343,32 +343,24 @@ function pieceProductLanes(summary, lanesSrc = null) {
 function pieceDocs(summary, docsSrc = null) {
   const scraped = docsSrc?.scraped ?? summary.docsSurfaceScraped;
   const total = docsSrc?.total ?? null;
-  const mcpHint = summary.mcpToolsDoc
-    || (docsSrc?.pages || []).find((p) => p.id === "mcp-tools")?.toolHint;
-  const clawHint = summary.clawToolsDoc
-    || (docsSrc?.pages || []).find((p) => p.id === "claw")?.toolHint;
-  const toolBit = mcpHint
-    ? mcpHint.includes("/")
-      ? `MCP tools: ${mcpHint.replace("/", " tools / ")} groups`
-      : `MCP tools doc hints ${mcpHint} tools`
-    : "MCP tools page watched";
-  const clawBit = clawHint
-    ? `Claw browser tools (docs): ${clawHint}`
-    : "Claw / Agent Mode page watched";
+  const linked = docsSrc?.linkedPageCount ?? summary.docsLinkedPageCount;
+  const modelLayers = docsSrc?.publishedModelLayers || summary.docsPublishedModelLayers || [];
   return {
     id: "docs",
     title: "The docs",
-    plain: "docs.geoff.ai — intro, MCP, features, token plan, Geoff Code",
+    plain: "docs.geoff.ai — Introduction · Geoff Code · API Reference · Token Plan",
     status:
       typeof scraped === "number"
-        ? `${scraped}${total != null ? `/${total}` : ""} pages fingerprinted`
+        ? `${scraped}${total != null ? `/${total}` : ""} representative pages fingerprinted`
         : "Docs surface not sniffed yet",
     tone: scraped > 0 ? "good" : "muted",
     meaning: "Body fingerprints on watched pages — What’s changing lights when copy moves. No fake changelog.",
     facts: [
-      toolBit,
-      clawBit,
-      "Features watched: Codev3 · Skills · Social · StackNet Proxy · Studio · Claw/HQ",
+      linked ? `${linked} live linked pages inventoried` : "Live docs inventory pending",
+      modelLayers.length ? `Published model layers: ${modelLayers.join(" · ")}` : "Model layers pending",
+      "Geoff Code watched: MCP · plugins · hooks · skills · subagents · ACP",
+      "API categories watched: text · speech · training · video · image · music · code · files",
+      "x402 docs: Solana-mainnet PAYG · pg_ API keys · real payments",
       "Source: public docs.geoff.ai HTML (main body, not shared chrome)",
     ],
   };
@@ -490,7 +482,7 @@ function userTakeForEvent(event) {
     case "maxSolana":
       return "Max × Solana routes moved — public connect-gate probe on /max and /max/solana/*.";
     case "productLanes":
-      return "Product lanes moved — HQ / Studio / Skills / Code / Claw / Social / Max (docs-allowlisted).";
+      return "Historically watched app routes moved; current docs no longer substantiate this route list as products.";
     case "pricing":
       return "Public Token Plan rates on docs.geoff.ai changed — check what seats/tokens cost now.";
     case "baseline":
@@ -563,6 +555,8 @@ export function compileBriefing({ latest, temperature, events = [], agentDesk = 
       ? {
           scraped: docsSrc.scraped,
           total: docsSrc.total,
+          linkedPageCount: docsSrc.linkedPageCount,
+          publishedModelLayers: docsSrc.publishedModelLayers || [],
           fingerprint: docsSrc.fingerprint,
           url: "https://docs.geoff.ai/",
         }
@@ -606,10 +600,12 @@ function buildTokenPlan(latest) {
     ...sheet,
     kicker: src.scraped
       ? `${sheet.kicker} · sniffed live`
-      : `${sheet.kicker} · published tables`,
+      : `${sheet.kicker} · bundled fallback`,
     scraped: Boolean(src.scraped),
     reason: src.reason || null,
     fingerprint: src.fingerprint || null,
+    observed: src.observed || null,
+    sections: src.sections || null,
     sourceUrls: src.sourceUrls || TOKEN_PLAN_URLS,
   };
 }
@@ -839,7 +835,7 @@ function glossary() {
     },
     {
       term: "MCP",
-      meaning: "A plug-in contract so outside AI agents can call Stacknet tools safely.",
+      meaning: "Geoff Code support for stdio or HTTP tool/data servers, configured at user, project-root, or project-local scope.",
     },
     {
       term: "Build / deploy",
@@ -848,7 +844,7 @@ function glossary() {
     {
       term: "Docs surface",
       meaning:
-        "28 public docs.geoff.ai pages (intro, token plan, MCP, features like Codev3/Skills/StackNet Proxy, Geoff Code, cookbook). Body fingerprints — not shared nav chrome.",
+        "70 live linked docs pages were inventoried; 24 representative pages across Introduction, Geoff Code, API Reference, and Token Plan are body-fingerprinted.",
     },
     {
       term: "Explore",
@@ -858,7 +854,7 @@ function glossary() {
     {
       term: "Product lanes",
       meaning:
-        "Auth-gated geoff.ai shells allowlisted from docs: /hq, /studio, /skills, /code, /claw, /social, /max. Catch-all /connect on random paths is ignored.",
+        "Historically watched auth-gated geoff.ai paths. They are route observations, not claims supported by the current rewritten docs.",
     },
     {
       term: "Max × Solana",
@@ -866,19 +862,9 @@ function glossary() {
         "Auth-gated geoff.ai routes under /max and /max/solana/*. We only probe public redirects (307→connect) — not wallets or portfolio contents.",
     },
     {
-      term: "Claw",
-      meaning:
-        "Browser-based agent mode (docs: 12 static tools, SOUL.md / MEMORY.md, skills, VM sandbox). Lane at /claw; docs under Agent Mode.",
-    },
-    {
       term: "Skills",
       meaning:
-        "Reusable agent behaviors as markdown + YAML (SKILL.md) on docs — discovery without bloating every prompt. Watched via the Skills docs page + /skills lane.",
-    },
-    {
-      term: "StackNet Proxy",
-      meaning:
-        "Geoff’s JWT re-signing / request-forwarding layer between users and Stacknet. Watched on the public docs page.",
+        "Reusable Geoff Code instructions discovered from project/user .geoff/skills and .agents/skills directories, extra configured paths, and built-ins.",
     },
     {
       term: "Rank",

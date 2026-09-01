@@ -5,23 +5,19 @@
 
 export const TOKEN_PLAN_URLS = {
   overview: "https://docs.geoff.ai/token-plan/overview",
-  pricing: "https://docs.geoff.ai/token-plan/pricing",
   usage: "https://docs.geoff.ai/token-plan/usage",
   billing: "https://geoff.ai/settings/billing",
 };
 
 const PLAN_ORDER = ["basic", "pro", "max", "turbo"];
 
-/** Feature matrix from docs.geoff.ai/token-plan/overview */
-/** Exact feature rows from docs.geoff.ai/token-plan/overview Plans table. */
+/** Feature access stated in the current Token Plan Overview prose. */
 export const FEATURE_MATRIX = [
   { id: "chat", label: "Chat on web, iOS, Android, desktop", levels: ["yes", "yes", "yes", "yes"] },
   { id: "media", label: "Create music, videos, and images", levels: ["yes", "yes", "yes", "yes"] },
-  { id: "code", label: "Generate code and visualize data", levels: ["yes", "yes", "yes", "yes"] },
-  { id: "content", label: "Write, edit, and create content", levels: ["yes", "yes", "yes", "yes"] },
-  { id: "analyze", label: "Analyze text and images", levels: ["yes", "yes", "yes", "yes"] },
+  { id: "code", label: "Code generation and execution", levels: ["yes", "yes", "yes", "yes"] },
+  { id: "content", label: "Content writing and analysis", levels: ["yes", "yes", "yes", "yes"] },
   { id: "search", label: "Search the web", levels: ["yes", "yes", "yes", "yes"] },
-  { id: "files", label: "Create files and execute code", levels: ["yes", "yes", "yes", "yes"] },
   { id: "think", label: "Extended thinking for complex work", levels: ["yes", "yes", "yes", "yes"] },
   { id: "e2e", label: "End-to-end encryption", levels: ["yes", "yes", "yes", "yes"] },
   { id: "memory", label: "Memory across conversations", levels: ["no", "yes", "yes", "yes"] },
@@ -38,6 +34,7 @@ export const FEATURE_MATRIX = [
 export const FALLBACK_TOKEN_PLAN = {
   model:
     "One monthly token pool. Shared across text, speech, video, image, music, code, and files — no per-modality nickel-and-dime.",
+  unfilteredNote: "Unfiltered requests such as NSFW use 10x tokens.",
   plans: [
     {
       id: "basic",
@@ -62,7 +59,7 @@ export const FALLBACK_TOKEN_PLAN = {
       inputTpm: "500K",
       outputTpm: "200K",
       badge: "Daily",
-      pitch: "~13× the images. Memory that sticks.",
+      pitch: "More usage, memory, and extended creation.",
       why: "The daily driver when Basic runs dry.",
     },
     {
@@ -93,17 +90,6 @@ export const FALLBACK_TOKEN_PLAN = {
       why: "For shops that print, don’t dabble.",
     },
   ],
-  estimates: {
-    note: "Docs: approximate output if you spend the entire monthly balance on one capability",
-    perImageTokens: "~150K tokens per image",
-    perVideo5sTokens: "~5M tokens per 5-sec video",
-    perSongTokens: "~3M tokens per song",
-    nsfwNote: "Unfiltered requests such as NSFW use 10× tokens",
-    images: { basic: "~1,000", pro: "~13,300", max: "~46,000", turbo: "~133,000" },
-    // Column header in docs: "Videos (5s)" — five-second clips, not “55 videos”
-    videos5s: { basic: "~30", pro: "~400", max: "~1,400", turbo: "~4,000" },
-    songs: { basic: "~50", pro: "~660", max: "~2,300", turbo: "~6,600" },
-  },
   wins: [
     {
       k: "One pool",
@@ -115,7 +101,7 @@ export const FALLBACK_TOKEN_PLAN = {
     },
     {
       k: "Published sheet",
-      v: "Seats, RPM/TPM, and yield estimates on docs.geoff.ai. Receipts, not vibes.",
+      v: "Plan prices, token pools, and RPM/TPM limits are published on docs.geoff.ai.",
     },
     {
       k: "MoM unlock",
@@ -143,15 +129,8 @@ function normalizePlanName(name) {
   return n.replace(/[^a-z0-9]+/g, "") || null;
 }
 
-function parseLevel(cell) {
-  const t = decodeEntities(cell).toLowerCase();
-  if (!t || t === "—" || t === "-" || t === "no" || t === "n") return "no";
-  if (t === "yes" || t === "✓" || t === "✔") return "yes";
-  return t;
-}
-
 /**
- * Parse plan price/token rows, rate limits, yields, and feature matrix from Mintlify SSR HTML.
+ * Parse plan price/token rows and rate limits from Mintlify SSR HTML.
  */
 export function parseTokenPlanHtml(html) {
   const text = String(html || "");
@@ -182,30 +161,6 @@ export function parseTokenPlanHtml(html) {
     byId.set(id, { ...prev, name: m[1], rpm, inputTpm, outputTpm });
   }
 
-  // Yield tables: Plan | Tokens | Images/Videos/Songs
-  const yieldRow =
-    /<strong>\s*(Basic|Pro|Max|Turbo)\s*<\/strong>\s*<\/td>\s*<td[^>]*>\s*([^<]+?)\s*<\/td>\s*<td[^>]*>\s*(~?[\d,]+)\s*<\/td>/gi;
-  const yieldHits = { images: {}, videos5s: {}, songs: {} };
-  const yieldBuckets = [];
-  for (const m of text.matchAll(yieldRow)) {
-    const id = normalizePlanName(m[1]);
-    const mid = decodeEntities(m[2]);
-    const val = decodeEntities(m[3]);
-    if (!id || !/~/.test(val)) continue;
-    // Skip if mid looks like RPM (plain int without M/B)
-    if (/^\d+$/.test(mid.replace(/,/g, ""))) continue;
-    yieldBuckets.push({ id, val });
-  }
-  // Docs order: images table, then videos, then songs — 4 plans each
-  const ids = PLAN_ORDER;
-  if (yieldBuckets.length >= 12) {
-    ids.forEach((id, i) => {
-      yieldHits.images[id] = yieldBuckets[i]?.val;
-      yieldHits.videos5s[id] = yieldBuckets[i + 4]?.val;
-      yieldHits.songs[id] = yieldBuckets[i + 8]?.val;
-    });
-  }
-
   const plans = PLAN_ORDER.map((id) => {
     const scraped = byId.get(id);
     const fallback = FALLBACK_TOKEN_PLAN.plans.find((p) => p.id === id);
@@ -215,29 +170,29 @@ export function parseTokenPlanHtml(html) {
       id,
       name: scraped?.name || fallback.name,
       price: scraped?.price || fallback.price,
+      priceNum: Number((scraped?.price || fallback.price).match(/[\d.]+/)?.[0]) || fallback.priceNum,
       tokens: scraped?.tokens || fallback.tokens,
       rpm: scraped?.rpm || fallback.rpm,
       inputTpm: scraped?.inputTpm || fallback.inputTpm,
       outputTpm: scraped?.outputTpm || fallback.outputTpm,
-      images: yieldHits.images[id] || FALLBACK_TOKEN_PLAN.estimates.images[id],
-      videos5s: yieldHits.videos5s[id] || FALLBACK_TOKEN_PLAN.estimates.videos5s[id],
-      songs: yieldHits.songs[id] || FALLBACK_TOKEN_PLAN.estimates.songs[id],
     };
   }).filter(Boolean);
-
-  const estimates = {
-    ...FALLBACK_TOKEN_PLAN.estimates,
-    images: { ...FALLBACK_TOKEN_PLAN.estimates.images, ...yieldHits.images },
-    videos5s: { ...FALLBACK_TOKEN_PLAN.estimates.videos5s, ...yieldHits.videos5s },
-    songs: { ...FALLBACK_TOKEN_PLAN.estimates.songs, ...yieldHits.songs },
-  };
 
   return {
     plans,
     model: FALLBACK_TOKEN_PLAN.model,
-    estimates,
+    unfilteredNote: /Unfiltered requests[\s\S]{0,240}?10x tokens/i.test(text)
+      ? FALLBACK_TOKEN_PLAN.unfilteredNote
+      : null,
+    estimates: null,
     matrix: FEATURE_MATRIX,
     wins: FALLBACK_TOKEN_PLAN.wins,
+    observed: {
+      plans: PLAN_ORDER.every((id) => byId.get(id)?.price && byId.get(id)?.tokens),
+      limits: PLAN_ORDER.every((id) =>
+        byId.get(id)?.rpm && byId.get(id)?.inputTpm && byId.get(id)?.outputTpm
+      ),
+    },
   };
 }
 
@@ -248,15 +203,11 @@ export function buildPlanSheet(plan) {
     return {
       ...fb,
       ...p,
-      images: p.images || plan?.estimates?.images?.[p.id] || fb.images,
-      videos5s: p.videos5s || plan?.estimates?.videos5s?.[p.id] || fb.videos5s,
-      songs: p.songs || plan?.estimates?.songs?.[p.id] || fb.songs,
     };
   });
 
   const matrix = plan?.matrix || FEATURE_MATRIX;
   const wins = plan?.wins || FALLBACK_TOKEN_PLAN.wins;
-  const estimates = plan?.estimates || FALLBACK_TOKEN_PLAN.estimates;
 
   // Compact “everyone gets” vs “unlocks at” for the sheet header story
   const everyone = matrix.filter((r) => r.levels.every((l) => l === "yes")).map((r) => r.label);
@@ -268,10 +219,13 @@ export function buildPlanSheet(plan) {
 
   return {
     model: plan?.model || FALLBACK_TOKEN_PLAN.model,
+    unfilteredNote: plan && Object.hasOwn(plan, "unfilteredNote")
+      ? plan.unfilteredNote
+      : FALLBACK_TOKEN_PLAN.unfilteredNote,
     plans,
     matrix,
     wins,
-    estimates,
+    estimates: null,
     everyone: everyone.slice(0, 6),
     unlocks,
     headline: "Geoff Token Plan",
@@ -284,5 +238,10 @@ export function fingerprintTokenPlan(plan) {
   const payload = (plan?.plans || []).map((p) =>
     [p.id, p.price, p.tokens, p.rpm, p.inputTpm, p.outputTpm].join("|"),
   );
-  return payload.join("::");
+  return [
+    payload.join("::"),
+    plan?.unfilteredNote || "no-unfiltered-note",
+    plan?.observed?.plans,
+    plan?.observed?.limits,
+  ].join("::");
 }

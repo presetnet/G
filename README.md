@@ -16,7 +16,8 @@ Designed to deploy on **Vercel** with a **shared live desk** (same feed in every
 | Stacknet widgets | `/widgets` | public widget catalog |
 | Stacknet node | `/node` | node id / tasks |
 | Geoff catalogs | `/api/catalog/*` | optional auth cookie / preview code |
-| TRIX Packs | `/api/mkt/state` | API-reported Pack mints + Card odds and gross reward multiples |
+| Geoff docs | 24 representative live pages | Body fingerprints across Introduction, Geoff Code, API Reference, and Token Plan; 70 linked pages inventoried |
+| TRIX Packs | `/api/mkt/state`, `/api/mkt/g` + Solana RPC | API-reported Pack mints, Genesis status, observed Base payment maxima, Card odds, and gross reward multiples |
 
 The translator turns diffs into a readable feed and a **temperature** score (cool → blazing).
 
@@ -29,7 +30,7 @@ The translator turns diffs into a readable feed and a **temperature** score (coo
 
 On Vercel, history is **universal** — one shared desk for every browser (incognito included). `/api/status`, `/api/poll`, and `/api/market` are read-only views of that desk. Browser traffic never triggers upstream probes.
 
-The protected Vercel `/api/tick` cron is the only automatic collector. It runs a lightweight TRIX pass every minute and substitutes one full pass every 15 minutes. The minute pass reads the latest 48 generation records and two Pack market-state endpoints directly. A one-time historical pass traverses five mints per minute from the public launch catalog (863 at implementation time), retaining up to 2,000 deduplicated paid Geoff records. During ordinary backfill this is at most eight TRIX requests per minute, or ten when the six-hour launch catalog refresh is due; afterward it is three. Redis is the preferred shared desk; the GitHub `gt-live` branch is the fallback and only receives minute writes when TRIX data or backfill progress changes. Browser refreshes only read the shared desk; the public `/api/sniff` endpoint is disabled. The GitHub workflow is manual recovery only.
+The protected Vercel `/api/tick` cron is the only automatic collector. It runs a lightweight TRIX pass every minute and substitutes one full pass every 15 minutes. The minute pass reads the latest 48 generation records and two Pack market-state endpoints directly. A one-time historical pass traverses up to five token histories per minute from the public launch catalog (863 at implementation time), retaining up to 2,000 deduplicated paid Geoff records. Because other generators can crowd Geoff out of the global recent feed, that same five-request budget reserves two active-token refreshes during backfill and rotates across active token histories after backfill. During ordinary backfill this is at most eight TRIX requests per minute, or ten when the six-hour launch catalog refresh is due; afterward it remains at most eight. Pack payment auditing separately uses one Solana signature request and resolves at most five new program transactions per pass. Redis is the preferred shared desk; the GitHub `gt-live` branch is the fallback and only receives minute writes when TRIX data or backfill progress changes. Browser refreshes only read the shared desk; the public `/api/sniff` endpoint is disabled. The GitHub workflow is manual recovery only.
 
 Required on Vercel:
 - `CRON_SECRET` (protects `/api/tick`)

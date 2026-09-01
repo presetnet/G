@@ -333,7 +333,7 @@ async function sniffStacknetX402() {
     periodEnd: downloads.json?.end ?? null,
     package: "@stacknet/x402payg",
     paymentMints: ["SOL", "USDC", "PAPER"],
-    docsUrl: "https://devconsole-indol.vercel.app/stacks/packages/x402payg",
+    docsUrl: "https://docs.geoff.ai/introduction/x402-payg",
     fingerprint: simpleHash(`${version || ""}|${weeklyDownloads || 0}|${downloads.json?.end || ""}`),
   };
 }
@@ -1041,40 +1041,36 @@ export async function sniffSolanaTokens(owner = DEFAULT_TOKEN_OWNER) {
 
 /** Public docs pages we fingerprint so silent surface moves show up in the feed. */
 const DOCS_SURFACE_PAGES = [
-  // Intro
+  // Introduction
   { id: "api-overview", path: "/introduction/overview", label: "API Overview" },
   { id: "quickstart", path: "/introduction/quickstart", label: "Quickstart" },
   { id: "auth", path: "/introduction/authentication", label: "Authentication" },
+  { id: "x402", path: "/introduction/x402-payg", label: "x402 PAYG" },
   { id: "models", path: "/introduction/models", label: "Models" },
-  // Token plan
-  { id: "token-overview", path: "/token-plan/overview", label: "Token Plan Overview" },
-  { id: "pricing-docs", path: "/token-plan/pricing", label: "Pricing docs" },
-  { id: "usage", path: "/token-plan/usage", label: "Usage & Limits" },
-  // MCP
-  { id: "mcp-overview", path: "/mcp/overview", label: "MCP Overview" },
-  { id: "mcp-tools", path: "/mcp/tools", label: "MCP Tools" },
-  { id: "mcp-examples", path: "/mcp/examples", label: "MCP Examples" },
-  { id: "mcp-transports", path: "/mcp/transports", label: "MCP Transports" },
-  // Features (expanded nav)
-  { id: "hq", path: "/features/hq", label: "HQ" },
-  { id: "claw", path: "/features/agent-mode", label: "Agent Mode (Claw)" },
-  { id: "codev3", path: "/features/codev3", label: "Codev3" },
-  { id: "content-types", path: "/features/content-types", label: "Content Types" },
-  { id: "elements", path: "/features/elements", label: "Elements" },
-  { id: "skills", path: "/features/skills", label: "Skills" },
-  { id: "social", path: "/features/social", label: "Social" },
-  { id: "stacknet-proxy", path: "/features/stacknet-proxy", label: "StackNet Proxy" },
-  { id: "studio-mode", path: "/features/studio-mode", label: "Studio Mode" },
-  { id: "tool-catalog", path: "/features/tool-catalog", label: "Tool Catalog" },
-  // Product + ops docs
+  // Geoff Code
   { id: "geoff-code", path: "/geoff-code/getting-started", label: "Geoff Code" },
+  { id: "geoff-code-use-cases", path: "/geoff-code/use-cases", label: "Geoff Code Use Cases" },
+  { id: "geoff-code-mcp", path: "/geoff-code/mcp", label: "Geoff Code MCP" },
+  { id: "geoff-code-plugins", path: "/geoff-code/plugins", label: "Geoff Code Plugins" },
+  { id: "geoff-code-hooks", path: "/geoff-code/hooks", label: "Geoff Code Hooks" },
+  { id: "geoff-code-skills", path: "/geoff-code/skills", label: "Geoff Code Skills" },
+  { id: "geoff-code-subagents", path: "/geoff-code/subagents", label: "Geoff Code Subagents" },
+  { id: "geoff-code-acp", path: "/geoff-code/acp", label: "Geoff Code ACP" },
+  // API Reference: one representative page per published category.
   { id: "api-reference", path: "/api-reference/overview", label: "API Reference" },
-  { id: "cookbook", path: "/cookbook/overview", label: "Cookbook" },
-  { id: "docs-overview", path: "/docs/overview", label: "Docs Overview" },
-  { id: "agents-docs", path: "/docs/agents", label: "Agent integration" },
-  { id: "security", path: "/docs/security", label: "Security" },
-  { id: "billing-docs", path: "/docs/billing", label: "Billing docs" },
+  { id: "api-text", path: "/api-reference/text/openai-api", label: "OpenAI-compatible API" },
+  { id: "api-speech", path: "/api-reference/speech/t2a-http", label: "Speech API" },
+  { id: "api-training", path: "/api-reference/training/image-lora", label: "Training API" },
+  { id: "api-video", path: "/api-reference/video/text-to-video", label: "Video API" },
+  { id: "api-image", path: "/api-reference/image/text-to-image", label: "Image API" },
+  { id: "api-music", path: "/api-reference/music/generate", label: "Music API" },
+  { id: "api-code", path: "/api-reference/code/execute", label: "Code API" },
+  { id: "api-files", path: "/api-reference/file/upload", label: "File API" },
+  // Token Plan
+  { id: "token-overview", path: "/token-plan/overview", label: "Token Plan Overview" },
+  { id: "usage", path: "/token-plan/usage", label: "Usage & Limits" },
 ];
+const DOCS_LINKED_PAGE_COUNT = 70;
 
 /** Prefer main/article/prose body so shared docs chrome doesn't fake-move every page. */
 function extractDocsBodyText(html = "") {
@@ -1096,10 +1092,10 @@ function extractDocsBodyText(html = "") {
 
 function extractDocsFingerprint(html = "") {
   const title = (html.match(/<title>([^<]+)<\/title>/i) || [])[1] || "";
-  const text = extractDocsBodyText(html).slice(0, 6000);
+  const text = extractDocsBodyText(html).slice(0, 50_000);
   const modelHits = [
     ...new Set(
-      [...text.matchAll(/\b(magma|duce|pyro(?::max)?|preview|stack-embed|mom-preview)\b/gi)].map((m) =>
+      [...text.matchAll(/\b(magma(?:-2\.1)?|pyro(?::max)?|preview|stack-embed|mom-preview)\b/gi)].map((m) =>
         m[0].toLowerCase(),
       ),
     ),
@@ -1107,23 +1103,24 @@ function extractDocsFingerprint(html = "") {
   const featureHits = [
     ...new Set(
       [
-        "codev3",
-        "stacknet proxy",
-        "studio mode",
+        "x402",
+        "plugins",
+        "hooks",
         "skills",
-        "social",
-        "agent mode",
-        "claw",
-        "hq",
+        "subagents",
+        "acp",
         "mcp",
         "geoff code",
         "token plan",
+        "model training",
+        "sandbox",
+        "voice clone",
       ].filter((k) => new RegExp(`\\b${k.replace(/\s+/g, "\\s+")}\\b`, "i").test(text)),
     ),
   ].sort();
   const transportHits = [
     ...new Set(
-      ["sse", "stdio", "streamable http", "websocket", "http"]
+      ["sse", "stdio", "streamable http", "websocket", "http", "acp"]
         .filter((k) => new RegExp(`\\b${k.replace(/\s+/g, "\\s+")}\\b`, "i").test(text)),
     ),
   ].sort();
@@ -1364,7 +1361,7 @@ async function sniffGeoffMaxSolana() {
   };
 }
 
-/** Auth-gated product shells on geoff.ai — allowlisted from docs (catch-all /connect is NOT proof). */
+/** Historically watched auth-gated geoff.ai shells; catch-all /connect is not product proof. */
 const PRODUCT_LANES = [
   { id: "hq", path: "/hq", label: "HQ" },
   { id: "studio", path: "/studio", label: "Studio" },
@@ -1569,6 +1566,8 @@ async function sniffGeoffDocsSurface() {
   }
 
   const okPages = pages.filter((p) => p.ok);
+  const publishedModelLayers = (pages.find((p) => p.id === "models")?.modelHits || [])
+    .filter((id) => ["magma", "magma-2.1", "pyro"].includes(id));
   const fingerprint = simpleHash(
     okPages.map((p) => `${p.id}:${p.hash}`).sort().join("|"),
   );
@@ -1580,6 +1579,10 @@ async function sniffGeoffDocsSurface() {
     ms: Date.now() - started,
     scraped: okPages.length,
     total: DOCS_SURFACE_PAGES.length,
+    linkedPageCount: DOCS_LINKED_PAGE_COUNT,
+    representativeWatch: true,
+    publishedModelLayers,
+    checkedAt: new Date().toISOString(),
     fingerprint,
     pages,
     reason:
@@ -1592,59 +1595,70 @@ async function sniffGeoffDocsSurface() {
 async function sniffGeoffTokenPlan() {
   const started = Date.now();
   try {
-    const [overview, pricing] = await Promise.all([
+    const [overview, usage] = await Promise.all([
       fetchJson(TOKEN_PLAN_URLS.overview),
-      fetchJson(TOKEN_PLAN_URLS.pricing),
+      fetchJson(TOKEN_PLAN_URLS.usage),
     ]);
-    const html = `${overview.text || ""}\n${pricing.text || ""}`;
+    const html = `${overview.text || ""}\n${usage.text || ""}`;
     const parsed = parseTokenPlanHtml(html);
-    const scrapedOk =
-      (overview.ok || pricing.ok) &&
-      parsed.plans.length >= 3 &&
-      parsed.plans.every((p) => p.price && p.tokens);
-    const plan = scrapedOk
-      ? parsed
-      : {
-          ...FALLBACK_TOKEN_PLAN,
-          plans: FALLBACK_TOKEN_PLAN.plans.map((p) => ({ ...p })),
-          matrix: FEATURE_MATRIX,
-          wins: FALLBACK_TOKEN_PLAN.wins,
-        };
+    const plansLive = Boolean(overview.ok && parsed.observed.plans);
+    const limitsLive = Boolean(usage.ok && parsed.observed.limits);
+    const scrapedOk = plansLive && limitsLive;
+    const plan = {
+      ...parsed,
+      observed: { plans: plansLive, limits: limitsLive },
+    };
     const fingerprint = simpleHash(fingerprintTokenPlan(plan));
 
     return {
       source: "geoff.docs.pricing",
-      ok: Boolean(overview.ok || pricing.ok || scrapedOk),
-      status: overview.status || pricing.status || 0,
+      ok: scrapedOk,
+      status: scrapedOk ? 200 : !overview.ok ? overview.status : usage.status || 0,
       ms: Date.now() - started,
       scraped: scrapedOk,
       fingerprint,
       model: plan.model,
+      unfilteredNote: plan.unfilteredNote,
       plans: plan.plans,
       estimates: plan.estimates,
       matrix: plan.matrix || FEATURE_MATRIX,
       wins: plan.wins || FALLBACK_TOKEN_PLAN.wins,
+      observed: plan.observed,
+      sections: {
+        plans: { live: plansLive, status: overview.status, sourceUrl: TOKEN_PLAN_URLS.overview },
+        limits: { live: limitsLive, status: usage.status, sourceUrl: TOKEN_PLAN_URLS.usage },
+        features: { live: overview.ok, status: overview.status, sourceUrl: TOKEN_PLAN_URLS.overview },
+        yields: { live: false, status: null, sourceUrl: null },
+      },
       sourceUrls: TOKEN_PLAN_URLS,
       reason: scrapedOk
         ? null
-        : "Docs HTML parse incomplete — showing last known public Token Plan tables",
+        : "Live Token Plan parse incomplete — showing bundled values for incomplete sections",
     };
   } catch (error) {
     return {
       source: "geoff.docs.pricing",
-      ok: true,
+      ok: false,
       skipped: false,
       status: 0,
       ms: Date.now() - started,
       scraped: false,
       fingerprint: simpleHash(fingerprintTokenPlan(FALLBACK_TOKEN_PLAN)),
       model: FALLBACK_TOKEN_PLAN.model,
+      unfilteredNote: FALLBACK_TOKEN_PLAN.unfilteredNote,
       plans: FALLBACK_TOKEN_PLAN.plans.map((p) => ({ ...p })),
-      estimates: FALLBACK_TOKEN_PLAN.estimates,
+      estimates: null,
       matrix: FEATURE_MATRIX,
       wins: FALLBACK_TOKEN_PLAN.wins,
+      observed: { plans: false, limits: false },
+      sections: {
+        plans: { live: false, status: 0, sourceUrl: TOKEN_PLAN_URLS.overview },
+        limits: { live: false, status: 0, sourceUrl: TOKEN_PLAN_URLS.usage },
+        features: { live: false, status: 0, sourceUrl: TOKEN_PLAN_URLS.overview },
+        yields: { live: false, status: null, sourceUrl: null },
+      },
       sourceUrls: TOKEN_PLAN_URLS,
-      reason: `Docs sniff failed (${error.message}); using cached public Token Plan tables`,
+      reason: `Docs sniff failed (${error.message}); using bundled public Token Plan values`,
     };
   }
 }
@@ -1740,6 +1754,9 @@ export function parseTrixPackMarket(
       status: genesis.status,
       cap: genesis.cap,
       isGenesis: genesis.isGenesis,
+      pricePerPackUsd: genesis.pricePerPackUsd,
+      mostRipped: genesis.mostRipped,
+      memeStatus: genesis.memeStatus,
     } : null,
     levels: levels.map((level) => ({
       id: level.id,
@@ -1766,6 +1783,16 @@ export function parseTrixPackMarket(
     genesisRound: genesisOk ? Number(genesis.round) || null : null,
     genesisMarketStatus: genesisOk ? genesis.status || null : null,
     isGenesis: genesisOk ? Boolean(genesis.isGenesis) : null,
+    genesisPricePerPackUsd: genesisOk && Number.isFinite(Number(genesis.pricePerPackUsd))
+      ? Number(genesis.pricePerPackUsd)
+      : null,
+    mostRippedSymbol: genesisOk && typeof genesis.mostRipped?.symbol === "string"
+      ? genesis.mostRipped.symbol
+      : null,
+    mostRippedBuybackUsd: genesisOk && Number.isFinite(Number(genesis.mostRipped?.buybackUsd))
+      ? Number(genesis.mostRipped.buybackUsd)
+      : null,
+    memeStatus: genesisOk && typeof genesis.memeStatus === "string" ? genesis.memeStatus : null,
     holders: null,
     holderReason: "TRIX does not publish a global Pack/Card holder count or collection mint.",
     available: Number(base?.available) || 0,
@@ -1790,6 +1817,122 @@ export function parseTrixPackMarket(
   };
 }
 
+const TRIX_PACK_PROGRAM = "HTrrq6C6j9NYySUrpSLn9nDjFbKNBD6pS3xBuLppfW4F";
+const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+function decodeBase58(value) {
+  let decoded = 0n;
+  for (const char of value || "") {
+    const digit = BASE58_ALPHABET.indexOf(char);
+    if (digit < 0) return null;
+    decoded = decoded * 58n + BigInt(digit);
+  }
+  let hex = decoded.toString(16);
+  if (hex.length % 2) hex = `0${hex}`;
+  const leadingZeroes = [...(value || "")].findIndex((char) => char !== "1");
+  const prefix = "00".repeat(leadingZeroes < 0 ? value.length : leadingZeroes);
+  return Buffer.from(`${prefix}${hex}`, "hex");
+}
+
+export function parseTrixPackPurchase(transaction, levels = []) {
+  if (!transaction?.meta || transaction.meta.err) return null;
+  if (!(transaction.meta.logMessages || []).some((line) => line.includes("Instruction: BuyPack"))) {
+    return null;
+  }
+  const keys = transaction.transaction?.message?.accountKeys || [];
+  const buyerIndex = keys.findIndex((key) => key?.signer);
+  const buyer = keys[buyerIndex]?.pubkey;
+  if (!buyer) return null;
+  const instructions = [
+    ...(transaction.transaction.message.instructions || []),
+    ...(transaction.meta.innerInstructions || []).flatMap((entry) => entry.instructions || []),
+  ];
+  const buyInstruction = instructions.find((instruction) =>
+    instruction.programId === TRIX_PACK_PROGRAM
+  );
+  const instructionData = decodeBase58(buyInstruction?.data);
+  // Anchor prefixes instructions with an 8-byte discriminator; BuyPack stores its level next.
+  const level = levels[instructionData?.[8]] || null;
+  const paidLamports = instructions
+    .filter((instruction) =>
+      instruction.program === "system" &&
+      instruction.parsed?.type === "transfer" &&
+      instruction.parsed.info?.source === buyer
+    )
+    .reduce((sum, instruction) => sum + (Number(instruction.parsed.info.lamports) || 0), 0);
+  const allInLamports = buyerIndex >= 0
+    ? transaction.meta.preBalances[buyerIndex] - transaction.meta.postBalances[buyerIndex]
+    : null;
+  return {
+    signature: transaction.transaction.signatures?.[0] || null,
+    observedAt: transaction.blockTime ? new Date(transaction.blockTime * 1000).toISOString() : null,
+    buyer,
+    level: level?.id || null,
+    paidLamports,
+    paidSol: paidLamports / 1e9,
+    allInLamports,
+    allInSol: Number.isFinite(allInLamports) ? allInLamports / 1e9 : null,
+    networkFeeLamports: Number(transaction.meta.fee) || 0,
+  };
+}
+
+async function sniffTrixPackPurchases(levels = [], previous = null) {
+  try {
+    const signatures = await solanaRpc("getSignaturesForAddress", [
+      TRIX_PACK_PROGRAM,
+      { limit: 25, commitment: "confirmed" },
+    ]);
+    const scanned = new Set(previous?.scannedSignatures || []);
+    const selected = (signatures || []).filter((entry) => !scanned.has(entry.signature)).slice(0, 5);
+    const settled = await Promise.allSettled(selected.map((entry) =>
+      solanaRpc("getTransaction", [
+        entry.signature,
+        { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 },
+      ])
+    ));
+    const resolvedSignatures = selected.filter((_, index) =>
+      settled[index]?.status === "fulfilled" && settled[index].value
+    );
+    if (selected.length && !resolvedSignatures.length) {
+      throw new Error("Recent TRIX Pack transactions could not be resolved.");
+    }
+    const observed = settled
+      .filter((result) => result.status === "fulfilled")
+      .map((result) => parseTrixPackPurchase(result.value, levels))
+      .filter(Boolean);
+    const bySignature = new Map();
+    for (const record of [...(previous?.records || []), ...observed]) {
+      if (record.signature) bySignature.set(record.signature, record);
+    }
+    const records = [...bySignature.values()]
+      .sort((a, b) => Date.parse(b.observedAt || 0) - Date.parse(a.observedAt || 0))
+      .slice(0, 100);
+    const baseRecords = records.filter((record) => record.level === "base");
+    const baseAllIn = baseRecords.map((record) => record.allInSol).filter(Number.isFinite);
+    return {
+      ok: true,
+      records,
+      observedTransactions: records.length,
+      observedBaseTransactions: baseRecords.length,
+      baseMaxPaidSol: baseRecords.length ? Math.max(...baseRecords.map((record) => record.paidSol)) : null,
+      baseMaxAllInSol: baseAllIn.length ? Math.max(...baseAllIn) : null,
+      scannedSignatures: [...new Set([
+        ...resolvedSignatures.map((entry) => entry.signature),
+        ...(previous?.scannedSignatures || []),
+      ])].slice(0, 250),
+      checkedAt: new Date().toISOString(),
+      fingerprint: bodyHash(records.map((record) =>
+        `${record.signature}:${record.level}:${record.paidLamports}:${record.allInLamports}`
+      ).join("|")),
+      reason: null,
+    };
+  } catch (error) {
+    return previous
+      ? { ...previous, ok: false, stale: true, reason: error?.message || String(error) }
+      : { ok: false, records: [], reason: error?.message || String(error) };
+  }
+}
+
 export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
   const started = Date.now();
   const [recentRes, packRes, genesisRes] = await Promise.all([
@@ -1804,6 +1947,13 @@ export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
     genesis: genesisRes.json,
     genesisStatus: genesisRes.status,
   });
+  if (packs.ok) {
+    packs.purchaseAudit = await sniffTrixPackPurchases(
+      packs.levels,
+      previous?.packs?.purchaseAudit || null,
+    );
+    packs.fingerprint = bodyHash(`${packs.fingerprint}:${packs.purchaseAudit.fingerprint || "none"}`);
+  }
   const catalogAge = Date.now() - Date.parse(previous?.launchCatalogCheckedAt || 0);
   const refreshCatalog =
     !Array.isArray(previous?.tokenMints) ||
@@ -1837,7 +1987,21 @@ export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
   }
   const previouslyScanned = new Set(previous?.scannedTokenMints || []);
   const unscanned = tokenMints.filter((mint) => !previouslyScanned.has(mint));
-  const selectedMints = unscanned.slice(0, Math.max(1, maxMints));
+  const requestBudget = Math.max(1, Math.floor(maxMints));
+  const activeTokenMints = [...new Set(recentRecords.map((record) => record?.tokenMint).filter(Boolean))];
+  const liveReserve = activeTokenMints.length ? Math.min(2, requestBudget) : 0;
+  const backfillBudget = unscanned.length ? Math.max(0, requestBudget - liveReserve) : 0;
+  const backfillMints = unscanned.slice(0, backfillBudget);
+  const activeCandidates = activeTokenMints.filter((mint) => !backfillMints.includes(mint));
+  const activeBudget = requestBudget - backfillMints.length;
+  const activeStart = activeCandidates.length
+    ? (Math.floor(Date.now() / 60_000) * activeBudget) % activeCandidates.length
+    : 0;
+  const activeRefreshMints = Array.from(
+    { length: Math.min(activeBudget, activeCandidates.length) },
+    (_, index) => activeCandidates[(activeStart + index) % activeCandidates.length],
+  );
+  const selectedMints = [...backfillMints, ...activeRefreshMints];
   const settled = await Promise.allSettled(
     selectedMints.map((mint) => fetchJson(`${TRIX_BASE_URL}/api/meme-image/token/${mint}`)),
   );
@@ -1847,16 +2011,17 @@ export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
       result.status === "fulfilled" && Array.isArray(result.value.json) ? result.value.json : [],
     ),
   ];
-  const resolvedTokenMints = selectedMints.filter((_, index) => {
+  const resolvedRequests = selectedMints.filter((_, index) => {
     const result = settled[index];
-    return result?.status === "fulfilled" && result.value.status < 500;
+    return result?.status === "fulfilled" && result.value.ok;
   });
+  const resolvedTokenMints = backfillMints.filter((mint) => resolvedRequests.includes(mint));
   const geoffRecords = parseTrixGeoffRecords([], records);
   const latest = geoffRecords.find((record) => record.imageUrl) || geoffRecords[0] || null;
   const paidLamports = geoffRecords.reduce((sum, record) => sum + (record.feeLamports || 0), 0);
   const ok = recentRes.ok && (
     selectedMints.length === 0 ||
-    resolvedTokenMints.length > 0
+    resolvedRequests.length > 0
   );
   const scannedTokenMints = [
     ...new Set([...(previous?.scannedTokenMints || []), ...resolvedTokenMints]),
@@ -1873,6 +2038,9 @@ export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
     resolvedTokenMints,
     scannedTokenMints,
     recentCount: recentRecords.length,
+    activeTokenCount: activeTokenMints.length,
+    activeRefreshCount: activeRefreshMints.length,
+    activeRefreshMints,
     launchTotal,
     launchCatalogCheckedAt,
     backfillComplete: tokenMints.length > 0 && scannedTokenMints.length >= tokenMints.length,
@@ -1883,7 +2051,7 @@ export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
       geoffRecords.map((record) => `${record.id}:${record.txSignature}:${record.feeLamports}`).join("|"),
     ),
     url: `${TRIX_BASE_URL}/`,
-    note: "TRIX public records label the provider as Geoff and report mainnet payment signatures. This does not independently establish geoff.ai operator identity or an NFT mint.",
+    note: "TRIX public records label the provider as Geoff and report mainnet payment signatures. Active token histories are rotated because the global recent feed can crowd Geoff records out before filtering. This does not independently establish geoff.ai operator identity or an NFT mint.",
     reason: ok ? null : "TRIX recent generations or historical token records could not be resolved.",
   };
 }
@@ -1933,7 +2101,7 @@ export function mergeTrixGeoffHistory(previous = null, observed = null) {
     previous.packs.status >= 200 &&
     previous.packs.status < 300 &&
     Number(previous.packs.minted) > 0;
-  const packs = observed.packs?.ok
+  let packs = observed.packs?.ok
     ? !observed.packs.genesisOk && previousPacksValid && previous.packs.genesisCap != null
       ? {
           ...observed.packs,
@@ -1941,6 +2109,10 @@ export function mergeTrixGeoffHistory(previous = null, observed = null) {
           genesisRound: previous.packs.genesisRound,
           genesisMarketStatus: previous.packs.genesisMarketStatus,
           isGenesis: previous.packs.isGenesis,
+          genesisPricePerPackUsd: previous.packs.genesisPricePerPackUsd,
+          mostRippedSymbol: previous.packs.mostRippedSymbol,
+          mostRippedBuybackUsd: previous.packs.mostRippedBuybackUsd,
+          memeStatus: previous.packs.memeStatus,
           genesisStale: true,
         }
       : observed.packs
@@ -1952,6 +2124,36 @@ export function mergeTrixGeoffHistory(previous = null, observed = null) {
           lastError: observed.packs?.reason || "Current TRIX Pack read failed.",
         }
       : observed.packs;
+  if (observed.packs?.ok) {
+    const currentAt = Date.parse(packs.checkedAt || 0);
+    const currentMinted = Number(packs.minted);
+    const sameRound = previous?.packs?.round === packs.round;
+    const priorSamples = sameRound && Array.isArray(previous.packs.mintSamples)
+      ? previous.packs.mintSamples
+      : sameRound && Number.isFinite(Number(previous.packs.minted))
+        ? [{ at: previous.packs.checkedAt, minted: Number(previous.packs.minted) }]
+        : [];
+    const mintSamples = [...priorSamples, { at: packs.checkedAt, minted: currentMinted }]
+      .filter((sample) => Number.isFinite(Date.parse(sample.at)) && Number.isFinite(sample.minted))
+      .filter((sample, index, samples) =>
+        samples.findIndex((entry) => entry.at === sample.at) === index
+      )
+      .filter((sample) => Date.parse(sample.at) >= currentAt - 60 * 60_000)
+      .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+    const firstSample = mintSamples[0];
+    const windowMinutes = firstSample ? (currentAt - Date.parse(firstSample.at)) / 60_000 : 0;
+    const mintedInWindow = firstSample ? currentMinted - firstSample.minted : 0;
+    packs = {
+      ...packs,
+      mintSamples,
+      mintsPerHour: windowMinutes >= 0.25 && mintedInWindow >= 0
+        ? mintedInWindow * 60 / windowMinutes
+        : null,
+      mintRateWindowMinutes: windowMinutes >= 0.25 ? windowMinutes : null,
+      mintRateMinted: windowMinutes >= 0.25 && mintedInWindow >= 0 ? mintedInWindow : null,
+      mintRateCheckedAt: packs.checkedAt,
+    };
+  }
   return {
     ...(previous || {}),
     ...observed,
@@ -2187,10 +2389,8 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
       tokenPlanFingerprint: bySource["geoff.docs.pricing"]?.fingerprint ?? null,
       docsSurfaceScraped: bySource["geoff.docs.surface"]?.scraped ?? null,
       docsSurfaceFingerprint: bySource["geoff.docs.surface"]?.fingerprint ?? null,
-      mcpToolsDoc:
-        bySource["geoff.docs.surface"]?.pages?.find((p) => p.id === "mcp-tools")?.toolHint ?? null,
-      clawToolsDoc:
-        bySource["geoff.docs.surface"]?.pages?.find((p) => p.id === "claw")?.toolHint ?? null,
+      docsLinkedPageCount: bySource["geoff.docs.surface"]?.linkedPageCount ?? null,
+      docsPublishedModelLayers: bySource["geoff.docs.surface"]?.publishedModelLayers ?? [],
       exploreCount: bySource["geoff.explore"]?.count ?? null,
       exploreAuthors: bySource["geoff.explore"]?.authorCount ?? null,
       exploreFingerprint: bySource["geoff.explore"]?.fingerprint ?? null,

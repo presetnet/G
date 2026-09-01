@@ -14,30 +14,40 @@ function pickTokenPlan(geoffSnap) {
     ? {
         scraped: Boolean(src.scraped),
         model: src.model || FALLBACK_TOKEN_PLAN.model,
+        unfilteredNote: Object.hasOwn(src, "unfilteredNote")
+          ? src.unfilteredNote
+          : FALLBACK_TOKEN_PLAN.unfilteredNote,
         plans: src.plans,
-        estimates: src.estimates || FALLBACK_TOKEN_PLAN.estimates,
+        estimates: null,
         matrix: src.matrix || FEATURE_MATRIX,
         wins: src.wins || FALLBACK_TOKEN_PLAN.wins,
         sourceUrls: src.sourceUrls || TOKEN_PLAN_URLS,
         reason: src.reason || null,
         fingerprint: src.fingerprint || null,
+        observed: src.observed || null,
+        sections: src.sections || null,
       }
     : {
         scraped: false,
         model: FALLBACK_TOKEN_PLAN.model,
+        unfilteredNote: FALLBACK_TOKEN_PLAN.unfilteredNote,
         plans: FALLBACK_TOKEN_PLAN.plans.map((p) => ({ ...p })),
-        estimates: FALLBACK_TOKEN_PLAN.estimates,
+        estimates: null,
         matrix: FEATURE_MATRIX,
         wins: FALLBACK_TOKEN_PLAN.wins,
         sourceUrls: TOKEN_PLAN_URLS,
-        reason: "Using published Token Plan tables from docs.geoff.ai",
+        reason: "Using bundled Token Plan values pending a complete live docs parse",
         fingerprint: null,
+        observed: { plans: false, limits: false },
+        sections: null,
       };
   return {
     ...buildPlanSheet(base),
     scraped: base.scraped,
     reason: base.reason,
     fingerprint: base.fingerprint,
+    observed: base.observed,
+    sections: base.sections,
     sourceUrls: base.sourceUrls,
   };
 }
@@ -61,7 +71,7 @@ function enrichCatalog(catalog, tokenPlan) {
         "Public Token Plan seats on docs.geoff.ai (Basic → Turbo)",
       ],
       research: [
-        { label: "Token Plan pricing", href: TOKEN_PLAN_URLS.pricing },
+        { label: "Token Plan usage limits", href: TOKEN_PLAN_URLS.usage },
         { label: "Token Plan overview", href: TOKEN_PLAN_URLS.overview },
         ...((v.research || []).filter(
           (r) => !/token plan/i.test(r.label || ""),
@@ -118,14 +128,15 @@ export async function buildMarketPayload() {
       title: "Geoff Token Plan (docs)",
       subtitle: tokenPlan.scraped
         ? "Sniffed from docs.geoff.ai"
-        : "Published docs tables",
+        : "Bundled fallback values",
       items: (tokenPlan.plans || []).map(
         (p) =>
           `${p.name}: ${p.price} · ${p.tokens} tokens · ${p.rpm || "—"} RPM`,
       ),
       extras: [
         "shared monthly token pool",
-        `source:${TOKEN_PLAN_URLS.pricing}`,
+        `prices:${TOKEN_PLAN_URLS.overview}`,
+        `limits:${TOKEN_PLAN_URLS.usage}`,
       ],
     },
     ...(intel.inventories || []),
@@ -136,7 +147,7 @@ export async function buildMarketPayload() {
       ...(intel.live.geoff.components || []),
       {
         name: "Token Plan docs",
-        status: tokenPlan.scraped ? "operational" : "published (fallback)",
+        status: tokenPlan.scraped ? "operational" : "bundled fallback",
       },
       {
         name: "Cheapest seat",

@@ -59,6 +59,14 @@ function isScrapeFlap(prevList, currList, diff) {
 }
 
 function isFlapEvent(e) {
+  if (e.kind === "fleet") {
+    const added = (e.details?.bases?.added?.length || 0) +
+      (e.details?.lines?.added?.length || 0);
+    const removed = (e.details?.bases?.removed?.length || 0) +
+      (e.details?.lines?.removed?.length || 0);
+    if (removed === 0 && added >= 4) return true;
+    if (added === 0 && removed >= 4) return true;
+  }
   if (
     !["models", "apiModels", "widgets", "capabilities", "catalog"].includes(e.kind)
   ) {
@@ -444,7 +452,7 @@ export function translate(previous, current) {
         rank: "note",
         title: "Public docs surface moved",
         summary: moved.length
-          ? `Docs moved: ${moved.slice(0, 8).join(" · ")}${moved.length > 8 ? ` (+${moved.length - 8} more)` : ""}. Full Stacknet docs surface (intro · token-plan · MCP · features · Geoff Code · cookbook).`
+          ? `Docs moved: ${moved.slice(0, 8).join(" · ")}${moved.length > 8 ? ` (+${moved.length - 8} more)` : ""}. Representative Geoff docs surface (Introduction · Geoff Code · API Reference · Token Plan).`
           : "Public docs fingerprint changed on docs.geoff.ai.",
         details: {
           from: prevDocsFp,
@@ -924,7 +932,9 @@ export function translate(previous, current) {
   // Engine-tier census — a NEW BASE means a new brain joined the relabeling machine.
   const prevFleet = fleetTaxonomyOf(prev["stacknet.network"]?.models);
   const currFleet = fleetTaxonomyOf(curr["stacknet.network"]?.models);
-  if (prevFleet && currFleet) {
+  const fleetFlap = isScrapeFlap(prevModels, currModels, modelDiff);
+  const fleetSourcesValid = prev["stacknet.network"]?.ok && curr["stacknet.network"]?.ok;
+  if (prevFleet && currFleet && fleetSourcesValid && !fleetFlap) {
     const baseDiff = listDiff(prevFleet.bases, currFleet.bases);
     const lineDiff = listDiff(prevFleet.lines, currFleet.lines);
     if (baseDiff.changed || lineDiff.changed) {

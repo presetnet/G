@@ -386,7 +386,7 @@ Theory under watch in the wild: opencode zen slot x-preview-f-free (display name
 is Geoff/StackNet brains wearing a promo mask. Investigator note: this desk's own runtime
 identifies as ox-alpha — suspect and investigator share a name; nothing here is neutral.
 
-FOR: 1M context matches pyro:max docs; id contains "preview" matching an internal base
+FOR: 1M context matches several current Geoff docs layers; id contains "preview" matching an internal base, but neither fact identifies the supplier
 name; stealth/closed-weight slot style mirrors lane design; Aug 2026 release postdates
 consumer stack (RDAP: geoff.ai reg 2020, magma-rpc 2024 — timeline barrier dead).
 AGAINST: traffic never touches magma/geoff; zen gateway uniformity hides any upstream

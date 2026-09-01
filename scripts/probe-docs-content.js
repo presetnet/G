@@ -53,7 +53,7 @@ async function digHtml(path) {
   ]) {
     await tryUrl(u);
   }
-  for (const p of ["/features/skills", "/mcp/tools", "/features/stacknet-proxy"]) {
+  for (const p of ["/geoff-code/skills", "/geoff-code/mcp", "/api-reference/overview"]) {
     await digHtml(p);
   }
 })().catch((e) => {

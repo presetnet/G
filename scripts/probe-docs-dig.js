@@ -20,22 +20,24 @@ async function dig(path) {
 
 (async () => {
   for (const p of [
-    "/mcp/overview",
-    "/mcp/tools",
-    "/features/tool-catalog",
-    "/features/agent-mode",
-    "/features/skills",
+    "/geoff-code/mcp",
+    "/geoff-code/plugins",
+    "/geoff-code/hooks",
+    "/geoff-code/skills",
+    "/geoff-code/subagents",
+    "/geoff-code/acp",
+    "/introduction/x402-payg",
     "/token-plan/overview",
     "/introduction/models",
-    "/docs/agents",
+    "/api-reference/overview",
   ]) {
     await dig(p);
   }
 
-  const health = await fetch("https://api.stacknet.network/health", {
+  const health = await fetch("https://stacknet.magma-rpc.com/health", {
     headers: { "user-agent": "GeoffThermometer/1.0" },
   }).then((r) => r.json());
-  const net = await fetch("https://api.stacknet.network/network/summary", {
+  const net = await fetch("https://stacknet.magma-rpc.com/network/summary", {
     headers: { "user-agent": "GeoffThermometer/1.0" },
   }).then((r) => r.json());
   console.log("\n== health", {

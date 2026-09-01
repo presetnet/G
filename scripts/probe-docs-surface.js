@@ -3,31 +3,27 @@ const WATCHED = [
   "/introduction/overview",
   "/introduction/quickstart",
   "/introduction/authentication",
+  "/introduction/x402-payg",
   "/introduction/models",
-  "/token-plan/overview",
-  "/token-plan/pricing",
-  "/token-plan/usage",
-  "/mcp/overview",
-  "/mcp/tools",
-  "/mcp/examples",
-  "/mcp/transports",
-  "/features/hq",
-  "/features/agent-mode",
-  "/features/codev3",
-  "/features/content-types",
-  "/features/elements",
-  "/features/skills",
-  "/features/social",
-  "/features/stacknet-proxy",
-  "/features/studio-mode",
-  "/features/tool-catalog",
   "/geoff-code/getting-started",
+  "/geoff-code/use-cases",
+  "/geoff-code/mcp",
+  "/geoff-code/plugins",
+  "/geoff-code/hooks",
+  "/geoff-code/skills",
+  "/geoff-code/subagents",
+  "/geoff-code/acp",
   "/api-reference/overview",
-  "/cookbook/overview",
-  "/docs/overview",
-  "/docs/agents",
-  "/docs/security",
-  "/docs/billing",
+  "/api-reference/text/openai-api",
+  "/api-reference/speech/t2a-http",
+  "/api-reference/training/image-lora",
+  "/api-reference/video/text-to-video",
+  "/api-reference/image/text-to-image",
+  "/api-reference/music/generate",
+  "/api-reference/code/execute",
+  "/api-reference/file/upload",
+  "/token-plan/overview",
+  "/token-plan/usage",
 ];
 
 async function probe(path) {
@@ -66,7 +62,7 @@ async function main() {
     ),
   ].sort();
   console.log("homeNav", hrefs);
-  const missingFromWatch = hrefs.filter((h) => !WATCHED.includes(h) && h !== "/mcp");
+  const missingFromWatch = hrefs.filter((h) => !WATCHED.includes(h));
   console.log("navNotWatched", missingFromWatch);
 
   const results = [];

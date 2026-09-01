@@ -148,6 +148,14 @@ function dedupeDeployBursts(events = []) {
 }
 
 function isFlapEvent(e) {
+  if (e.kind === "fleet") {
+    const added = (e.details?.bases?.added?.length || 0) +
+      (e.details?.lines?.added?.length || 0);
+    const removed = (e.details?.bases?.removed?.length || 0) +
+      (e.details?.lines?.removed?.length || 0);
+    if (removed === 0 && added >= 4) return true;
+    if (added === 0 && removed >= 4) return true;
+  }
   if (
     !["models", "apiModels", "widgets", "capabilities", "catalog"].includes(e.kind)
   ) {
@@ -1044,16 +1052,18 @@ function renderMetrics(latest) {
   if (els.trixGeoffMeta) {
     const paidSol = Number(trixGeoff?.paidSol);
     const latestFee = Number(trixGeoff?.latest?.feeSol);
+    const latestPaidAt = trixGeoff?.latest?.createdAt;
+    const checkedAt = trixGeoff?.checkedAt;
     const scannedMints = trixGeoff?.scannedTokenMints?.length || 0;
     const launchTotal = Number(trixGeoff?.launchTotal);
     const backfill = Number.isFinite(launchTotal) && scannedMints < launchTotal
       ? ` · backfill ${scannedMints}/${launchTotal} mints`
       : "";
     els.trixGeoffMeta.textContent = Number.isFinite(paidSol) && paidSol > 0
-      ? `${paidSol.toFixed(3)} SOL in observed history${Number.isFinite(latestFee) ? ` · latest ${latestFee.toFixed(3)} SOL` : ""}${backfill}`
+      ? `${paidSol.toFixed(3)} SOL observed${Number.isFinite(latestFee) ? ` · latest ${latestFee.toFixed(3)} SOL` : ""}${latestPaidAt ? ` · last paid ${fmtTime(latestPaidAt)}` : ""}${checkedAt ? ` · checked ${fmtTime(checkedAt)}` : ""}${backfill}`
       : trixGeoff?.reason || "waiting for paid generations";
     els.trixGeoffMeta.title =
-      "TRIX supplies the Geoff provider label, fee amount, network, and transaction signature. This does not independently prove geoff.ai operator identity or that the generated image was minted as an NFT.";
+      `TRIX supplies the Geoff provider label, fee amount, network, and transaction signature. The global recent feed can be saturated by other generators, so the collector also rotates through active token histories (${trixGeoff?.activeRefreshCount || 0}/${trixGeoff?.activeTokenCount || 0} this pass). Last paid is activity time; checked is collector time. This does not independently prove geoff.ai operator identity or that the generated image was minted as an NFT.`;
   }
   if (els.trixGeoffReceipt) {
     const signature = trixGeoff?.latest?.txSignature;
@@ -1091,9 +1101,15 @@ function renderMetrics(latest) {
     const formatUsd = (value) => hasNumber(value)
       ? `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
       : "—";
-    const preorderCap = hasNumber(trixPacks?.genesisCap)
-      ? Math.min(20, Math.max(1, Math.floor(Number(trixPacks.genesisCap))))
-      : null;
+    const mintRate = hasNumber(trixPacks?.mintsPerHour)
+      ? `${Number(trixPacks.mintsPerHour).toLocaleString(undefined, {
+          minimumFractionDigits: Number(trixPacks.mintsPerHour) < 1 ? 2 : 1,
+          maximumFractionDigits: 2,
+        })}/hr`
+      : "N/A";
+    const observedSol = (value) => hasNumber(value)
+      ? `${Number(value).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })} SOL`
+      : "N/A";
     const priceStat = (id, label) => {
       const level = levels.get(id);
       const hasReportedMints = Number(level?.minted) > 0;
@@ -1105,10 +1121,12 @@ function renderMetrics(latest) {
     };
     const stats = [
       { label: "Packs left", value: formatCount(trixPacks?.available) },
-      {
-        label: trixPacks?.genesisStale ? "Max per buy*" : "Max per buy",
-        value: preorderCap == null ? "—" : formatCount(preorderCap),
-      },
+      { label: "Mints/hour", value: mintRate },
+      { label: "Base paid max", value: observedSol(trixPacks?.purchaseAudit?.baseMaxPaidSol) },
+      { label: "Base all-in max", value: observedSol(trixPacks?.purchaseAudit?.baseMaxAllInSol) },
+      { label: "Most ripped", value: trixPacks?.mostRippedSymbol || "N/A" },
+      { label: "Reported buyback", value: formatUsd(trixPacks?.mostRippedBuybackUsd) },
+      { label: "Meme status", value: trixPacks?.memeStatus || "N/A" },
       priceStat("base", "Base"),
       priceStat("viral", "Viral"),
       priceStat("hype", "Hype"),
@@ -1116,8 +1134,13 @@ function renderMetrics(latest) {
     els.trixPackMarket.innerHTML = stats.map(({ label, value, muted }) =>
       `<span${muted ? ' class="unverified-price"' : ""}><b>${escapeHtml(label)}</b><i>${escapeHtml(value)}</i></span>`,
     ).join("");
+    const genesisPrice = Number(trixPacks?.genesisPricePerPackUsd);
+    const basePrice = Number(trixPacks?.basePriceUsd);
+    const priceCrossCheck = Number.isFinite(genesisPrice) && Number.isFinite(basePrice)
+      ? ` State Base $${basePrice.toFixed(2)} vs Genesis $${genesisPrice.toFixed(2)}: ${Math.abs(basePrice - genesisPrice) <= 0.01 ? "match" : "mismatch"}.`
+      : "";
     els.trixPackMarket.title =
-      "Available is TRIX-reported primary-sale inventory. Per buy is the preorder request limit. Prices are current API quotes, not verified realized sales; levels with zero reported mints show N/A. An asterisk marks a retained last-valid limit.";
+      `Mints/hour is calculated from recent same-round TRIX API-reported mint totals over a rolling window of up to 60 minutes; it does not prove queueing or throttling. Base paid max is observed Pack consideration. Base all-in max also includes buyer-funded account rent and network fees. TRIX bulk checkout submits one transaction per Pack. Premium Pack levels are excluded from both Base maxima. Most ripped, buyback, and meme status are TRIX Genesis API reports. Prices are current API quotes, not verified realized sales.${priceCrossCheck}`;
   }
   if (els.trixPackTraits) {
     const classes = Array.isArray(trixPacks?.classes) ? trixPacks.classes : [];
@@ -1301,21 +1324,10 @@ function renderDocsCue(board, events = []) {
   els.docsCue.classList.remove("hot");
   if (board?.scraped != null) {
     const total = board.total != null ? `/${board.total}` : "";
-    const mcp = latestMcpToolsHint();
-    els.docsCue.textContent = mcp
-      ? `Armed · ${board.scraped}${total} · MCP ${mcp}`
-      : `Armed · ${board.scraped}${total} pages watched`;
+    const linked = board.linkedPageCount ? ` · ${board.linkedPageCount} live pages inventoried` : "";
+    els.docsCue.textContent = `Armed · ${board.scraped}${total} representative pages${linked}`;
   } else {
     els.docsCue.textContent = "Fingerprinting docs…";
-  }
-}
-
-function latestMcpToolsHint() {
-  try {
-    const pages = memory?.latest?.sources?.["geoff.docs.surface"]?.pages || [];
-    return pages.find((p) => p.id === "mcp-tools")?.toolHint || null;
-  } catch {
-    return null;
   }
 }
 
@@ -1879,40 +1891,13 @@ function renderTokenPlan(plan) {
         <p class="price-amount">${escapeHtml(p.price)}</p>
         <p class="price-tokens"><span>${escapeHtml(p.tokens)}</span> tokens / mo</p>
         <p class="price-pitch">${escapeHtml(p.pitch || p.why || "")}</p>
-        <div class="price-yield-mini">
-          <span><em>Images</em>${escapeHtml(p.images || "—")}</span>
-          <span><em>Videos (5s)</em>${escapeHtml(p.videos5s || "—")}</span>
-          <span><em>Songs</em>${escapeHtml(p.songs || "—")}</span>
-        </div>
       </article>`;
     })
     .join("");
 
   if (els.priceYield) {
-    const est = plan.estimates || {};
-    els.priceYield.innerHTML = `
-      <div class="price-yield-head">
-        <strong>Burn the whole pool on one lane</strong>
-        <span>${escapeHtml(est.note || "Docs estimates · Videos (5s) = 5-second clips")}</span>
-      </div>
-      <div class="price-yield-grid">
-        <article>
-          <em>Images</em>
-          <strong>~150K tokens each</strong>
-          <p>${plan.plans.map((p) => `<span>${escapeHtml(p.name)} ${escapeHtml(p.images || "—")}</span>`).join("")}</p>
-        </article>
-        <article>
-          <em>Videos (5 sec)</em>
-          <strong>~5M tokens per 5-sec clip</strong>
-          <p>${plan.plans.map((p) => `<span>${escapeHtml(p.name)} ${escapeHtml(p.videos5s || "—")}</span>`).join("")}</p>
-        </article>
-        <article>
-          <em>Songs</em>
-          <strong>~3M tokens per song</strong>
-          <p>${plan.plans.map((p) => `<span>${escapeHtml(p.name)} ${escapeHtml(p.songs || "—")}</span>`).join("")}</p>
-        </article>
-      </div>
-      ${est.nsfwNote ? `<p class="price-yield-note">${escapeHtml(est.nsfwNote)}</p>` : ""}`;
+    els.priceYield.hidden = true;
+    els.priceYield.innerHTML = "";
   }
 
   if (els.priceSheet && plan.matrix?.length) {
@@ -1971,19 +1956,20 @@ function renderTokenPlan(plan) {
           </div>`,
           )
           .join("")}
-      </div>`;
+      </div>
+      ${plan.unfilteredNote ? `<p class="price-yield-note">${escapeHtml(plan.unfilteredNote)}</p>` : ""}`;
   }
 
   if (els.priceSource) {
-    const pricing = plan.sourceUrls?.pricing || "https://docs.geoff.ai/token-plan/pricing";
     const overview = plan.sourceUrls?.overview || "https://docs.geoff.ai/token-plan/overview";
-    const note = plan.scraped
-      ? "Sniffed live from public docs"
-      : plan.reason || "Cached public docs tables";
+    const usage = plan.sourceUrls?.usage || "https://docs.geoff.ai/token-plan/usage";
+    const note = plan.sections?.plans?.live && plan.sections?.limits?.live
+      ? "Prices, token pools, and limits sniffed live from public docs"
+      : plan.reason || "Bundled values pending a complete live docs parse";
     els.priceSource.innerHTML = `${escapeHtml(note)} ·
       <a href="${escapeHtml(overview)}" target="_blank" rel="noopener noreferrer">Overview sheet</a>
       ·
-      <a href="${escapeHtml(pricing)}" target="_blank" rel="noopener noreferrer">Pricing</a>
+      <a href="${escapeHtml(usage)}" target="_blank" rel="noopener noreferrer">Usage & Limits</a>
       ·
       <a href="https://geoff.ai/settings/billing" target="_blank" rel="noopener noreferrer">Billing</a>`;
   }

@@ -51,12 +51,12 @@ async function dig(url) {
 
   // Search docs pages for RH mentions in body
   for (const p of [
-    "/features/hq",
-    "/features/social",
-    "/features/tool-catalog",
-    "/mcp/tools",
+    "/geoff-code/use-cases",
+    "/geoff-code/skills",
+    "/geoff-code/subagents",
+    "/geoff-code/mcp",
     "/introduction/models",
-    "/docs/overview",
+    "/api-reference/overview",
   ]) {
     const html = await fetch("https://docs.geoff.ai" + p, {
       headers: { "user-agent": "GeoffThermometer/1.0" },

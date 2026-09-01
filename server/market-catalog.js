@@ -1,5 +1,5 @@
 /**
- * Curated market horsepower catalog (public docs as of mid-2026).
+ * Curated market horsepower catalog reconciled against current public docs.
  * Used by the Market Deep Dive page — separate from the Geoff Thermometer home.
  */
 
@@ -15,6 +15,7 @@ export const marketCatalog = {
       tagline: "Universal Token Plan capacity · multimodal story utility",
       delivers: [
         "Shared monthly token pool across chat, image, music, video, voice, code, agents",
+        "Solana-mainnet x402 PAYG can issue pg_-prefixed API keys funded with real wallet payments",
         "Public /v1/models cards (5) + ~29 network routing lanes — not the same list",
         "Creative shadow booster for storytelling — not a sealed chatbot seat",
         "Built by hwonder — Token Plan tables on docs.geoff.ai",
@@ -22,9 +23,9 @@ export const marketCatalog = {
       horsepower: {
         flagship: "magma",
         context: "Network-routed (varies by model lane)",
-        maxContextLabel: "Lane-dependent · pyro:max docs say 1M",
+        maxContextLabel: "1M on documented magma, magma-2.1, and pyro layers",
         modalities: ["text", "image", "music", "video", "voice", "code", "agents"],
-        apiStyle: "App + Stacknet RPC / OpenAI-compatible /v1/models",
+        apiStyle: "geoff.ai/api gateway · OpenAI, Anthropic, and Stacknet-compatible text APIs",
         pricingModel:
           "Token Plan seats: Basic $19 / Pro $199 / Max $499 / Turbo $999 (monthly token pool)",
       },
@@ -38,20 +39,28 @@ export const marketCatalog = {
           notes: "SOTA media + agents · public /v1/models card · shared pool",
         },
         {
-          id: "pyro",
-          role: "Companion reasoning brain",
-          context: "Network",
-          input: "plan tokens",
-          output: "plan tokens",
-          notes: "Live API card — replaced older duce naming on Stacknet",
-        },
-        {
-          id: "pyro:max",
-          role: "Max reasoning lane",
+          id: "magma-2.1",
+          role: "Agentic multimodal layer",
           context: "1M (docs)",
           input: "plan tokens",
           output: "plan tokens",
-          notes: "Heavier pyro-class multimodal chat",
+          notes: "Current docs layer for long-horizon coding, media, tools, and MoM; not present in the current public /v1/models card list",
+        },
+        {
+          id: "pyro",
+          role: "Agentic coding layer",
+          context: "1M (docs)",
+          input: "plan tokens",
+          output: "plan tokens",
+          notes: "Current docs layer and Geoff Code default · text output · tools, structured output, reasoning, MoM",
+        },
+        {
+          id: "pyro:max",
+          role: "Pyro Max API card",
+          context: "1M (live API description)",
+          input: "plan tokens",
+          output: "plan tokens",
+          notes: "Still present in /v1/models and network routes, but not listed as one of the current docs model layers",
         },
         {
           id: "preview",
@@ -89,7 +98,7 @@ export const marketCatalog = {
       research: [
         { label: "geoff.ai", href: "https://geoff.ai" },
         { label: "hwonder", href: "https://www.hwonder.com/" },
-        { label: "Token Plan pricing", href: "https://docs.geoff.ai/token-plan/pricing" },
+        { label: "Token Plan usage limits", href: "https://docs.geoff.ai/token-plan/usage" },
         { label: "Token Plan overview", href: "https://docs.geoff.ai/token-plan/overview" },
         { label: "Stacknet health", href: "https://stacknet.magma-rpc.com/health" },
         { label: "Network summary", href: "https://stacknet.magma-rpc.com/network/summary" },
