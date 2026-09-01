@@ -2492,7 +2492,9 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       id: item.id,
       name: item?.name ?? null,
       artworkType: item?.artworkType ?? null,
-      imageUrl: item.imageUrl,
+      imageUrl: typeof item.imageUrl === "string" && item.imageUrl.startsWith("/")
+        ? `${TRIX_BASE_URL}${item.imageUrl}`
+        : item.imageUrl,
     }));
   const aggregations = {
     cards: cardsSummary,

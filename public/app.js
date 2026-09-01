@@ -1389,8 +1389,9 @@ function renderTrixMarket(s) {
       const mult = Number.isFinite(Number(card.multiplier))
         ? `${Number(card.multiplier).toLocaleString(undefined, { maximumFractionDigits: 2 })}x`
         : "—";
+      const src = trixImageUrl(card.imageUrl);
       return `<figure class="trix-card" title="${escapeHtml(card.name || "")} · ${mult} · ${price}">
-        <img src="${escapeHtml(card.imageUrl)}" alt="${escapeHtml(card.name || "TRIX boost card")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
+        <img src="${escapeHtml(src)}" alt="${escapeHtml(card.name || "TRIX boost card")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
         <figcaption><b>${escapeHtml(card.name || "—")}</b><i>${mult} <span>${price}</span></i></figcaption>
       </figure>`;
     };
@@ -1403,7 +1404,7 @@ function renderTrixMarket(s) {
       .filter((item) => item?.imageUrl)
       .slice(0, 8)
       .map((item) => `<figure class="trix-mint" title="${escapeHtml(item?.name || "Recent TRIX mint")}">
-        <img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item?.name || "TRIX artwork")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
+        <img src="${escapeHtml(trixImageUrl(item.imageUrl))}" alt="${escapeHtml(item?.name || "TRIX artwork")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
         <figcaption>${escapeHtml(item?.name || "—")}</figcaption>
       </figure>`);
     if (mintTiles.length) {
@@ -1422,6 +1423,10 @@ function renderTrixMarket(s) {
 function finitePositive(value) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0;
+}
+function trixImageUrl(url) {
+  if (typeof url !== "string" || !url) return "";
+  return /^https?:\/\//i.test(url) ? url : `https://trix.market${url.startsWith("/") ? "" : "/"}${url}`;
 }
 
 function renderSettlementStatus(s) {
