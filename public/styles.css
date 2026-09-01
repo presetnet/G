@@ -3044,6 +3044,7 @@ details[open] > .fold-summary::after {
 .trix-card-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
   gap: 0.45rem;
   margin-top: 0.5rem;
 }
@@ -3054,7 +3055,7 @@ details[open] > .fold-summary::after {
 .trix-card img {
   display: block;
   width: 100%;
-  aspect-ratio: 3 / 4;
+  height: 100%;
   object-fit: contain;
   background:
     radial-gradient(120% 120% at 50% 15%, rgba(255, 214, 0, 0.14), rgba(20, 20, 24, 0) 60%),
@@ -3063,14 +3064,15 @@ details[open] > .fold-summary::after {
   border-radius: 8px;
 }
 .trix-card.featured {
-  grid-column: span 2;
-  grid-row: span 2;
+  border-color: rgba(255, 214, 0, 0.6);
+  box-shadow: 0 0 18px rgba(255, 214, 0, 0.18), inset 0 0 0 1px rgba(255, 214, 0, 0.25);
+  background: rgba(255, 214, 0, 0.04);
 }
 .trix-card.featured img {
-  aspect-ratio: 4 / 5;
-  border-color: rgba(255, 214, 0, 0.55);
-  box-shadow: 0 0 22px rgba(255, 214, 0, 0.13), inset 0 0 0 1px rgba(255, 214, 0, 0.18);
+  border-color: rgba(255, 214, 0, 0.65);
+  box-shadow: 0 0 14px rgba(255, 214, 0, 0.14);
 }
+
 .trix-card figcaption {
   margin-top: 0.22rem;
   text-align: center;
@@ -3150,7 +3152,6 @@ details[open] > .fold-summary::after {
   }
   .trix-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .trix-card.featured { grid-column: span 2; grid-row: span 1; }
-  .trix-card.featured img { aspect-ratio: 16 / 10; }
 }
 
 
