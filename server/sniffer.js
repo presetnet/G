@@ -1852,6 +1852,7 @@ const TRIX_BASE_URL = "https://trix.market";
 const MAX_TRIX_HISTORY_RECORDS = 2_000;
 const MAX_TRIX_HISTORY_IDS = 10_000;
 const TRIX_LAUNCH_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
+const TRIX_CARD_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
 const TRIX_CARD_CLASSES = [
   { key: "common", label: "Common", oddsBps: 4_561 },
   { key: "uncommon", label: "Uncommon", oddsBps: 900 },
@@ -2364,6 +2365,184 @@ export function mergeTrixGeoffHistory(previous = null, observed = null) {
   };
 }
 
+let trixCardCatalogCache = {
+  at: 0,
+  cards: [],
+};
+
+export async function sniffTrixMarket({ previous = null } = {}) {
+  const started = Date.now();
+  const endpoints = {
+    artworks: `${TRIX_BASE_URL}/api/artworks`,
+    auctions: `${TRIX_BASE_URL}/api/auctions`,
+    treasury: `${TRIX_BASE_URL}/api/treasury`,
+    preorder: `${TRIX_BASE_URL}/api/mkt/preorder`,
+    activity: `${TRIX_BASE_URL}/api/activity`,
+    leaderboard: `${TRIX_BASE_URL}/api/leaderboard`,
+    recentMints: `${TRIX_BASE_URL}/api/artworks/recent-activity?limit=12`,
+  };
+  let cards = trixCardCatalogCache.cards;
+  const cardsAge = Date.now() - trixCardCatalogCache.at;
+  const cardsStale = !Array.isArray(cards) || cards.length === 0 || cardsAge >= TRIX_CARD_CATALOG_TTL_MS;
+  if (cardsStale) endpoints.cards = `${TRIX_BASE_URL}/api/cards`;
+  const endpointKeys = Object.keys(endpoints);
+  const settled = await Promise.allSettled(endpointKeys.map((key) => fetchJson(endpoints[key])));
+  const results = {};
+  const failures = [];
+  settled.forEach((result, index) => {
+    const key = endpointKeys[index];
+    if (result.status === "fulfilled" && result.value?.ok) {
+      results[key] = result.value.json;
+    } else {
+      const meta = result.status === "fulfilled" ? result.value : result.reason;
+      failures.push(
+        `${key}:${meta?.status ?? 0}:${meta?.reason || meta?.error || meta?.message || "error"}`,
+      );
+    }
+  });
+  let cardsSummary = { count: null, cards: [], maxMultiplier: null };
+  if (results.cards && Array.isArray(results.cards)) {
+    cardsSummary.cards = results.cards
+      .map((card) => ({
+        id: card?.id ?? null,
+        name: card?.name ?? null,
+        slot: Number.isFinite(Number(card?.slot)) ? Number(card.slot) : null,
+        multiplier: Number.isFinite(Number(card?.multiplier)) ? Number(card.multiplier) : null,
+        priceSol: Number.isFinite(Number(card?.priceSol)) ? Number(card.priceSol) : null,
+        imageUrl: typeof card?.imageUrl === "string" && card.imageUrl.startsWith("/")
+          ? `${TRIX_BASE_URL}${card.imageUrl}`
+          : (typeof card?.imageUrl === "string" ? card.imageUrl : null),
+        active: Boolean(card?.active),
+        discountActive: Boolean(card?.discountActive),
+        discountPercent: Number.isFinite(Number(card?.discountPercent))
+          ? Number(card.discountPercent)
+          : null,
+      }))
+      .filter((card) => card.id);
+    cardsSummary.count = cardsSummary.cards.length;
+    cardsSummary.maxMultiplier = cardsSummary.cards.reduce(
+      (max, card) => Math.max(max, Number(card.multiplier) || 0),
+      0,
+    ) || null;
+    trixCardCatalogCache = { at: Date.now(), cards: cardsSummary.cards };
+  } else {
+    cardsSummary.cards = cards;
+    cardsSummary.count = cards.length || null;
+    cardsSummary.maxMultiplier = cards.reduce(
+      (max, card) => Math.max(max, Number(card.multiplier) || 0),
+      0,
+    ) || null;
+  }
+  const artworks = Array.isArray(results.artworks) ? results.artworks : [];
+  let artworkTotal = null;
+  let artworkPrinted = null;
+  let artworkPrintedSupplySum = null;
+  if (results.artworks) {
+    artworkTotal = artworks.length;
+    artworkPrinted = artworks.filter((item) => Number(item?.printedSupply) > 0).length;
+    artworkPrintedSupplySum = artworks.reduce(
+      (sum, item) => sum + (Number.isFinite(Number(item?.printedSupply)) ? Number(item.printedSupply) : 0),
+      0,
+    );
+  }
+  const auctions = Array.isArray(results.auctions) ? results.auctions : [];
+  const isLive = (auction) =>
+    (auction?.status !== "closed" &&
+      auction?.status !== "sold" &&
+      auction?.status !== "cancelled") &&
+    Number.isFinite(Number(auction?.startingPriceLamports)) &&
+    Number(auction.startingPriceLamports) >= 0;
+  const activeAuctions = auctions.filter(isLive);
+  const activeStartLamports = activeAuctions
+    .map((auction) => Number(auction?.startingPriceLamports))
+    .filter((value) => Number.isFinite(value) && value >= 0);
+  const treasury = {
+    balanceSol: Number.isFinite(Number(results.treasury?.balance))
+      ? Number(results.treasury.balance)
+      : null,
+    totalPoints: Number.isFinite(Number(results.treasury?.totalPoints))
+      ? Number(results.treasury.totalPoints)
+      : null,
+  };
+  const preorder = {
+    tcg: Boolean(results.preorder?.tcg),
+    round: results.preorder?.round ?? null,
+    cap: Number.isFinite(Number(results.preorder?.cap)) ? Number(results.preorder.cap) : null,
+    pricePerPackUsd: Number.isFinite(Number(results.preorder?.pricePerPackUsd))
+      ? Number(results.preorder.pricePerPackUsd)
+      : null,
+    mostRippedSymbol: results.preorder?.mostRipped?.symbol ?? null,
+    mostRippedBuybackUsd: Number.isFinite(Number(results.preorder?.mostRipped?.buybackUsd))
+      ? Number(results.preorder.mostRipped.buybackUsd)
+      : null,
+  };
+  const activityItems = Array.isArray(results.activity?.items) ? results.activity.items : [];
+  const leaderboard = Array.isArray(results.leaderboard?.leaderboard)
+    ? results.leaderboard.leaderboard
+    : [];
+  const leaderboardPoints = leaderboard.reduce(
+    (sum, entry) => sum + (Number.isFinite(Number(entry?.points)) ? Number(entry.points) : 0),
+    0,
+  );
+  const recentMints = Array.isArray(results.recentMints) ? results.recentMints : [];
+  const recentMintsSummary = recentMints
+    .filter((item) => item?.id && typeof item?.imageUrl === "string")
+    .slice(0, 12)
+    .map((item) => ({
+      id: item.id,
+      name: item?.name ?? null,
+      artworkType: item?.artworkType ?? null,
+      imageUrl: item.imageUrl,
+    }));
+  const aggregations = {
+    cards: cardsSummary,
+    artworks: {
+      total: artworkTotal,
+      printed: artworkPrinted,
+      printedSupply: artworkPrintedSupplySum,
+    },
+    auctions: {
+      active: activeStartLamports.length || null,
+      minStartSol: activeStartLamports.length
+        ? Math.min(...activeStartLamports) / 1e9
+        : null,
+      maxStartSol: activeStartLamports.length
+        ? Math.max(...activeStartLamports) / 1e9
+        : null,
+    },
+    treasury,
+    preorder,
+    activity: {
+      items: activityItems.length,
+      hasMore: Boolean(results.activity?.hasMore),
+    },
+    leaderboard: {
+      entries: leaderboard.length || null,
+      totalPoints: leaderboardPoints || null,
+    },
+    recentMints: recentMintsSummary,
+  };
+  const ok = Boolean(results.cards || results.artworks || results.auctions || results.treasury);
+  return {
+    source: "trix.market",
+    ok,
+    status: ok ? 200 : 0,
+    ms: Date.now() - started,
+    checkedAt: new Date().toISOString(),
+    cardsCached: !results.cards && cardsStale ? false : !results.cards,
+    cardsCatalogAgeMs: Number.isFinite(trixCardCatalogCache.at)
+      ? Date.now() - trixCardCatalogCache.at
+      : null,
+    ...aggregations,
+    fingerprint: bodyHash(
+      JSON.stringify(aggregations),
+    ),
+    url: `${TRIX_BASE_URL}/`,
+    note: "Aggregate-only counts and totals from TRIX public APIs (/api/cards, /api/artworks, /api/auctions, /api/treasury, /api/mkt/preorder, /api/activity, /api/leaderboard). No individual holder, artwork owner, auction bidder, or leaderboard identity is kept or displayed. Card artwork is shown from TRIX's own image URLs; the card catalog and recent-mint tile feed are cached for six hours. Physical packaging is not represented by any of these endpoints; the TCG flag is API-reported and false.",
+    reason: failures.length ? `Partial: ${failures.join("; ")}.` : null,
+  };
+}
+
 export async function runSniff({ forceMiningSurface = false, previous = null } = {}) {
   const startedAt = new Date().toISOString();
   const settled = await Promise.allSettled([
@@ -2378,6 +2557,7 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
     sniffGeoffPublicSurfaces(),
     sniffGeoffSubscription(),
     sniffTrixGeoff({ previous: previous?.sources?.["trix.geoff"] || null }),
+    sniffTrixMarket(),
     sniffStacknetHealth(),
     sniffStacknetRoot(),
     sniffStacknetNetwork(),
@@ -2551,9 +2731,21 @@ miningArchiveGeneratedAt: bySource["surface.mining"]?.archiveGeneratedAt ?? null
       publicSurfacesLive: bySource["geoff.public.surfaces"]?.liveCount ?? null,
       publicSurfacesTotal: bySource["geoff.public.surfaces"]?.total ?? null,
       publicSurfacesFingerprint: bySource["geoff.public.surfaces"]?.fingerprint ?? null,
-      trixGeoffCount: bySource["trix.geoff"]?.count ?? null,
+trixGeoffCount: bySource["trix.geoff"]?.count ?? null,
       trixGeoffPaidSol: bySource["trix.geoff"]?.paidSol ?? null,
       trixGeoffFingerprint: bySource["trix.geoff"]?.fingerprint ?? null,
+      trixCardCount: bySource["trix.market"]?.cards?.count ?? null,
+      trixCardMaxMultiplier: bySource["trix.market"]?.cards?.maxMultiplier ?? null,
+      trixArtworkCount: bySource["trix.market"]?.artworks?.total ?? null,
+      trixArtworkPrinted: bySource["trix.market"]?.artworks?.printed ?? null,
+      trixAuctionCount: bySource["trix.market"]?.auctions?.active ?? null,
+      trixTreasurySol: bySource["trix.market"]?.treasury?.balanceSol ?? null,
+      trixTreasuryPoints: bySource["trix.market"]?.treasury?.totalPoints ?? null,
+      trixActivityCount: bySource["trix.market"]?.activity?.items ?? null,
+      trixLeaderboardEntries: bySource["trix.market"]?.leaderboard?.entries ?? null,
+      trixTcgActive: Boolean(bySource["trix.market"]?.preorder?.tcg),
+      trixRecentMints: bySource["trix.market"]?.recentMints ?? [],
+      trixMarketFingerprint: bySource["trix.market"]?.fingerprint ?? null,
       subscriptionLiveCount: bySource["geoff.subscription"]?.liveCount ?? null,
       subscriptionTotal: bySource["geoff.subscription"]?.total ?? null,
       subscriptionFingerprint: bySource["geoff.subscription"]?.fingerprint ?? null,

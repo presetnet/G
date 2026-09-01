@@ -3007,6 +3007,143 @@ details[open] > .fold-summary::after {
   line-height: 1.35;
 }
 
+.trix-mkt-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.22rem;
+  margin-top: 0.35rem;
+}
+
+.trix-mkt-grid > span {
+  min-width: 0;
+  padding: 0.2rem 0.28rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: rgba(255, 214, 10, 0.035);
+  font-family: var(--font-mono);
+}
+
+.trix-mkt-grid b,
+.trix-mkt-grid i {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trix-mkt-grid b {
+  color: var(--muted);
+  font-size: 0.5rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.trix-mkt-grid i {
+  color: var(--ink);
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.trix-mkt-grid .unverified-price {
+  border-color: rgba(161, 161, 170, 0.2);
+  background: rgba(161, 161, 170, 0.025);
+}
+
+.trix-mkt-grid .unverified-price b,
+.trix-mkt-grid .unverified-price i {
+  color: rgba(161, 161, 170, 0.62);
+}
+
+.trix-card-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+}
+
+.trix-card {
+  margin: 0;
+  min-width: 0;
+}
+
+.trix-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: contain;
+  background:
+    radial-gradient(120% 120% at 50% 18%, rgba(255, 214, 10, 0.12), rgba(20, 20, 24, 0) 55%),
+    rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 214, 10, 0.18);
+  border-radius: 6px;
+}
+
+.trix-card figcaption {
+  margin-top: 0.18rem;
+}
+
+.trix-card figcaption b,
+.trix-card figcaption i {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font-family: var(--font-mono);
+}
+
+.trix-card figcaption b {
+  color: var(--ink);
+  font-size: 0.5rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.trix-card figcaption i {
+  color: var(--muted);
+  font-size: 0.48rem;
+  font-style: normal;
+}
+
+.trix-card figcaption i span {
+  display: block;
+}
+
+.trix-mint-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+}
+
+.trix-mint {
+  margin: 0;
+  min-width: 0;
+}
+
+.trix-mint img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.trix-mint figcaption {
+  margin-top: 0.14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.46rem;
+  text-align: center;
+}
+
 @media (max-width: 760px) {
   .trix-pack-metric {
     grid-row: auto;
@@ -3014,8 +3151,17 @@ details[open] > .fold-summary::after {
   }
 
   .trix-pack-market,
-  .trix-pack-traits {
+  .trix-pack-traits,
+  .trix-mkt-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trix-card-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .trix-mint-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

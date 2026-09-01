@@ -230,6 +230,9 @@ const els = {
   trixPacksMeta: document.getElementById("trixPacksMeta"),
 trixPackMarket: document.getElementById("trixPackMarket"),
   trixPackTraits: document.getElementById("trixPackTraits"),
+  trixMarketCount: document.getElementById("trixMarketCount"),
+  trixMarketMeta: document.getElementById("trixMarketMeta"),
+  trixMarketStats: document.getElementById("trixMarketStats"),
   pond0xMiners: document.getElementById("pond0xMiners"),
   pond0xMeta: document.getElementById("pond0xMeta"),
   keysoldUsd: document.getElementById("keysoldUsd"),
@@ -760,6 +763,33 @@ const PROOFS = {
       `curl -s https://api.mainnet-beta.solana.com -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"getBalance","params":["cPUtmyb7RZhCaTusCb4qnPJjVTbwpJ6SpXUCvnBDU4a",{"commitment":"confirmed"}]}'`,
     ],
   },
+  trixMarket: {
+    title: "TRIX collectibles",
+    explain:
+      "Aggregate-only counts read from TRIX public APIs: boost Card roster, minted artworks, live auctions, treasury, pre-order TCG flag, and the public activity feed. No individual holder, artwork owner, auction bidder, or leaderboard identity is kept or displayed — totals only. The TCG flag is API-reported (false) and no endpoint represents physical packaging.",
+    sources: ["trix.market"],
+    fields: [
+      "trixCardCount",
+      "trixCardMaxMultiplier",
+      "trixArtworkCount",
+      "trixArtworkPrinted",
+      "trixAuctionCount",
+      "trixTreasurySol",
+      "trixTreasuryPoints",
+      "trixActivityCount",
+      "trixLeaderboardEntries",
+      "trixTcgActive",
+      "trixMarketFingerprint",
+    ],
+    curls: [
+      "curl -s https://trix.market/api/cards",
+      "curl -s https://trix.market/api/artworks",
+      "curl -s https://trix.market/api/auctions",
+      "curl -s https://trix.market/api/treasury",
+      "curl -s https://trix.market/api/mkt/preorder",
+      "curl -s https://trix.market/api/activity",
+    ],
+  },
 };
 
 const CARD_PROOF_ORDER = [
@@ -773,8 +803,9 @@ const CARD_PROOF_ORDER = [
   "keySale",
 "ghostCount",
   "fleetCount",
-  "x402Downloads",
-  "pond0xMiners",
+"x402Downloads",
+  "pond0xMining",
+  "trixMarket",
 ];
 
 function openProof(key) {
@@ -1188,6 +1219,7 @@ function renderMetrics(latest) {
     els.trixPackTraits.title =
       "Gross reward multiplier applies to Pack USD price before owner, creator, and meme-pool shares. Early claims may pay less than the owner's full share.";
   }
+renderTrixMarket(s);
   renderSettlementStatus(s);
   renderKeySale(s);
   if (els.ghostCount) {
@@ -1266,6 +1298,130 @@ function renderMetrics(latest) {
       ? "Community-only aggregation: no wallet identities, no user addresses, no login required."
       : "Collector offline or first sample not yet decoded.";
   }
+}
+
+function renderTrixMarket(s) {
+  if (!els.trixMarketCount) return;
+  const fmt = (value, digits = 0) =>
+    Number.isFinite(Number(value)) && Number(value) !== 0
+      ? Number(value).toLocaleString(undefined, { maximumFractionDigits: digits })
+      : "—";
+  const marketData = lastLatest?.sources?.["trix.market"];
+  const cards = Array.isArray(marketData?.cards?.cards) ? marketData.cards.cards : [];
+  const artworks = marketData?.artworks || {};
+  if (cards.length) {
+    const top = cards
+      .filter((card) => card.active)
+      .sort((a, b) => (Number(b.multiplier) || 0) - (Number(a.multiplier) || 0))[0];
+    let text = `${cards.length} boost cards`;
+    if (top?.name && Number.isFinite(Number(top.multiplier))) {
+      text += ` · ${top.name} ${Number(top.multiplier).toLocaleString(undefined, { maximumFractionDigits: 2 })}x`;
+    }
+    els.trixMarketCount.textContent = text;
+    els.trixMarketCount.title =
+      "Boost Card roster reported by TRIX /api/cards with their stated multiplier and SOL ask. Artwork shown from TRIX's own image URLs.";
+  } else if (els.trixMarketMeta) {
+    els.trixMarketCount.textContent = finitePositive(artworks.total)
+      ? `${fmt(artworks.total)} artworks`
+      : "—";
+  }
+  if (els.trixMarketMeta) {
+    const bits = [];
+    if (marketData?.cardsCached) bits.push("card catalog cached");
+    if (marketData?.checkedAt) bits.push(`checked ${fmtTime(marketData.checkedAt)}`);
+    if (!marketData?.ok && marketData?.reason) bits.push("partial read");
+    els.trixMarketMeta.textContent = bits.length ? bits.join(" · ") : "waiting on TRIX public endpoints";
+  }
+  if (els.trixMarketStats) {
+    const stats = [];
+    if (finitePositive(artworks.total)) {
+      stats.push({
+        b: "Artworks minted",
+        i: `${fmt(artworks.total)} · ${fmt(artworks.printed)} editions`,
+      });
+      if (finitePositive(artworks.printedSupply)) {
+        stats.push({ b: "Printed supply", i: fmt(artworks.printedSupply) });
+      }
+    }
+    const auctions = marketData?.auctions || {};
+    if (finitePositive(auctions.active)) {
+      const range = (auctions.minStartSol != null && auctions.maxStartSol != null && Number.isFinite(Number(auctions.minStartSol)) && Number.isFinite(Number(auctions.maxStartSol)))
+        ? ` · ${Number(auctions.minStartSol).toFixed(3)}–${Number(auctions.maxStartSol).toFixed(3)} SOL`
+        : "";
+      stats.push({ b: "Live auctions", i: `${fmt(auctions.active)}${range}` });
+    }
+    const treasury = marketData?.treasury || {};
+    if (treasury.balanceSol != null && Number.isFinite(Number(treasury.balanceSol))) {
+      stats.push({
+        b: "Treasury",
+        i: `${fmt(treasury.balanceSol, 2)} SOL${treasury.totalPoints != null ? ` · ${fmt(treasury.totalPoints)} pts` : ""}`,
+      });
+    }
+    const preorder = marketData?.preorder || {};
+    if (preorder.pricePerPackUsd != null && Number.isFinite(Number(preorder.pricePerPackUsd))) {
+      stats.push({
+        b: "Preorder",
+        i: `$${Number(preorder.pricePerPackUsd).toFixed(2)}${preorder.cap != null ? ` · cap ${fmt(preorder.cap)}` : ""}`,
+      });
+    }
+    const lb = marketData?.leaderboard || {};
+    if (lb.entries != null) {
+      stats.push({
+        b: "Leaderboard",
+        i: `${fmt(lb.entries)} entries${lb.totalPoints != null ? ` · ${fmt(lb.totalPoints)} pts` : ""}`,
+      });
+    }
+    const activity = marketData?.activity || {};
+    if (finitePositive(activity.items)) {
+      stats.push({ b: "Live sales", i: fmt(activity.items) });
+    }
+    let html = stats
+      .map(({ b, i }) => `<span><b>${escapeHtml(b)}</b><i>${escapeHtml(i)}</i></span>`)
+      .join("");
+    if (html) html = `<div class="trix-mkt-grid">${html}</div>`;
+    const boostCards = cards
+      .filter((card) => card.imageUrl && card.active !== false)
+      .sort((a, b) => ((Number(a.slot) || 0) - (Number(b.slot) || 0)) || (Number(b.multiplier) || 0) - (Number(a.multiplier) || 0));
+    const cardChart = (card) => {
+      const price = card.priceSol != null && Number.isFinite(Number(card.priceSol))
+        ? `${Number(card.priceSol).toLocaleString(undefined, { maximumFractionDigits: 3 })} SOL`
+        : "—";
+      const mult = Number.isFinite(Number(card.multiplier))
+        ? `${Number(card.multiplier).toLocaleString(undefined, { maximumFractionDigits: 2 })}x`
+        : "—";
+      return `<figure class="trix-card" title="${escapeHtml(card.name || "")} · ${mult} · ${price}">
+        <img src="${escapeHtml(card.imageUrl)}" alt="${escapeHtml(card.name || "TRIX boost card")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
+        <figcaption><b>${escapeHtml(card.name || "—")}</b><i>${mult} <span>${price}</span></i></figcaption>
+      </figure>`;
+    };
+    if (boostCards.length) {
+      html += `<div class="trix-card-grid">${boostCards.map(cardChart).join("")}</div>`;
+      stats.push({ b: "Boost cards", i: "" });
+    }
+    const mints = Array.isArray(marketData?.recentMints) ? marketData.recentMints : [];
+    const mintTiles = mints
+      .filter((item) => item?.imageUrl)
+      .slice(0, 8)
+      .map((item) => `<figure class="trix-mint" title="${escapeHtml(item?.name || "Recent TRIX mint")}">
+        <img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item?.name || "TRIX artwork")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
+        <figcaption>${escapeHtml(item?.name || "—")}</figcaption>
+      </figure>`);
+    if (mintTiles.length) {
+      html += `<div class="trix-mint-grid">${mintTiles.join("")}</div>`;
+      stats.push({ b: "Recent mints", i: "" });
+    }
+    if (!html) {
+      html = `<div class="trix-mkt-grid"><span class="unverified-price"><b>Market</b><i>waiting for a valid TRIX read</i></span></div>`;
+    }
+    els.trixMarketStats.innerHTML = html;
+    els.trixMarketStats.title =
+      marketData?.note ||
+      "Aggregate counts from TRIX public endpoints. No holder, auction, or leaderboard identities are kept or shown.";
+  }
+}
+function finitePositive(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0;
 }
 
 function renderSettlementStatus(s) {
