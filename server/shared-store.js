@@ -6,6 +6,7 @@
 
 import { config } from "./config.js";
 import { pruneDailyActivity } from "./daily-activity.js";
+import { emptyPond0x, prunePond0x } from "./pond0x.js";
 import { normalizeEvents } from "./translator.js";
 
 const REDIS_KEY = process.env.GT_REDIS_KEY || "gt:live:desk";
@@ -55,6 +56,7 @@ function emptyBundle() {
     latest: null,
     events: [],
     dailyActivity: [],
+    pond0x: emptyPond0x(),
     state: {
       startedAt: null,
       lastPollAt: null,
@@ -96,6 +98,7 @@ export function normalizeBundle(raw) {
     latest: raw.latest || null,
     events: pruneEvents(raw.events || []),
     dailyActivity: pruneDailyActivity(raw.dailyActivity || [], config.heatmapDays),
+    pond0x: prunePond0x(raw.pond0x || null, config.heatmapDays),
     state: { ...base.state, ...(raw.state || {}) },
   };
 }

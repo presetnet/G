@@ -1,6 +1,7 @@
 import { config } from "./config.js";
 import { compileBriefing } from "./briefing.js";
 import { upsertDailyActivity } from "./daily-activity.js";
+import { upsertPond0x } from "./pond0x.js";
 import { mergeTrixGeoffHistory, runSniff } from "./sniffer.js";
 import {
   loadSharedBundle,
@@ -137,6 +138,7 @@ export async function getStoredPayload() {
     latest,
     events,
     dailyActivity,
+    pond0x: null,
     state,
     temperature: computeTemperature(events, latest),
     config: publicConfig(),
@@ -153,6 +155,7 @@ export async function getSharedPayload({ sniffLive = true, forceMiningSurface = 
   let newEvents = [];
   let events = shared.events || [];
   let dailyActivity = shared.dailyActivity || [];
+  let pond0x = shared.pond0x || null;
   let persisted = false;
   let persistError = null;
 
@@ -169,6 +172,10 @@ export async function getSharedPayload({ sniffLive = true, forceMiningSurface = 
     dailyActivity = upsertDailyActivity(shared.dailyActivity || [], newEvents, {
       heatmapDays: config.heatmapDays,
     });
+    pond0x = upsertPond0x(
+      shared.pond0x || null,
+      snapshot.sources?.["pond0x.mining"],
+    );
     latest = snapshot;
 
     // This live path is reserved for explicit internal callers; public routes use sniffLive=false.
@@ -179,6 +186,7 @@ export async function getSharedPayload({ sniffLive = true, forceMiningSurface = 
           latest: snapshot,
           events,
           dailyActivity,
+          pond0x,
           state: {
             startedAt: shared.state?.startedAt || new Date().toISOString(),
             lastPollAt: snapshot.takenAt,
@@ -200,6 +208,7 @@ export async function getSharedPayload({ sniffLive = true, forceMiningSurface = 
     events,
     newEvents,
     dailyActivity,
+    pond0x,
     state: {
       ...(shared.state || {}),
       lastPollAt: latest?.takenAt || shared.state?.lastPollAt || null,

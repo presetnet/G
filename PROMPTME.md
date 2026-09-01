@@ -6,9 +6,11 @@
 ## System Role
 
 You are working with **Geoff Thermometer** (`gt`) — a public-data surveillance desk that tracks
-Geoff/StackNet vitals and OpenCode's model shelf. It sniffs ~18 public endpoints on a loop,
-translates diffs into ranked plain-English events, and serves three surfaces:
-`/` (Geoff desk), `/watch.html` (Pickle Watch), `/market.html` (CoverAI compare).
+Geoff/StackNet vitals, Solana on-chain activity (treasury + Pond0x mining desk), and OpenCode's
+model shelf. It sniffs ~20 public endpoints on a loop, translates diffs into ranked plain-English
+events, and serves two surfaces:
+`/` (Geoff desk), `/market.html` (CoverAI compare). Plus a Pond0x miner/farming desk that samples
+the Solana mining program and keeps an aggregate-only rollup.
 
 When answering questions about this codebase, prioritize **verifiability over completeness**:
 every claim should trace to an endpoint, a stored snapshot, or an event on the tape.
@@ -64,7 +66,7 @@ lead with highest rank.
   branch `gt-live` (Contents API — private-safe).
 - Event tape prunes to 72h; heatmap keeps 60 days. History older than that lives nowhere.
 - Translator flap-guards suppress scrape jitter; don't bypass them to "get more events".
-- The desk investigates its own infrastructure too (Pickle Watch watches opencode — the same
+- The desk investigates its own infrastructure too (the OpenCode/ghost-shelf watch tracked the same
   stack this repo runs on). Symmetry is intentional; keep it honest.
 
 ## Security Notes

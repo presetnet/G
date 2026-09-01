@@ -1039,6 +1039,191 @@ export async function sniffSolanaTokens(owner = DEFAULT_TOKEN_OWNER) {
   }
 }
 
+const POND0X_PROGRAM = "T1pyyaTNZsKv2WcRAB8oVnk93mLJw2XzjtVYqCsaHqt";
+const POND0X_TREASURY = "cPUtmyb7RZhCaTusCb4qnPJjVTbwpJ6SpXUCvnBDU4a";
+const POND0X_SAMPLE_TARGET = 10;
+const POND0X_QUIET_MS = 90 * 1000;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function getTransactionWithRetry(signature) {
+  const attempt = () =>
+    solanaRpc("getTransaction", [
+      signature,
+      { encoding: "jsonParsed", maxSupportedTransactionVersion: 0, commitment: "confirmed" },
+    ]).catch(() => null);
+  let tx = await attempt();
+  if (!tx) {
+    await sleep(250);
+    tx = await attempt();
+  }
+  return tx;
+}
+
+async function samplePond0xMiners(rows, target = POND0X_SAMPLE_TARGET) {
+  const feePayers = new Set();
+  let decoded = 0;
+  const span = Math.max(1, (rows || []).length - 1);
+  for (let k = 0; k < target; k += 1) {
+    const idx = Math.round((k * span) / Math.max(1, target - 1));
+    const row = rows?.[idx];
+    if (!row?.signature) continue;
+    const tx = await getTransactionWithRetry(row.signature);
+    if (tx?.meta?.err || !tx?.transaction?.message?.accountKeys?.length) continue;
+    decoded += 1;
+    const first = tx.transaction.message.accountKeys[0];
+    const payer = typeof first === "string" ? first : first?.pubkey || null;
+    if (payer) feePayers.add(payer);
+  }
+  const unique = feePayers.size;
+  const ratio = decoded > 0 ? unique / decoded : null;
+  return {
+    sampleCount: decoded,
+    sampledUnique: unique,
+    sampledUniqueRatio: ratio,
+    estActiveMiners:
+      ratio != null && (rows || []).length > 0
+        ? Math.max(1, Math.round(rows.length * ratio))
+        : null,
+  };
+}
+
+/** On-chain Pond0x mining desk: aggregate activity + unique-signer estimate. No user wallets. */
+export async function sniffPond0x({ previous = null } = {}) {
+  const checkedAt = new Date().toISOString();
+  const started = Date.now();
+  const base = {
+    source: "pond0x.mining",
+    ok: false,
+    status: 0,
+    ms: null,
+    checkedAt,
+    program: POND0X_PROGRAM,
+    treasury: POND0X_TREASURY,
+    cluster: "mainnet",
+    rpcUrl: SOLANA_RPC_URL,
+    reason: null,
+  };
+  try {
+    const sigRes = await solanaRpc("getSignaturesForAddress", [
+      POND0X_PROGRAM,
+      { limit: 1000, commitment: "confirmed" },
+    ]);
+    const rows = (Array.isArray(sigRes) ? sigRes : []).filter(
+      (row) => !row.err && row.blockTime != null,
+    );
+    if (!rows.length) {
+      return {
+        ...base,
+        ms: Date.now() - started,
+        status: 200,
+        reason: "No successful program signatures in window",
+      };
+    }
+
+    const newestAt = new Date(rows[0].blockTime * 1000).toISOString();
+    const oldestAt = new Date(rows[rows.length - 1].blockTime * 1000).toISOString();
+    const spanSeconds = Math.max(1, rows[0].blockTime - rows[rows.length - 1].blockTime);
+    const activityCount = rows.length;
+    const pageFull = Array.isArray(sigRes) && sigRes.length >= 1000;
+    const rawRate = (activityCount - 1) * 60 / spanSeconds;
+    const ratePerMinute = Number.isFinite(rawRate)
+      ? Math.round(rawRate * 10) / 10
+      : null;
+
+    const prevChecked = previous?.checkedAt ? Date.parse(previous.checkedAt) : NaN;
+    const quiet =
+      Number.isFinite(prevChecked) &&
+      Date.now() - prevChecked < POND0X_QUIET_MS &&
+      previous?.latestSignature === rows[0].signature;
+
+    let sampled = false;
+    let cached = quiet;
+    let sampleCount = 0;
+    let sampledUnique = 0;
+    let sampledUniqueRatio = null;
+    let estActiveMiners = null;
+    if (!quiet) {
+      const sample = await samplePond0xMiners(rows);
+      sampled = true;
+      sampleCount = sample.sampleCount;
+      sampledUnique = sample.sampledUnique;
+      sampledUniqueRatio = sample.sampledUniqueRatio;
+      estActiveMiners = sample.estActiveMiners;
+    }
+
+    const balanceAttempt = () =>
+      solanaRpc("getBalance", [POND0X_TREASURY, { commitment: "confirmed" }]).catch(() => null);
+    let balRes = await balanceAttempt();
+    if (!balRes) {
+      await sleep(250);
+      balRes = await balanceAttempt();
+    }
+    const treasuryLamports =
+      typeof balRes?.value === "number" ? balRes.value : null;
+
+    return {
+      ...base,
+      ok: true,
+      status: 200,
+      ms: Date.now() - started,
+      latestSignature: rows[0].signature,
+      activityCount,
+      pageFull,
+      windowSeconds: spanSeconds,
+      windowMinutes: Math.round((spanSeconds / 60) * 10) / 10,
+      ratePerMinute,
+      sampled,
+      cached,
+      sampleCount,
+      sampledUnique,
+      sampledUniqueRatio,
+      estActiveMiners,
+      treasurySol: treasuryLamports != null ? treasuryLamports / 1e9 : null,
+      newestAt,
+      oldestAt,
+      latestAt: newestAt,
+    };
+  } catch (error) {
+    return {
+      ...base,
+      ms: Date.now() - started,
+      reason: error?.message || String(error),
+    };
+  }
+}
+
+export function summarizePond0x(source) {
+  if (!source || typeof source !== "object") {
+    return {
+      pond0xOk: false,
+      pond0xRatePerMinute: null,
+      pond0xActivityCount: null,
+      pond0xWindowMinutes: null,
+      pond0xEstActiveMiners: null,
+      pond0xUniqueRatio: null,
+      pond0xTreasurySol: null,
+      pond0xLatestAt: null,
+      pond0xSampled: false,
+      pond0xReason: null,
+    };
+  }
+  return {
+    pond0xOk: Boolean(source.ok),
+    pond0xRatePerMinute: source.ratePerMinute ?? null,
+    pond0xActivityCount: source.activityCount ?? null,
+    pond0xWindowMinutes: source.windowMinutes ?? null,
+    pond0xEstActiveMiners: source.estActiveMiners ?? null,
+    pond0xUniqueRatio: source.sampledUniqueRatio ?? null,
+    pond0xTreasurySol: source.treasurySol ?? null,
+    pond0xLatestAt: source.latestAt ?? null,
+    pond0xSampled: Boolean(source.sampled),
+    pond0xReason: source.reason ?? null,
+  };
+}
+
 /** Public docs pages we fingerprint so silent surface moves show up in the feed. */
 const DOCS_SURFACE_PAGES = [
   // Introduction
@@ -2207,6 +2392,7 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
     sniffOpencodeReleases(),
     sniffOpencodeGo(),
     sniffMiningSurface(forceMiningSurface),
+    sniffPond0x({ previous: previous?.sources?.["pond0x.mining"] || null }),
     sniffZenErrorShape(),
   ]);
 
@@ -2335,8 +2521,9 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
       miningArchiveClaims: bySource["surface.mining"]?.archiveClaims ?? null,
       miningArchiveWallets: bySource["surface.mining"]?.archiveWallets ?? null,
       miningArchiveTotalWpond: bySource["surface.mining"]?.archiveTotalWpond ?? null,
-      miningArchiveGeneratedAt: bySource["surface.mining"]?.archiveGeneratedAt ?? null,
+miningArchiveGeneratedAt: bySource["surface.mining"]?.archiveGeneratedAt ?? null,
       miningArchiveMinimum: bySource["surface.mining"]?.archiveMinimum ?? null,
+      ...summarizePond0x(bySource["pond0x.mining"]),
       zenErrShape: bySource["opencode.zenerr"]?.shape ?? null,
       zenErrLeakHit: Boolean(bySource["opencode.zenerr"]?.leakHit),
       catalogModels: bySource["geoff.catalog"]?.models?.length ?? null,
