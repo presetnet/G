@@ -210,6 +210,7 @@ const els = {
   stackHealth: document.getElementById("stackHealth"),
   stackNodes: document.getElementById("stackNodes"),
   stackLoad: document.getElementById("stackLoad"),
+  stacknetChangeNotice: document.getElementById("stacknetChangeNotice"),
   vramText: document.getElementById("vramText"),
   vramBar: document.getElementById("vramBar"),
   geoffBuild: document.getElementById("geoffBuild"),
@@ -935,6 +936,11 @@ setInterval(() => fetchPaperworkHistory(true), 5 * 60 * 1000);
 function renderMetrics(latest) {
   lastLatest = latest ?? null;
   const s = latest?.summary ?? {};
+  if (els.stacknetChangeNotice) {
+    const shellOnline = ["healthy", "ok"].includes(s.stacknetStatus);
+    const horsepowerDisconnected = s.gpus === 0 && s.vramGb === 0;
+    els.stacknetChangeNotice.hidden = !(shellOnline && horsepowerDisconnected);
+  }
   const tokenSource = latest?.sources?.["solana.tokens"];
   const tokenRows = Array.isArray(s.tokenPress) && s.tokenPress.length
     ? s.tokenPress
