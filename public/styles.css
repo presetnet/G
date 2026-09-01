@@ -3006,130 +3006,124 @@ details[open] > .fold-summary::after {
   font-size: 0.5rem;
   line-height: 1.35;
 }
-
-.trix-mkt-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.22rem;
-  margin-top: 0.35rem;
+.trix-market-inner {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
-
-.trix-mkt-grid > span {
-  min-width: 0;
-  padding: 0.2rem 0.28rem;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: rgba(255, 214, 10, 0.035);
+.trix-stats-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  margin-top: 0.4rem;
+  padding: 0.3rem 0.45rem;
+  background: rgba(255, 214, 0, 0.03);
+  border: 1px solid rgba(255, 214, 0, 0.12);
+  border-radius: 6px;
+}
+.trix-stats-bar > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
   font-family: var(--font-mono);
-}
-
-.trix-mkt-grid b,
-.trix-mkt-grid i {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 0.58rem;
   white-space: nowrap;
 }
-
-.trix-mkt-grid b {
+.trix-stats-bar b {
   color: var(--muted);
-  font-size: 0.5rem;
   font-weight: 500;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
+  font-size: 0.5rem;
 }
-
-.trix-mkt-grid i {
+.trix-stats-bar i {
   color: var(--ink);
-  font-size: 0.62rem;
-  font-style: normal;
   font-weight: 600;
+  font-size: 0.6rem;
 }
-
-.trix-mkt-grid .unverified-price {
-  border-color: rgba(161, 161, 170, 0.2);
-  background: rgba(161, 161, 170, 0.025);
-}
-
-.trix-mkt-grid .unverified-price b,
-.trix-mkt-grid .unverified-price i {
-  color: rgba(161, 161, 170, 0.62);
-}
-
 .trix-card-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.4rem;
+  gap: 0.45rem;
   margin-top: 0.5rem;
 }
-
-.trix-card:first-child {
-  grid-column: span 2;
-  grid-row: span 2;
+.trix-card {
+  margin: 0;
+  min-width: 0;
 }
-
-.trix-card:first-child img {
-  aspect-ratio: 4 / 5;
-  max-height: 10rem;
-  object-fit: contain;
-  margin: 0 auto;
-}
-
 .trix-card img {
   display: block;
   width: 100%;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: 3 / 4;
   object-fit: contain;
   background:
-    radial-gradient(120% 120% at 50% 18%, rgba(255, 214, 10, 0.12), rgba(20, 20, 24, 0) 55%),
-    rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 214, 10, 0.18);
-  border-radius: 6px;
+    radial-gradient(120% 120% at 50% 15%, rgba(255, 214, 0, 0.14), rgba(20, 20, 24, 0) 60%),
+    rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 214, 0, 0.2);
+  border-radius: 8px;
 }
-
+.trix-card.featured {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+.trix-card.featured img {
+  aspect-ratio: 4 / 5;
+  border-color: rgba(255, 214, 0, 0.55);
+  box-shadow: 0 0 22px rgba(255, 214, 0, 0.13), inset 0 0 0 1px rgba(255, 214, 0, 0.18);
+}
 .trix-card figcaption {
-  margin-top: 0.18rem;
+  margin-top: 0.22rem;
+  text-align: center;
 }
-
 .trix-card figcaption b,
 .trix-card figcaption i {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: center;
   font-family: var(--font-mono);
 }
-
 .trix-card figcaption b {
   color: var(--ink);
-  font-size: 0.5rem;
-  font-weight: 600;
+  font-size: 0.56rem;
+  font-weight: 700;
   letter-spacing: 0.06em;
 }
-
+.trix-card.featured figcaption b {
+  font-size: 0.74rem;
+  color: #ffd60a;
+}
 .trix-card figcaption i {
   color: var(--muted);
   font-size: 0.48rem;
   font-style: normal;
 }
-
+.trix-card.featured figcaption i {
+  font-size: 0.58rem;
+  color: var(--ink);
+}
 .trix-card figcaption i span {
   display: block;
 }
-
-.trix-mint-grid {
-  display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  gap: 0.3rem;
-  margin-top: 0.4rem;
+.trix-mint-strip {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding: 0 0.25rem;
+  padding-bottom: 0.15rem;
 }
-
+.trix-mint-strip::-webkit-scrollbar { height: 4px; }
+.trix-mint-strip::-webkit-scrollbar-track { background: transparent; }
+.trix-mint-strip::-webkit-scrollbar-thumb { background: rgba(255, 214, 0, 0.22); border-radius: 4px; }
 .trix-mint {
+  flex: 0 0 auto;
+  width: 110px;
+  scroll-snap-align: start;
   margin: 0;
-  min-width: 0;
 }
-
 .trix-mint img {
   display: block;
   width: 100%;
@@ -3137,40 +3131,28 @@ details[open] > .fold-summary::after {
   object-fit: cover;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
 }
-
 .trix-mint figcaption {
-  margin-top: 0.14rem;
+  margin-top: 0.12rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 0.46rem;
+  font-size: 0.42rem;
   text-align: center;
 }
-
 @media (max-width: 760px) {
   .trix-pack-metric {
     grid-row: auto;
     min-height: 0;
   }
-
-  .trix-pack-market,
-  .trix-pack-traits,
-  .trix-mkt-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .trix-card-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .trix-mint-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
+  .trix-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .trix-card.featured { grid-column: span 2; grid-row: span 1; }
+  .trix-card.featured img { aspect-ratio: 16 / 10; }
 }
+
 
 .trix-pack-traits {
   display: grid;
