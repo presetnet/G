@@ -2945,9 +2945,9 @@ details[open] > .fold-summary::after {
 }
 
 .trix-pack-metric {
-  grid-column: span 2;
-  grid-row: span 2;
-  min-height: 13.65rem;
+  grid-column: span 4;
+  grid-row: span 3;
+  min-height: 22rem;
 }
 
 .trix-pack-market {
@@ -3058,14 +3058,21 @@ details[open] > .fold-summary::after {
 
 .trix-card-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.3rem;
-  margin-top: 0.4rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin-top: 0.5rem;
 }
 
-.trix-card {
-  margin: 0;
-  min-width: 0;
+.trix-card:first-child {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+.trix-card:first-child img {
+  aspect-ratio: 4 / 5;
+  max-height: 10rem;
+  object-fit: contain;
+  margin: 0 auto;
 }
 
 .trix-card img {
