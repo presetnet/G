@@ -1378,11 +1378,11 @@ function renderTrixMarket(s) {
     let html = stats
       .map(({ b, i }) => `<span><b>${escapeHtml(b)}</b><i>${escapeHtml(i)}</i></span>`)
       .join("");
-    if (html) html = `<div class="trix-mkt-grid">${html}</div>`;
+    if (html) html = `<div class="trix-stats-bar">${html}</div>`;
     const boostCards = cards
       .filter((card) => card.imageUrl && card.active !== false)
-      .sort((a, b) => ((Number(a.slot) || 0) - (Number(b.slot) || 0)) || (Number(b.multiplier) || 0) - (Number(a.multiplier) || 0));
-    const cardChart = (card) => {
+      .sort((a, b) => (Number(b.multiplier) || 0) - (Number(a.multiplier) || 0) || (Number(a.slot) || 0) - (Number(b.slot) || 0));
+    const cardChart = (card, i) => {
       const price = card.priceSol != null && Number.isFinite(Number(card.priceSol))
         ? `${Number(card.priceSol).toLocaleString(undefined, { maximumFractionDigits: 3 })} SOL`
         : "—";
@@ -1390,7 +1390,7 @@ function renderTrixMarket(s) {
         ? `${Number(card.multiplier).toLocaleString(undefined, { maximumFractionDigits: 2 })}x`
         : "—";
       const src = trixImageUrl(card.imageUrl);
-      return `<figure class="trix-card" title="${escapeHtml(card.name || "")} · ${mult} · ${price}">
+      return `<figure class="trix-card${i === 0 ? ' featured' : ''}" title="${escapeHtml(card.name || "")} · ${mult} · ${price}">
         <img src="${escapeHtml(src)}" alt="${escapeHtml(card.name || "TRIX boost card")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
         <figcaption><b>${escapeHtml(card.name || "—")}</b><i>${mult} <span>${price}</span></i></figcaption>
       </figure>`;
@@ -1408,7 +1408,7 @@ function renderTrixMarket(s) {
         <figcaption>${escapeHtml(item?.name || "—")}</figcaption>
       </figure>`);
     if (mintTiles.length) {
-      html += `<div class="trix-mint-grid">${mintTiles.join("")}</div>`;
+      html += `<div class="trix-mint-strip">${mintTiles.join("")}</div>`;
       stats.push({ b: "Recent mints", i: "" });
     }
     if (!html) {
