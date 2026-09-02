@@ -3044,9 +3044,13 @@ details[open] > .fold-summary::after {
 .trix-card-grid {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: 0.4rem;
+  grid-auto-columns: minmax(5rem, 1fr);
+  gap: 0.35rem;
   margin-top: 0.5rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding: 0 0.25rem;
+  padding-bottom: 0.15rem;
 }
 .trix-card {
   margin: 0;
@@ -3087,9 +3091,12 @@ details[open] > .fold-summary::after {
 }
 .trix-card figcaption b {
   color: var(--ink);
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .trix-card figcaption i {
   color: var(--muted);
@@ -3101,6 +3108,8 @@ details[open] > .fold-summary::after {
 }
 .trix-card figcaption .trix-discount {
   display: inline-block;
+  box-sizing: border-box;
+  max-width: 100%;
   margin-top: 0.12rem;
   padding: 0.04rem 0.3rem;
   border-radius: 3px;
@@ -3109,6 +3118,9 @@ details[open] > .fold-summary::after {
   font-family: var(--font-mono);
   font-size: 0.48rem;
   font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .trix-mint-strip {
   display: flex;
