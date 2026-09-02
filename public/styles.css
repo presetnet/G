@@ -3067,7 +3067,8 @@ details[open] > .fold-summary::after {
   display: block;
   width: 100%;
   aspect-ratio: 4 / 5;
-  object-fit: contain;
+  object-fit: cover;
+  overflow: hidden;
   background:
     radial-gradient(120% 120% at 50% 15%, rgba(255, 214, 0, 0.14), rgba(20, 20, 24, 0) 60%),
     rgba(255, 255, 255, 0.03);
