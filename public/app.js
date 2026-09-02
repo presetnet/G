@@ -1393,7 +1393,9 @@ function renderTrixMarket(s) {
       const discount = card.discountActive && Number.isFinite(Number(card.discountPercent)) && Number(card.discountPercent) > 0
         ? `<span class="trix-discount">${Number(card.discountPercent).toLocaleString()}% off</span>`
         : "";
-      return `<figure class="trix-card${i === 0 ? ' featured' : ''}" title="${escapeHtml(card.name || "")} · ${mult} · ${price}">
+      const rankClass = i < 3 ? "big" : "small";
+      const featuredClass = i === 0 ? " featured" : "";
+      return `<figure class="trix-card ${rankClass}${featuredClass}" title="${escapeHtml(card.name || "")} · ${mult} · ${price}">
         <img src="${escapeHtml(src)}" alt="${escapeHtml(card.name || "TRIX boost card")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
         <figcaption><b>${escapeHtml(card.name || "—")}</b><i>${mult} <span>${price}</span></i>${discount}</figcaption>
       </figure>`;

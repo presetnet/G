@@ -3054,9 +3054,14 @@ details[open] > .fold-summary::after {
   margin-top: 0.5rem;
 }
 .trix-card {
-  flex: 0 0 calc(25% - 0.45rem);
   min-width: 0;
   margin: 0;
+}
+.trix-card.big {
+  flex: 0 0 calc(33.333% - 0.4rem);
+}
+.trix-card.small {
+  flex: 0 0 calc(25% - 0.45rem);
 }
 .trix-card img {
   display: block;
@@ -3167,7 +3172,8 @@ details[open] > .fold-summary::after {
     grid-row: auto;
     min-height: 0;
   }
-  .trix-card {
+  .trix-card.big,
+  .trix-card.small {
     flex-basis: calc(50% - 0.3rem);
   }
 }
