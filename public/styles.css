@@ -3147,7 +3147,7 @@ details[open] > .fold-summary::after {
 .trix-mint-strip::-webkit-scrollbar-thumb { background: rgba(255, 214, 0, 0.22); border-radius: 4px; }
 .trix-mint {
   flex: 0 0 auto;
-  width: 110px;
+  width: 88px;
   scroll-snap-align: start;
   margin: 0;
 }

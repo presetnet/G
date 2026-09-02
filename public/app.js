@@ -1360,7 +1360,7 @@ function renderTrixMarket(s) {
     const preorder = marketData?.preorder || {};
     if (preorder.pricePerPackUsd != null && Number.isFinite(Number(preorder.pricePerPackUsd))) {
       stats.push({
-        b: "Preorder",
+        b: "Preorder packs",
         i: `$${Number(preorder.pricePerPackUsd).toFixed(2)}${preorder.cap != null ? ` · cap ${fmt(preorder.cap)}` : ""}`,
       });
     }
