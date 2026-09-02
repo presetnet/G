@@ -2950,6 +2950,10 @@ details[open] > .fold-summary::after {
   min-height: 22rem;
 }
 
+#trixMarket.trix-pack-metric {
+  grid-column: 1 / -1;
+}
+
 .trix-pack-market {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3042,19 +3046,15 @@ details[open] > .fold-summary::after {
   font-size: 0.6rem;
 }
 .trix-card-grid {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(5rem, 1fr);
-  gap: 0.35rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
   margin-top: 0.5rem;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scroll-padding: 0 0.25rem;
-  padding-bottom: 0.15rem;
 }
 .trix-card {
-  margin: 0;
+  flex: 1 1 0;
   min-width: 0;
+  margin: 0;
 }
 .trix-card img {
   display: block;
@@ -3164,17 +3164,6 @@ details[open] > .fold-summary::after {
   .trix-pack-metric {
     grid-row: auto;
     min-height: 0;
-  }
-  .trix-card-grid {
-    display: flex;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    scroll-padding: 0 0.25rem;
-    padding-bottom: 0.15rem;
-  }
-  .trix-card {
-    flex: 0 0 100px;
-    scroll-snap-align: start;
   }
 }
 
