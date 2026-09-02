@@ -3044,16 +3044,20 @@ details[open] > .fold-summary::after {
 }
 .trix-card-grid {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   align-items: flex-start;
-  gap: 0.35rem;
+  gap: 0.4rem 0.5rem;
   margin-top: 0.5rem;
 }
 .trix-card {
-  flex: 0 0 calc(14.285% - 0.3rem);
-  max-width: 10rem;
+  flex: 0 0 15%;
+  max-width: none;
   min-width: 0;
   margin: 0;
+}
+.trix-card:nth-child(n + 5) {
+  flex: 0 0 20%;
 }
 .trix-card img {
   display: block;
