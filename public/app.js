@@ -213,8 +213,8 @@ const els = {
   stacknetChangeNotice: document.getElementById("stacknetChangeNotice"),
   vramText: document.getElementById("vramText"),
   vramBar: document.getElementById("vramBar"),
-  geoffBuild: document.getElementById("geoffBuild"),
-  geoffDeploy: document.getElementById("geoffDeploy"),
+  geoffBuild: null,
+  geoffDeploy: null,
   modelCount: document.getElementById("modelCount"),
   apiModelCount: document.getElementById("apiModelCount"),
   pileValue: document.getElementById("pileValue"),
@@ -237,6 +237,8 @@ trixPackMarket: document.getElementById("trixPackMarket"),
   pond0xMeta: document.getElementById("pond0xMeta"),
   keysoldUsd: document.getElementById("keysoldUsd"),
   keysoldMeta: document.getElementById("keysoldMeta"),
+  keys9gValue: document.getElementById("keys9gValue"),
+  keys9gMeta: document.getElementById("keys9gMeta"),
   trafficMini: document.getElementById("trafficMini"),
   settleBanner: document.getElementById("settleBanner"),
   oxAlphaSpec: document.getElementById("oxAlphaSpec"),
@@ -716,6 +718,27 @@ const PROOFS = {
       `curl -s https://devconsole-indol.vercel.app/aisp/node-keys`,
     ],
   },
+  key9g: {
+    title: "Node keys on-chain (9G)",
+    explain:
+      "Verified SOL inflows to the public 9G node-key wallet, pulled straight from Solana mainnet RPC (getSignaturesForAddress + getTransaction). Inbound transfers over the decoded recent window are summed; sender identities are hashed, and only aggregate cohort counts are kept. Recognized project wallets (StackNet treasury, Pond0x treasury) are flagged as funding hits so circular/self-funded purchases stand out. Cross-checks StackNet's self-reported key-sale counter.",
+    sources: ["geoff.keys.9g"],
+    fields: [
+      "key9gOk",
+      "key9gSolIn",
+      "key9gSenders",
+      "key9gDecoded",
+      "key9gSol24h",
+      "key9gTx24h",
+      "key9gCohorts",
+      "key9gFundingHits",
+      "key9gNewestAt",
+      "key9gReason",
+    ],
+    curls: [
+      'curl -s https://api.mainnet-beta.solana.com -X POST -H "Content-Type: application/json" -d \'{"jsonrpc":"2.0","id":1,"method":"getSignaturesForAddress","params":["9GjEVnpWiLe2uknUmtaH6DSfgcBvL66DtSKGREXDctZU",{"limit":1000,"commitment":"confirmed"}]}\'',
+    ],
+  },
   ghostCount: {
     title: "Ghost shelf",
     explain:
@@ -801,6 +824,7 @@ const CARD_PROOF_ORDER = [
   "pileValue",
   "paperworkUsd",
   "keySale",
+  "key9g",
 "ghostCount",
   "fleetCount",
 "x402Downloads",
@@ -1023,14 +1047,6 @@ function renderMetrics(latest) {
     els.vramText.textContent = "—";
     els.vramBar.style.width = "0%";
   }
-  if (els.geoffBuild) els.geoffBuild.textContent = short(s.geoffBuildId, 10, 6);
-  if (s.geoffDeployId) {
-    if (els.geoffDeploy) els.geoffDeploy.textContent = s.geoffDeployId;
-  } else if (s.chunkHash) {
-    els.geoffDeploy.textContent = `asset ${short(s.chunkHash, 4, 4)}`;
-  } else {
-    els.geoffDeploy.textContent = "—";
-  }
   if (els.modelCount) els.modelCount.textContent = s.models != null ? String(s.models) : "—";
   if (els.apiModelCount) els.apiModelCount.textContent =
     s.apiModels != null
@@ -1222,6 +1238,7 @@ function renderMetrics(latest) {
 renderTrixMarket(s);
   renderSettlementStatus(s);
   renderKeySale(s);
+  renderKey9g(s);
   if (els.ghostCount) {
     const ghosts = Array.isArray(s.zenGhostIds) ? s.zenGhostIds : [];
     els.ghostCount.textContent = ghosts.length ? String(ghosts.length) : "0";
@@ -1482,6 +1499,35 @@ function renderKeySale(s) {
   els.keysoldMeta.title =
     "Node-key sale ticker as reported by StackNet (/api/v2/node-keys/pricing). Self-reported; purchases unverified on-chain. Prices rise per key. Each key carries +1B inference tokens per docs.";
   els.keysoldUsd.title = els.keysoldMeta.title;
+}
+
+function renderKey9g(s) {
+  if (!els.keys9gValue) return;
+  const src = lastLatest?.sources?.["geoff.keys.9g"];
+  if (!src?.ok || src?.solIn == null) {
+    els.keys9gValue.textContent = "—";
+    els.keys9gMeta.textContent = src?.reason || "waiting on RPC window";
+    return;
+  }
+  const sol = Number(src.solIn);
+  els.keys9gValue.textContent = `${sol.toFixed(2)} SOL`;
+  const hits = Array.isArray(s.key9gFundingHits) ? s.key9gFundingHits : [];
+  const bits = [];
+  if (src.senders != null && src.decoded != null) bits.push(`${src.senders} senders · ${src.decoded} tx`);
+  if (src.avgSolPerTx != null) bits.push(`${src.avgSolPerTx.toFixed(2)} avg/tx`);
+  if (src.sol24h != null) bits.push(`${src.sol24h.toFixed(2)} / 24h`);
+  if (hits.length) bits.push(`<span class="${hits.length ? "fund-flag" : ""}">⚠ ${hits.join(" + ")} bought</span>`);
+  els.keys9gMeta.innerHTML = bits.length ? bits.join(" · ") : "verified SOL in";
+  const windowSpan = src.newestAt
+    ? `decoded ${src.decoded}/${src.windowTx} txs · ${src.newestAt.slice(0, 10)} → ${(src.oldestAt || "").slice(0, 10)}`
+    : `decoded ${src.decoded}/${src.windowTx} txs`;
+  const cohort = Array.isArray(src.cohorts) && src.cohorts.length
+    ? `top cohort ${src.cohorts[0]?.sol ?? "?"} SOL across ${src.cohorts[0]?.tx ?? 0} txs · ${src.cohorts.length} cohorts`
+    : "no cohorts yet";
+  els.keys9gValue.title = `Verified on-chain SOL in to the node-key wallet · ${windowSpan} · ${cohort}`;
+  els.keys9gMeta.title = hits.length
+    ? `Recognized wallet(s) among senders: ${hits.join(", ")} — possible self-funded purchases (circular revenue).`
+    : "Cross-checks StackNet's self-reported node-key sale counter against the 9G wallet's verified inbound. Sender addresses are hashed — no wallet identity is kept or displayed.";
 }
 
 function renderTraffic(traffic) {

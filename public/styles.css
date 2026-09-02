@@ -4799,6 +4799,7 @@ details[open] > .fold-summary::after {
 }
 .metric em .vel-up { color: var(--heat-bright); font-weight: 700; }
 .metric em .vel-down { color: var(--danger); font-weight: 700; }
+.metric em .fund-flag { color: var(--danger); font-weight: 800; letter-spacing: 0.02em; }
 
 /* ---- live dot ---- */
 .live-dot {

@@ -1224,6 +1224,196 @@ export function summarizePond0x(source) {
   };
 }
 
+/** Node-key payout wallet on the public 9G SOL leaderboard. Sender identities are hashed, never kept in full. */
+const GEOF_KEYS_9G_WALLET = "9GjEVnpWiLe2uknUmtaH6DSfgcBvL66DtSKGREXDctZU";
+const GEOF_KEYS_9G_DECODE_LIMIT = 10;
+const GEOF_KEYS_9G_CACHE_MS = 15 * 60 * 1000;
+let geof9gCache = { at: 0, value: null };
+
+const hash9gAddr = (addr) =>
+  createHash("sha256").update(String(addr)).digest("hex").slice(0, 16);
+
+export async function sniffNodeKeys9g() {
+  const startedAt = new Date().toISOString();
+  const started = Date.now();
+  const base = {
+    source: "geoff.keys.9g",
+    ok: false,
+    status: 0,
+    ms: null,
+    checkedAt: startedAt,
+    wallet: GEOF_KEYS_9G_WALLET,
+    cluster: "mainnet",
+    reason: null,
+  };
+  if (geof9gCache.value && Date.now() - geof9gCache.at < GEOF_KEYS_9G_CACHE_MS) {
+    return { ...geof9gCache.value, cached: true, ms: Date.now() - started };
+  }
+  try {
+    const sigRes = await solanaRpc("getSignaturesForAddress", [
+      GEOF_KEYS_9G_WALLET,
+      { limit: 1000, commitment: "confirmed" },
+    ]);
+    const rows = (Array.isArray(sigRes) ? sigRes : []).filter(
+      (row) => !row.err && row.blockTime != null,
+    );
+    if (!rows.length) {
+      const value = {
+        ...base,
+        ok: true,
+        status: 200,
+        ms: Date.now() - started,
+        windowTx: 0,
+        decoded: 0,
+        solIn: null,
+        senders: null,
+        reason: "No successful signatures in window",
+      };
+      geof9gCache = { at: Date.now(), value };
+      return value;
+    }
+
+    const inbound = [];
+    const decodeCount = Math.min(GEOF_KEYS_9G_DECODE_LIMIT, rows.length);
+    for (let k = 0; k < decodeCount; k += 1) {
+      const row = rows[k];
+      const tx = await getTransactionWithRetry(row.signature);
+      if (!tx?.meta?.preBalances || tx.meta.err || !Array.isArray(tx.meta.preBalances) || !Array.isArray(tx.meta.postBalances)) continue;
+      const keys = tx.transaction?.message?.accountKeys || [];
+      const index = keys.findIndex(
+        (key) => (typeof key === "string" ? key : key?.pubkey) === GEOF_KEYS_9G_WALLET,
+      );
+      if (index < 0) continue;
+      const lamports = tx.meta.postBalances[index] - tx.meta.preBalances[index];
+      if (lamports <= 0) continue;
+      const payer = keys[0] ? (typeof keys[0] === "string" ? keys[0] : keys[0]?.pubkey) : null;
+      inbound.push({
+        at: row.blockTime * 1000,
+        sol: lamports / 1e9,
+        senderHash: payer ? hash9gAddr(payer) : null,
+      });
+    }
+    inbound.sort((a, b) => b.at - a.at);
+    if (!inbound.length) {
+      const value = {
+        ...base,
+        ok: true,
+        status: 200,
+        ms: Date.now() - started,
+        windowTx: rows.length,
+        decoded: 0,
+        solIn: null,
+        senders: null,
+        sol24h: null,
+        tx24h: 0,
+        reason: "No inbound SOL transfers decoded in recent window",
+      };
+      geof9gCache = { at: Date.now(), value };
+      return value;
+    }
+
+    const now = Date.now();
+    const dayAgo = now - 24 * 3600 * 1000;
+    const recent24h = inbound.filter((r) => r.at >= dayAgo);
+    const solIn = inbound.reduce((sum, r) => sum + r.sol, 0);
+    const bySender = new Map();
+    for (const r of inbound) {
+      const key = r.senderHash || "unknown";
+      const entry = bySender.get(key) || { first: r.at, last: r.at, tx: 0, sol: 0 };
+      entry.first = Math.min(entry.first, r.at);
+      entry.last = Math.max(entry.last, r.at);
+      entry.tx += 1;
+      entry.sol += r.sol;
+      bySender.set(key, entry);
+    }
+    const cohorts = [...bySender.entries()]
+      .map(([sender, entry]) => ({
+        sender: sender.slice(0, 12),
+        first: new Date(entry.first).toISOString(),
+        last: new Date(entry.last).toISOString(),
+        tx: entry.tx,
+        sol: Math.round(entry.sol * 1000) / 1000,
+      }))
+      .sort((a, b) => b.sol - a.sol)
+      .slice(0, 5);
+
+    const senderHashes = [...bySender.keys()].filter((key) => key !== "unknown");
+
+    const value = {
+      ...base,
+      ok: true,
+      status: 200,
+      ms: Date.now() - started,
+      windowTx: rows.length,
+      decoded: inbound.length,
+      solIn: Math.round(solIn * 1000) / 1000,
+      senders: bySender.size,
+      senderHashes,
+      avgSolPerTx: Math.round((solIn / inbound.length) * 1000) / 1000,
+      sol24h: Math.round(recent24h.reduce((sum, r) => sum + r.sol, 0) * 1000) / 1000,
+      tx24h: recent24h.length,
+      cohorts,
+      newestAt: new Date(inbound[0].at).toISOString(),
+      oldestAt: new Date(inbound[inbound.length - 1].at).toISOString(),
+      cached: false,
+      reason: null,
+    };
+    geof9gCache = { at: Date.now(), value };
+    return value;
+  } catch (error) {
+    return {
+      ...base,
+      ms: Date.now() - started,
+      reason: error?.message || String(error),
+    };
+  }
+}
+
+export function summarizeKey9g(source) {
+  if (!source || typeof source !== "object") {
+    return {
+      key9gOk: false,
+      key9gSolIn: null,
+      key9gSenders: null,
+      key9gDecoded: null,
+      key9gSol24h: null,
+      key9gTx24h: null,
+      key9gCohorts: [],
+      key9gFundingHits: [],
+      key9gNewestAt: null,
+      key9gReason: null,
+    };
+  }
+  const visited = new Set();
+  const hits = [];
+  for (const [label, address] of [
+    ["stacknet-treasury", DEFAULT_TREASURY_ADDRESS],
+    ["pond0x-treasury", POND0X_TREASURY],
+  ]) {
+    const digest = hash9gAddr(address);
+    if (
+      Array.isArray(source.senderHashes) &&
+      source.senderHashes.includes(digest) &&
+      !visited.has(digest)
+    ) {
+      visited.add(digest);
+      hits.push(label);
+    }
+  }
+  return {
+    key9gOk: Boolean(source.ok),
+    key9gSolIn: source.solIn ?? null,
+    key9gSenders: source.senders ?? null,
+    key9gDecoded: source.decoded ?? null,
+    key9gSol24h: source.sol24h ?? null,
+    key9gTx24h: source.tx24h ?? null,
+    key9gCohorts: Array.isArray(source.cohorts) ? source.cohorts : [],
+    key9gFundingHits: hits,
+    key9gNewestAt: source.newestAt ?? null,
+    key9gReason: source.reason ?? null,
+  };
+}
+
 /** Public docs pages we fingerprint so silent surface moves show up in the feed. */
 const DOCS_SURFACE_PAGES = [
   // Introduction
@@ -2575,6 +2765,7 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
     sniffOpencodeGo(),
     sniffMiningSurface(forceMiningSurface),
     sniffPond0x({ previous: previous?.sources?.["pond0x.mining"] || null }),
+    sniffNodeKeys9g(),
     sniffZenErrorShape(),
   ]);
 
@@ -2706,6 +2897,7 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
 miningArchiveGeneratedAt: bySource["surface.mining"]?.archiveGeneratedAt ?? null,
       miningArchiveMinimum: bySource["surface.mining"]?.archiveMinimum ?? null,
       ...summarizePond0x(bySource["pond0x.mining"]),
+      ...summarizeKey9g(bySource["geoff.keys.9g"]),
       zenErrShape: bySource["opencode.zenerr"]?.shape ?? null,
       zenErrLeakHit: Boolean(bySource["opencode.zenerr"]?.leakHit),
       catalogModels: bySource["geoff.catalog"]?.models?.length ?? null,
