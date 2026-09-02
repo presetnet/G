@@ -1,6 +1,5 @@
 import { config } from "../server/config.js";
 import { upsertDailyActivity } from "../server/daily-activity.js";
-import { upsertPond0x } from "../server/pond0x.js";
 import {
   acquireSharedLock,
   loadSharedBundle,
@@ -12,10 +11,8 @@ import {
 } from "../server/shared-store.js";
 import {
   runSniff,
-  sniffPond0x,
   sniffStacknetMinute,
   sniffTrixGeoff,
-  summarizePond0x,
 } from "../server/sniffer.js";
 import { computeTemperature, translate } from "../server/translator.js";
 import {
@@ -82,14 +79,11 @@ export default async function handler(req, res) {
         ),
       );
     } else {
-      const [observed, stacknet, pond0x] = await Promise.all([
+      const [observed, stacknet] = await Promise.all([
         sniffTrixGeoff({
           previous: previous.latest?.sources?.["trix.geoff"] || null,
         }),
         sniffStacknetMinute(),
-        sniffPond0x({
-          previous: previous.latest?.sources?.["pond0x.mining"] || null,
-        }),
       ]);
       const base = previous.latest || {
         takenAt: stacknet.takenAt,
@@ -106,12 +100,10 @@ export default async function handler(req, res) {
           ...(base.sources || {}),
           ...stacknet.sources,
           "trix.geoff": observed,
-          "pond0x.mining": pond0x,
         },
         summary: {
           ...(base.summary || {}),
           ...stacknet.summary,
-          ...summarizePond0x(pond0x),
         },
       });
     }
@@ -126,10 +118,6 @@ export default async function handler(req, res) {
         latest: snapshot,
         events,
         dailyActivity,
-        pond0x: upsertPond0x(
-          previous.pond0x || null,
-          snapshot.sources?.["pond0x.mining"],
-        ),
         state: {
           startedAt: previous.state?.startedAt || new Date().toISOString(),
           lastPollAt: profile === "full" ? snapshot.takenAt : previous.state?.lastPollAt || null,

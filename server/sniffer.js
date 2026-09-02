@@ -2850,7 +2850,6 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
     sniffOpencodeReleases(),
     sniffOpencodeGo(),
     sniffMiningSurface(forceMiningSurface),
-    sniffPond0x({ previous: previous?.sources?.["pond0x.mining"] || null }),
     sniffNodeKeys9g(),
     sniffZenErrorShape(),
   ]);
@@ -2982,7 +2981,6 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
       miningArchiveTotalWpond: bySource["surface.mining"]?.archiveTotalWpond ?? null,
 miningArchiveGeneratedAt: bySource["surface.mining"]?.archiveGeneratedAt ?? null,
       miningArchiveMinimum: bySource["surface.mining"]?.archiveMinimum ?? null,
-      ...summarizePond0x(bySource["pond0x.mining"]),
       ...summarizeKey9g(bySource["geoff.keys.9g"]),
       zenErrShape: bySource["opencode.zenerr"]?.shape ?? null,
       zenErrLeakHit: Boolean(bySource["opencode.zenerr"]?.leakHit),

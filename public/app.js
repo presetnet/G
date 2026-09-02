@@ -233,8 +233,6 @@ trixPackMarket: document.getElementById("trixPackMarket"),
   trixMarketCount: document.getElementById("trixMarketCount"),
   trixMarketMeta: document.getElementById("trixMarketMeta"),
   trixMarketStats: document.getElementById("trixMarketStats"),
-  pond0xMiners: document.getElementById("pond0xMiners"),
-  pond0xMeta: document.getElementById("pond0xMeta"),
   keysoldUsd: document.getElementById("keysoldUsd"),
   keysoldMeta: document.getElementById("keysoldMeta"),
   keys9gValue: document.getElementById("keys9gValue"),
@@ -766,26 +764,6 @@ const PROOFS = {
       "curl -s https://registry.npmjs.org/@stacknet/x402payg/latest",
     ],
   },
-  pond0xMining: {
-    title: "Pond0x miners",
-    explain:
-      "Live on-chain sampling of the Pond0x mining program: signature rate, unique signer wallets over the page window, and the program treasury balance. Sampled fee payers are hashed to a count only — individual wallet addresses are never kept or shown.",
-    sources: ["pond0x.mining"],
-    fields: [
-      "pond0xRatePerMinute",
-      "pond0xActivityCount",
-      "pond0xWindowMinutes",
-      "pond0xEstActiveMiners",
-      "pond0xUniqueRatio",
-      "pond0xTreasurySol",
-      "pond0xLatestAt",
-      "pond0xSampled",
-    ],
-    curls: [
-      `curl -s https://api.mainnet-beta.solana.com -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"getSignaturesForAddress","params":["T1pyyaTNZsKv2WcRAB8oVnk93mLJw2XzjtVYqCsaHqt",{"limit":1000,"commitment":"confirmed"}]}'`,
-      `curl -s https://api.mainnet-beta.solana.com -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"getBalance","params":["cPUtmyb7RZhCaTusCb4qnPJjVTbwpJ6SpXUCvnBDU4a",{"commitment":"confirmed"}]}'`,
-    ],
-  },
   trixMarket: {
     title: "TRIX collectibles",
     explain:
@@ -827,8 +805,7 @@ const CARD_PROOF_ORDER = [
   "key9g",
 "ghostCount",
   "fleetCount",
-"x402Downloads",
-  "pond0xMining",
+  "x402Downloads",
   "trixMarket",
 ];
 
@@ -1301,26 +1278,6 @@ renderTrixMarket(s);
       : "no billing routes up yet";
     els.subscriptionMeta.title =
       "Public billing/plans/subscription route probe (API is auth-gated)";
-  }
-  if (els.pond0xMiners) {
-    const miners = Number(s.pond0xEstActiveMiners);
-    els.pond0xMiners.textContent =
-      Number.isFinite(miners) && miners > 0 ? `~${miners.toLocaleString()}` : "—";
-    els.pond0xMiners.title = s.pond0xEstActiveMiners != null
-      ? `Estimated unique signing wallets active in the last ${s.pond0xWindowMinutes ?? "?"} min (sampled ratio × activity count · on-chain).`
-      : "Waiting for a decodable on-chain sample.";
-  }
-  if (els.pond0xMeta) {
-    const bits = [];
-    if (s.pond0xRatePerMinute != null) bits.push(`${s.pond0xRatePerMinute}/min txs`);
-    if (s.pond0xActivityCount != null && s.pond0xWindowMinutes != null)
-      bits.push(`${s.pond0xActivityCount} in ${s.pond0xWindowMinutes}m`);
-    if (s.pond0xTreasurySol != null) bits.push(`${Number(s.pond0xTreasurySol).toFixed(0)} SOL treasury`);
-    if (s.pond0xLatestAt) bits.push(fmtTime(s.pond0xLatestAt));
-    els.pond0xMeta.textContent = bits.length ? bits.join(" · ") : "waiting on chain samples";
-    els.pond0xMeta.title = s.pond0xOk
-      ? "Community-only aggregation: no wallet identities, no user addresses, no login required."
-      : "Collector offline or first sample not yet decoded.";
   }
 }
 
