@@ -548,7 +548,7 @@ export function translate(previous, current) {
           kind: "trixGeoff",
           rank: "move",
           title: "Paid Geoff generation recorded on TRIX",
-          summary: `${added.length} new TRIX record${added.length === 1 ? "" : "s"} labeled provider=geoff · ${paidSol.toFixed(3)} SOL reported · mainnet payment receipt${added.length === 1 ? "" : "s"}`,
+          summary: `${added.length} new TRIX record${added.length === 1 ? "" : "s"} labeled or recipient-inferred provider=geoff · ${paidSol.toFixed(3)} SOL reported · mainnet payment receipt${added.length === 1 ? "" : "s"}`,
           details: {
             records: added.map((record) => ({
               id: record.id,

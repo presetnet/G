@@ -1123,7 +1123,7 @@ function renderMetrics(latest) {
     const count = Number(trixGeoff?.count);
     els.trixGeoffCount.textContent = Number.isFinite(count) && count > 0 ? `${count} paid` : "—";
     els.trixGeoffCount.title =
-      "Deduplicated paid-generation history observed where TRIX labels generator=geoff.";
+      `Deduplicated paid-generation history observed where TRIX labels generator=geoff${trixGeoff?.inferredCount > 0 ? `, plus ${trixGeoff.inferredCount} blank-labeled payment${trixGeoff.inferredCount === 1 ? "" : "s"} folded in after their on-chain recipients matched the known TRIX provider rails` : ""}.`;
   }
   if (els.trixGeoffMeta) {
     const paidSol = Number(trixGeoff?.paidSol);
@@ -1135,11 +1135,18 @@ function renderMetrics(latest) {
     const backfill = Number.isFinite(launchTotal) && scannedMints < launchTotal
       ? ` · backfill ${scannedMints}/${launchTotal} mints`
       : "";
+    const inferred = Number(trixGeoff?.inferredCount) || 0;
+    const unlabeled = Number(trixGeoff?.unlabeledCount) || 0;
+    const stainBit = inferred > 0
+      ? ` · ${inferred} unlabeled matched by recipient`
+      : unlabeled > 0
+        ? ` · ${unlabeled} unlabeled off-rails`
+        : "";
     els.trixGeoffMeta.textContent = Number.isFinite(paidSol) && paidSol > 0
-      ? `${paidSol.toFixed(3)} SOL observed${Number.isFinite(latestFee) ? ` · latest ${latestFee.toFixed(3)} SOL` : ""}${latestPaidAt ? ` · last paid ${fmtTime(latestPaidAt)}` : ""}${checkedAt ? ` · checked ${fmtTime(checkedAt)}` : ""}${backfill}`
+      ? `${paidSol.toFixed(3)} SOL observed${Number.isFinite(latestFee) ? ` · latest ${latestFee.toFixed(3)} SOL` : ""}${latestPaidAt ? ` · last paid ${fmtTime(latestPaidAt)}` : ""}${checkedAt ? ` · checked ${fmtTime(checkedAt)}` : ""}${backfill}${stainBit}`
       : trixGeoff?.reason || "waiting for paid generations";
     els.trixGeoffMeta.title =
-      `TRIX supplies the Geoff provider label, fee amount, network, and transaction signature. The global recent feed can be saturated by other generators, so the collector also rotates through active token histories (${trixGeoff?.activeRefreshCount || 0}/${trixGeoff?.activeTokenCount || 0} this pass). Last paid is activity time; checked is collector time. This does not independently prove geoff.ai operator identity or that the generated image was minted as an NFT.`;
+      `TRIX supplies the Geoff provider label, fee amount, network, and transaction signature. The global recent feed can be saturated by other generators, so the collector also rotates through active token histories (${trixGeoff?.activeRefreshCount || 0}/${trixGeoff?.activeTokenCount || 0} this pass). Last paid is activity time; checked is collector time. ${inferred > 0 ? `TRIX stopped labeling provider=geoff; ${inferred} blank-labeled payment${inferred === 1 ? "" : "s"} whose transfer recipients match the known TRIX provider rails are folded in as inferred (never claimed as verified).` : unlabeled > 0 ? `${unlabeled} blank-labeled paid generation${unlabeled === 1 ? " was" : "s were"} seen this pass but their recipients do not match the known provider rails.` : ""}This does not independently prove geoff.ai operator identity or that the generated image was minted as an NFT.`;
   }
   if (els.trixGeoffReceipt) {
     const signature = trixGeoff?.latest?.txSignature;

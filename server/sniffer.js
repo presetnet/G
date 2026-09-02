@@ -1062,6 +1062,25 @@ async function getTransactionWithRetry(signature) {
   return tx;
 }
 
+/** All system-transfer destinations of a parsed transaction, if any. */
+function trixTransferDestinations(tx) {
+  const destinations = new Set();
+  const instructions = [
+    ...(tx?.meta?.innerInstructions || []).flatMap((entry) => entry.instructions || []),
+    ...(tx?.transaction?.message?.instructions || []),
+  ];
+  for (const instruction of instructions) {
+    if (
+      instruction?.program === "system" &&
+      instruction?.parsed?.type === "transfer" &&
+      instruction.parsed.info?.destination
+    ) {
+      destinations.add(instruction.parsed.info.destination);
+    }
+  }
+  return destinations;
+}
+
 async function samplePond0xMiners(rows, target = POND0X_SAMPLE_TARGET) {
   const feePayers = new Set();
   let decoded = 0;
@@ -2052,6 +2071,23 @@ const TRIX_CARD_CLASSES = [
   { key: "trix", label: "Void", oddsBps: 4_300 },
 ];
 
+export function normalizeTrixGeoffRecord(record, post = null) {
+  const feeLamports = Number(record?.feeLamports);
+  return {
+    id: record?.id,
+    createdAt: record?.createdAt || post?.createdAt || null,
+    postId: record?.postId || post?.id || null,
+    authorWallet: record?.authorWallet || post?.payerWallet || null,
+    tokenMint: record?.tokenMint || post?.memeTokenMint || null,
+    tokenSymbol: record?.coinSymbol || post?.memeCoinSymbol || null,
+    imageUrl: record?.imageUrl || post?.imageUrl || null,
+    txSignature: record?.txSignature || null,
+    paidNetwork: record?.paidNetwork || null,
+    feeLamports: Number.isFinite(feeLamports) ? feeLamports : null,
+    feeSol: Number.isFinite(feeLamports) ? feeLamports / 1e9 : null,
+  };
+}
+
 export function parseTrixGeoffRecords(posts = [], records = []) {
   const postById = new Map(posts.map((post) => [post.id, post]));
   const seen = new Set();
@@ -2059,21 +2095,7 @@ export function parseTrixGeoffRecords(posts = [], records = []) {
     .filter((record) => record?.generator === "geoff" && record.id && !seen.has(record.id))
     .map((record) => {
       seen.add(record.id);
-      const post = postById.get(record.postId) || null;
-      const feeLamports = Number(record.feeLamports);
-      return {
-        id: record.id,
-        createdAt: record.createdAt || post?.createdAt || null,
-        postId: record.postId || post?.id || null,
-        authorWallet: record.authorWallet || post?.payerWallet || null,
-        tokenMint: record.tokenMint || post?.memeTokenMint || null,
-        tokenSymbol: record.coinSymbol || post?.memeCoinSymbol || null,
-        imageUrl: record.imageUrl || post?.imageUrl || null,
-        txSignature: record.txSignature || null,
-        paidNetwork: record.paidNetwork || null,
-        feeLamports: Number.isFinite(feeLamports) ? feeLamports : null,
-        feeSol: Number.isFinite(feeLamports) ? feeLamports / 1e9 : null,
-      };
+      return normalizeTrixGeoffRecord(record, postById.get(record.postId) || null);
     })
     .filter(
       (record) =>
@@ -2195,6 +2217,48 @@ export function parseTrixPackMarket(
 
 const TRIX_PACK_PROGRAM = "HTrrq6C6j9NYySUrpSLn9nDjFbKNBD6pS3xBuLppfW4F";
 const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+/** TRIX routes every paid generation to these two system-transfer legs. */
+const TRIX_PROVIDER_PAY_RECIPIENTS = new Set([
+  "QR7US76WP3D4Hk65DuvF8ZPWb9E65MBgBk25j7f9TtY",
+  "H1HU4Bfg6hsMz8SP2JB27urLM1TeB7UhKREsukRtvoid",
+]);
+const GEOF_INFER_VERIFY_LIMIT = 3;
+
+/**
+ * Fold blank-labeled paid TRIX generations into the geoff set when their
+ * on-chain payment split lands on the known TRIX provider rails. The label
+ * stopped being emitted, but the money continues to the same two legs, so
+ * these are counted as provider=geoff (inferred), never claimed as verified.
+ */
+async function inferGeoffPayments(unlabeledRecords, previous = null) {
+  const inferredSigs = new Set(previous?.inferredSigs || []);
+  const candidates = (unlabeledRecords || [])
+    .filter((record) => record?.txSignature)
+    .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0))
+    .slice(0, GEOF_INFER_VERIFY_LIMIT);
+  const inferred = [];
+  for (const record of candidates) {
+    if (!inferredSigs.has(record.txSignature)) {
+      const tx = await getTransactionWithRetry(record.txSignature);
+      if (tx?.meta && !tx.meta.err) {
+        const destinations = trixTransferDestinations(tx);
+        const matches =
+          TRIX_PROVIDER_PAY_RECIPIENTS.size === destinations.size &&
+          [...TRIX_PROVIDER_PAY_RECIPIENTS].every((address) => destinations.has(address));
+        if (matches) inferredSigs.add(record.txSignature);
+      }
+    }
+    if (inferredSigs.has(record.txSignature)) inferred.push(record);
+  }
+  return {
+    records: inferred,
+    count: inferred.length,
+    ok: candidates.length > 0 ? inferred.length > 0 : null,
+    inferredSigs: [...inferredSigs],
+    checkedAt: new Date().toISOString(),
+  };
+}
 
 function decodeBase58(value) {
   let decoded = 0n;
@@ -2392,7 +2456,23 @@ export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
     return result?.status === "fulfilled" && result.value.ok;
   });
   const resolvedTokenMints = backfillMints.filter((mint) => resolvedRequests.includes(mint));
-  const geoffRecords = parseTrixGeoffRecords([], records);
+  const labeledGeoff = parseTrixGeoffRecords([], records);
+  const unlabeledPaid = records.filter(
+    (record) =>
+      !record?.generator &&
+      record?.txSignature &&
+      Number(record.feeLamports || 0) > 0 &&
+      record.paidNetwork === "mainnet",
+  );
+  const infer = await inferGeoffPayments(unlabeledPaid, previous?.infer || null);
+  const inferredRecords = infer.records.map((record) => ({
+    ...normalizeTrixGeoffRecord(record),
+    inferred: true,
+  }));
+  const seenIds = new Set();
+  const geoffRecords = [...labeledGeoff, ...inferredRecords]
+    .filter((record) => record.id && !seenIds.has(record.id) ? (seenIds.add(record.id), true) : false)
+    .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
   const latest = geoffRecords.find((record) => record.imageUrl) || geoffRecords[0] || null;
   const paidLamports = geoffRecords.reduce((sum, record) => sum + (record.feeLamports || 0), 0);
   const ok = recentRes.ok && (
@@ -2410,6 +2490,12 @@ export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
     count: geoffRecords.length,
     paidLamports,
     paidSol: paidLamports / 1e9,
+    unlabeledCount: unlabeledPaid.length,
+    inferredCount: infer.count,
+    inferenceOk: infer.ok,
+    inferredSigs: infer.inferredSigs,
+    infer: { inferredSigs: infer.inferredSigs, verifiedAt: infer.checkedAt },
+    providerLabelInferred: infer.count > 0,
     tokenMints,
     resolvedTokenMints,
     scannedTokenMints,
