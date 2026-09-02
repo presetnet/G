@@ -923,6 +923,10 @@ a.btn {
   }
 }
 
+.metric-wide {
+  grid-column: span 2;
+}
+
 .metric {
   position: relative;
   min-width: 0;
