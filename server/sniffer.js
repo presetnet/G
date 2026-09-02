@@ -2730,7 +2730,7 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       JSON.stringify(aggregations),
     ),
     url: `${TRIX_BASE_URL}/`,
-    note: "Aggregate-only counts and totals from TRIX public APIs (/api/cards, /api/artworks, /api/auctions, /api/treasury, /api/mkt/preorder, /api/activity, /api/leaderboard). No individual holder, artwork owner, auction bidder, or leaderboard identity is kept or displayed. Card artwork is shown from TRIX's own image URLs; the card catalog and recent-mint tile feed are cached for six hours. Physical packaging is not represented by any of these endpoints; the TCG flag is API-reported and false.",
+    note: "Pack market data from TRIX public APIs (/api/mkt/preorder, /api/treasury, /api/mkt/state via the TRIX · GEOFF pool). Pack round, cap, price per pack, treasury balance, and per-level pack pricing. No NFT artwork, boost-card, holder, auction bidder, or leaderboard identity is fetched or shown. The TCG flag is API-reported and false; no endpoint represents physical packaging.",
     reason: failures.length ? `Partial: ${failures.join("; ")}.` : null,
   };
 }

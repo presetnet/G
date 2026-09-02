@@ -787,30 +787,21 @@ const PROOFS = {
     ],
   },
   trixMarket: {
-    title: "TRIX collectibles",
+    title: "TRIX pack market",
     explain:
-      "Aggregate-only counts read from TRIX public APIs: boost Card roster, minted artworks, live auctions, treasury, pre-order TCG flag, and the public activity feed. No individual holder, artwork owner, auction bidder, or leaderboard identity is kept or displayed — totals only. The TCG flag is API-reported (false) and no endpoint represents physical packaging.",
-    sources: ["trix.market"],
+      "Pack-only data read from TRIX public APIs: preorder round, cap, price per pack, treasury balance, current pack availability / mints-per-hour, and per-level pack pricing from the TRIX · GEOFF pool. No NFT artwork, boost-card, holder, auction, or leaderboard identity is fetched or shown. The TCG flag is API-reported (false) and no endpoint represents physical packaging.",
+    sources: ["trix.market", "trix.geoff"],
     fields: [
-      "trixCardCount",
-      "trixCardMaxMultiplier",
-      "trixArtworkCount",
-      "trixArtworkPrinted",
-      "trixAuctionCount",
       "trixTreasurySol",
       "trixTreasuryPoints",
-      "trixActivityCount",
-      "trixLeaderboardEntries",
+      "trixCardCount",
       "trixTcgActive",
       "trixMarketFingerprint",
     ],
     curls: [
-      "curl -s https://trix.market/api/cards",
-      "curl -s https://trix.market/api/artworks",
-      "curl -s https://trix.market/api/auctions",
-      "curl -s https://trix.market/api/treasury",
       "curl -s https://trix.market/api/mkt/preorder",
-      "curl -s https://trix.market/api/activity",
+      "curl -s https://trix.market/api/treasury",
+      "curl -s https://trix.market/api/mkt/state",
     ],
   },
 };
@@ -1324,49 +1315,38 @@ function renderTrixMarket(s) {
       ? Number(value).toLocaleString(undefined, { maximumFractionDigits: digits })
       : "—";
   const marketData = lastLatest?.sources?.["trix.market"];
-  const cards = Array.isArray(marketData?.cards?.cards) ? marketData.cards.cards : [];
-  const artworks = marketData?.artworks || {};
-  if (cards.length) {
-    const top = cards
-      .filter((card) => card.active)
-      .sort((a, b) => (Number(b.multiplier) || 0) - (Number(a.multiplier) || 0))[0];
-    let text = `${cards.length} boost cards`;
-    if (top?.name && Number.isFinite(Number(top.multiplier))) {
-      text += ` · ${top.name} ${Number(top.multiplier).toLocaleString(undefined, { maximumFractionDigits: 2 })}x`;
+  const trixPacks = lastLatest?.sources?.["trix.geoff"]?.packs || {};
+  const preorder = marketData?.preorder || {};
+  if (els.trixMarketCount) {
+    if (preorder.round != null) {
+      let text = `Round ${Number(preorder.round)}`;
+      if (preorder.cap != null && Number.isFinite(Number(preorder.cap))) {
+        text += ` · cap ${fmt(preorder.cap)}`;
+      }
+      els.trixMarketCount.textContent = text;
+      els.trixMarketCount.title =
+        `Pack preorder round as reported by /api/mkt/preorder${preorder.pricePerPackUsd != null ? ` · $${Number(preorder.pricePerPackUsd).toFixed(2)}/pack` : ""}. No NFT, boost-card, or artwork data shown.`;
+    } else if (preorder.pricePerPackUsd != null && Number.isFinite(Number(preorder.pricePerPackUsd))) {
+      els.trixMarketCount.textContent = `$${Number(preorder.pricePerPackUsd).toFixed(2)} / pack`;
+      els.trixMarketCount.title = "Pack preorder price as reported by /api/mkt/preorder.";
+    } else {
+      els.trixMarketCount.textContent = trixPacks?.roundStatus || "—";
+      els.trixMarketCount.title = "Pack round state from the TRIX · GEOFF pool.";
     }
-    els.trixMarketCount.textContent = text;
-    els.trixMarketCount.title =
-      "Boost Card roster reported by TRIX /api/cards with their stated multiplier and SOL ask. Artwork shown from TRIX's own image URLs.";
-  } else if (els.trixMarketMeta) {
-    els.trixMarketCount.textContent = finitePositive(artworks.total)
-      ? `${fmt(artworks.total)} artworks`
-      : "—";
   }
   if (els.trixMarketMeta) {
     const bits = [];
-    if (marketData?.cardsCached) bits.push("card catalog cached");
+    if (preorder.pricePerPackUsd != null && Number.isFinite(Number(preorder.pricePerPackUsd))) {
+      bits.push(`$${Number(preorder.pricePerPackUsd).toFixed(2)}/pack`);
+    }
+    if (preorder.round != null) bits.push(`round ${Number(preorder.round)}`);
+    if (preorder.tcg) bits.push("TCG flagged");
     if (marketData?.checkedAt) bits.push(`checked ${fmtTime(marketData.checkedAt)}`);
     if (!marketData?.ok && marketData?.reason) bits.push("partial read");
     els.trixMarketMeta.textContent = bits.length ? bits.join(" · ") : "waiting on TRIX public endpoints";
   }
   if (els.trixMarketStats) {
     const stats = [];
-    if (finitePositive(artworks.total)) {
-      stats.push({
-        b: "Artworks minted",
-        i: `${fmt(artworks.total)} · ${fmt(artworks.printed)} editions`,
-      });
-      if (finitePositive(artworks.printedSupply)) {
-        stats.push({ b: "Printed supply", i: fmt(artworks.printedSupply) });
-      }
-    }
-    const auctions = marketData?.auctions || {};
-    if (finitePositive(auctions.active)) {
-      const range = (auctions.minStartSol != null && auctions.maxStartSol != null && Number.isFinite(Number(auctions.minStartSol)) && Number.isFinite(Number(auctions.maxStartSol)))
-        ? ` · ${Number(auctions.minStartSol).toFixed(3)}–${Number(auctions.maxStartSol).toFixed(3)} SOL`
-        : "";
-      stats.push({ b: "Live auctions", i: `${fmt(auctions.active)}${range}` });
-    }
     const treasury = marketData?.treasury || {};
     if (treasury.balanceSol != null && Number.isFinite(Number(treasury.balanceSol))) {
       stats.push({
@@ -1374,70 +1354,53 @@ function renderTrixMarket(s) {
         i: `${fmt(treasury.balanceSol, 2)} SOL${treasury.totalPoints != null ? ` · ${fmt(treasury.totalPoints)} pts` : ""}`,
       });
     }
-    const preorder = marketData?.preorder || {};
     if (preorder.pricePerPackUsd != null && Number.isFinite(Number(preorder.pricePerPackUsd))) {
       stats.push({
         b: "Preorder packs",
-        i: `$${Number(preorder.pricePerPackUsd).toFixed(2)}${preorder.cap != null ? ` · cap ${fmt(preorder.cap)}` : ""}`,
+        i: `$${Number(preorder.pricePerPackUsd).toFixed(2)}${preorder.cap != null && Number.isFinite(Number(preorder.cap)) ? ` · cap ${fmt(preorder.cap)}` : ""}`,
       });
     }
-    const lb = marketData?.leaderboard || {};
-    if (lb.entries != null) {
+    const packsOk = Boolean(trixPacks?.ok && trixPacks.status >= 200 && trixPacks.status < 300);
+    const packsLeft = Number(trixPacks?.available);
+    const mintsPerHour = Number(trixPacks?.mintsPerHour);
+    const staked = Number(trixPacks?.stakedPacks);
+    if (packsOk && Number.isFinite(packsLeft)) {
+      stats.push({ b: "Packs left", i: packsLeft > 0 ? fmt(packsLeft) : "sold out" });
+    }
+    if (packsOk && Number.isFinite(mintsPerHour)) {
       stats.push({
-        b: "Leaderboard",
-        i: `${fmt(lb.entries)} entries${lb.totalPoints != null ? ` · ${fmt(lb.totalPoints)} pts` : ""}`,
+        b: "Mints/hour",
+        i: mintsPerHour.toLocaleString(undefined, { maximumFractionDigits: 2 }),
       });
     }
-    const activity = marketData?.activity || {};
-    if (finitePositive(activity.items)) {
-      stats.push({ b: "Live sales", i: fmt(activity.items) });
+    if (Number.isFinite(staked) && staked > 0) {
+      stats.push({ b: "Staked packs", i: fmt(staked) });
     }
     let html = stats
       .map(({ b, i }) => `<span><b>${escapeHtml(b)}</b><i>${escapeHtml(i)}</i></span>`)
       .join("");
     if (html) html = `<div class="trix-stats-bar">${html}</div>`;
-    const boostCards = cards
-      .filter((card) => card.imageUrl && card.active !== false)
-      .sort((a, b) => (Number(b.multiplier) || 0) - (Number(a.multiplier) || 0) || (Number(a.slot) || 0) - (Number(b.slot) || 0));
-    const cardChart = (card, i) => {
-      const price = card.priceSol != null && Number.isFinite(Number(card.priceSol))
-        ? `${Number(card.priceSol).toLocaleString(undefined, { maximumFractionDigits: 3 })} SOL`
-        : "—";
-      const mult = Number.isFinite(Number(card.multiplier))
-        ? `${Number(card.multiplier).toLocaleString(undefined, { maximumFractionDigits: 2 })}x`
-        : "—";
-      const src = trixImageUrl(card.imageUrl);
-      const discount = card.discountActive && Number.isFinite(Number(card.discountPercent)) && Number(card.discountPercent) > 0
-        ? `<span class="trix-discount">${Number(card.discountPercent).toLocaleString()}% off</span>`
-        : "";
-      return `<figure class="trix-card${i === 0 ? ' featured' : ''}" title="${escapeHtml(card.name || "")} · ${mult} · ${price}">
-        <img src="${escapeHtml(src)}" alt="${escapeHtml(card.name || "TRIX boost card")}" decoding="async">
-        <figcaption><b>${escapeHtml(card.name || "—")}</b><i>${mult} <span>${price}</span></i>${discount}</figcaption>
-      </figure>`;
-    };
-    if (boostCards.length) {
-      html += `<div class="trix-card-grid">${boostCards.map(cardChart).join("")}</div>`;
-      stats.push({ b: "Boost cards", i: "" });
-    }
-    const mints = Array.isArray(marketData?.recentMints) ? marketData.recentMints : [];
-    const mintTiles = mints
-      .filter((item) => item?.imageUrl)
-      .slice(0, 8)
-      .map((item) => `<figure class="trix-mint" title="${escapeHtml(item?.name || "Recent TRIX mint")}">
-        <img src="${escapeHtml(trixImageUrl(item.imageUrl))}" alt="${escapeHtml(item?.name || "TRIX artwork")}" decoding="async">
-        <figcaption>${escapeHtml(item?.name || "—")}</figcaption>
-      </figure>`);
-    if (mintTiles.length) {
-      html += `<div class="trix-mint-strip">${mintTiles.join("")}</div>`;
-      stats.push({ b: "Recent mints", i: "" });
-    }
+    const levels = Array.isArray(trixPacks?.levels) ? trixPacks.levels : [];
+    const levelTiles = levels
+      .filter((level) => level?.id)
+      .map((level) => {
+        const price = Number.isFinite(Number(level.priceUsd))
+          ? `$${Number(level.priceUsd).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+          : "—";
+        const minted = Number.isFinite(Number(level.minted)) ? fmt(level.minted) : "—";
+        const available = Number.isFinite(Number(level.available)) ? fmt(level.available) : "—";
+        return `<span class="trix-pack-level" title="${escapeHtml(level.id)} level · ${minted} minted · ${available} available">
+          <b>${escapeHtml(level.id)}</b><i>${price}<span>${minted} minted</span></i>
+        </span>`;
+      })
+      .join("");
+    if (levelTiles) html += `<div class="trix-pack-levels">${levelTiles}</div>`;
     if (!html) {
-      html = `<div class="trix-mkt-grid"><span class="unverified-price"><b>Market</b><i>waiting for a valid TRIX read</i></span></div>`;
+      html = `<div class="trix-mkt-grid"><span class="unverified-price"><b>Packs</b><i>waiting for a valid TRIX pack read</i></span></div>`;
     }
     els.trixMarketStats.innerHTML = html;
     els.trixMarketStats.title =
-      marketData?.note ||
-      "Aggregate counts from TRIX public endpoints. No holder, auction, or leaderboard identities are kept or shown.";
+      "Pack market only. Preorder round, treasury, and pack-level pricing from TRIX public endpoints. No NFT, boost-card, or artwork data is fetched or shown here.";
   }
 }
 function finitePositive(value) {

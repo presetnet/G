@@ -3023,6 +3023,39 @@ details[open] > .fold-summary::after {
   flex: 1;
   justify-content: center;
 }
+.trix-pack-levels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 36rem;
+  margin-top: 0.6rem;
+}
+.trix-pack-level {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.trix-pack-level b {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.trix-pack-level i {
+  font-style: normal;
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.trix-pack-level i span {
+  display: block;
+  opacity: 0.78;
+}
 .trix-stats-bar {
   display: flex;
   flex-wrap: wrap;
