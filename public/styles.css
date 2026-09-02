@@ -3059,7 +3059,7 @@ details[open] > .fold-summary::after {
 .trix-card img {
   display: block;
   width: 100%;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 5;
   object-fit: contain;
   background:
     radial-gradient(120% 120% at 50% 15%, rgba(255, 214, 0, 0.14), rgba(20, 20, 24, 0) 60%),
