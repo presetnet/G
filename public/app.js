@@ -1394,7 +1394,7 @@ function renderTrixMarket(s) {
         ? `<span class="trix-discount">${Number(card.discountPercent).toLocaleString()}% off</span>`
         : "";
       return `<figure class="trix-card${i === 0 ? ' featured' : ''}" title="${escapeHtml(card.name || "")} · ${mult} · ${price}">
-        <img src="${escapeHtml(src)}" alt="${escapeHtml(card.name || "TRIX boost card")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
+        <img src="${escapeHtml(src)}" alt="${escapeHtml(card.name || "TRIX boost card")}" decoding="async" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
         <figcaption><b>${escapeHtml(card.name || "—")}</b><i>${mult} <span>${price}</span></i>${discount}</figcaption>
       </figure>`;
     };
@@ -1407,7 +1407,7 @@ function renderTrixMarket(s) {
       .filter((item) => item?.imageUrl)
       .slice(0, 8)
       .map((item) => `<figure class="trix-mint" title="${escapeHtml(item?.name || "Recent TRIX mint")}">
-        <img src="${escapeHtml(trixImageUrl(item.imageUrl))}" alt="${escapeHtml(item?.name || "TRIX artwork")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
+        <img src="${escapeHtml(trixImageUrl(item.imageUrl))}" alt="${escapeHtml(item?.name || "TRIX artwork")}" decoding="async" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
         <figcaption>${escapeHtml(item?.name || "—")}</figcaption>
       </figure>`);
     if (mintTiles.length) {
