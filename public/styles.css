@@ -3051,13 +3051,10 @@ details[open] > .fold-summary::after {
   margin-top: 0.5rem;
 }
 .trix-card {
-  flex: 0 0 15%;
+  flex: 0 0 12%;
   max-width: none;
   min-width: 0;
   margin: 0;
-}
-.trix-card:nth-child(n + 5) {
-  flex: 0 0 20%;
 }
 .trix-card img {
   display: block;
