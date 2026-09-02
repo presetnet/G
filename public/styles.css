@@ -3043,9 +3043,9 @@ details[open] > .fold-summary::after {
 }
 .trix-card-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-auto-rows: 1fr;
-  gap: 0.45rem;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 0.4rem;
   margin-top: 0.5rem;
 }
 .trix-card {
@@ -3055,7 +3055,7 @@ details[open] > .fold-summary::after {
 .trix-card img {
   display: block;
   width: 100%;
-  height: 100%;
+  aspect-ratio: 1 / 1;
   object-fit: contain;
   background:
     radial-gradient(120% 120% at 50% 15%, rgba(255, 214, 0, 0.14), rgba(20, 20, 24, 0) 60%),
@@ -3087,25 +3087,28 @@ details[open] > .fold-summary::after {
 }
 .trix-card figcaption b {
   color: var(--ink);
-  font-size: 0.56rem;
+  font-size: 0.6rem;
   font-weight: 700;
   letter-spacing: 0.06em;
 }
-.trix-card.featured figcaption b {
-  font-size: 0.74rem;
-  color: #ffd60a;
-}
 .trix-card figcaption i {
   color: var(--muted);
-  font-size: 0.48rem;
+  font-size: 0.55rem;
   font-style: normal;
-}
-.trix-card.featured figcaption i {
-  font-size: 0.58rem;
-  color: var(--ink);
 }
 .trix-card figcaption i span {
   display: block;
+}
+.trix-card figcaption .trix-discount {
+  display: inline-block;
+  margin-top: 0.12rem;
+  padding: 0.04rem 0.3rem;
+  border-radius: 3px;
+  background: rgba(255, 214, 0, 0.16);
+  color: #ffd60a;
+  font-family: var(--font-mono);
+  font-size: 0.48rem;
+  font-weight: 700;
 }
 .trix-mint-strip {
   display: flex;
@@ -3150,8 +3153,17 @@ details[open] > .fold-summary::after {
     grid-row: auto;
     min-height: 0;
   }
-  .trix-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .trix-card.featured { grid-column: span 2; grid-row: span 1; }
+  .trix-card-grid {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-padding: 0 0.25rem;
+    padding-bottom: 0.15rem;
+  }
+  .trix-card {
+    flex: 0 0 100px;
+    scroll-snap-align: start;
+  }
 }
 
 
