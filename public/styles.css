@@ -2944,10 +2944,17 @@ details[open] > .fold-summary::after {
   .story { grid-template-columns: 1fr; }
 }
 
+.trix-packs-tile {
+  grid-column: span 4;
+  grid-row: span 1;
+  min-height: 0;
+  align-self: start;
+}
+
 .trix-pack-metric {
   grid-column: span 4;
   grid-row: span 3;
-  min-height: 24rem;
+  min-height: 30rem;
   align-self: start;
 }
 
@@ -3051,7 +3058,7 @@ details[open] > .fold-summary::after {
   margin-top: 0.5rem;
 }
 .trix-card {
-  flex: 0 0 12%;
+  flex: 0 0 18%;
   max-width: none;
   min-width: 0;
   margin: 0;
