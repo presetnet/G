@@ -2062,6 +2062,8 @@ const MAX_TRIX_HISTORY_RECORDS = 2_000;
 const MAX_TRIX_HISTORY_IDS = 10_000;
 const TRIX_LAUNCH_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
 const TRIX_CARD_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
+const TRIX_ARTWORK_WINDOW = 200; // /api/artworks hard cap; pagination params (offset/page/cursor) are ignored by the API
+const TRIX_LEADERBOARD_WINDOW = 100; // /api/leaderboard returns one ranked page from the API
 const TRIX_CARD_CLASSES = [
   { key: "common", label: "Common", oddsBps: 4_561 },
   { key: "uncommon", label: "Uncommon", oddsBps: 900 },
@@ -2649,7 +2651,7 @@ let trixCardCatalogCache = {
 export async function sniffTrixMarket({ previous = null } = {}) {
   const started = Date.now();
   const endpoints = {
-    artworks: `${TRIX_BASE_URL}/api/artworks`,
+    artworks: `${TRIX_BASE_URL}/api/artworks?limit=${TRIX_ARTWORK_WINDOW}`,
     auctions: `${TRIX_BASE_URL}/api/auctions`,
     treasury: `${TRIX_BASE_URL}/api/treasury`,
     preorder: `${TRIX_BASE_URL}/api/mkt/preorder`,
@@ -2732,6 +2734,12 @@ export async function sniffTrixMarket({ previous = null } = {}) {
   const activeStartLamports = activeAuctions
     .map((auction) => Number(auction?.startingPriceLamports))
     .filter((value) => Number.isFinite(value) && value >= 0);
+  const auctionBids = activeAuctions.filter(
+    (auction) => Number.isFinite(Number(auction?.currentBidLamports)) && Number(auction.currentBidLamports) > 0,
+  );
+  const topBidLamports = auctionBids.length
+    ? Math.max(...auctionBids.map((auction) => Number(auction.currentBidLamports)))
+    : null;
   const treasury = {
     balanceSol: Number.isFinite(Number(results.treasury?.balance))
       ? Number(results.treasury.balance)
@@ -2743,6 +2751,9 @@ export async function sniffTrixMarket({ previous = null } = {}) {
   const preorder = {
     tcg: Boolean(results.preorder?.tcg),
     round: results.preorder?.round ?? null,
+    status: results.preorder?.status ?? null,
+    opened: Boolean(results.preorder?.opened),
+    owned: Number.isFinite(Number(results.preorder?.owned)) ? Number(results.preorder.owned) : null,
     cap: Number.isFinite(Number(results.preorder?.cap)) ? Number(results.preorder.cap) : null,
     pricePerPackUsd: Number.isFinite(Number(results.preorder?.pricePerPackUsd))
       ? Number(results.preorder.pricePerPackUsd)
@@ -2778,6 +2789,8 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       total: artworkTotal,
       printed: artworkPrinted,
       printedSupply: artworkPrintedSupplySum,
+      window: TRIX_ARTWORK_WINDOW,
+      capped: artworkTotal >= TRIX_ARTWORK_WINDOW,
     },
     auctions: {
       active: activeStartLamports.length || null,
@@ -2787,6 +2800,8 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       maxStartSol: activeStartLamports.length
         ? Math.max(...activeStartLamports) / 1e9
         : null,
+      withBid: auctionBids.length || null,
+      topBidSol: topBidLamports != null ? topBidLamports / 1e9 : null,
     },
     treasury,
     preorder,
@@ -2797,6 +2812,8 @@ export async function sniffTrixMarket({ previous = null } = {}) {
     leaderboard: {
       entries: leaderboard.length || null,
       totalPoints: leaderboardPoints || null,
+      window: leaderboard.length >= TRIX_LEADERBOARD_WINDOW ? TRIX_LEADERBOARD_WINDOW : null,
+      capped: leaderboard.length >= TRIX_LEADERBOARD_WINDOW,
     },
     recentMints: recentMintsSummary,
   };
@@ -2816,7 +2833,7 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       JSON.stringify(aggregations),
     ),
     url: `${TRIX_BASE_URL}/`,
-    note: "Aggregate-only counts and totals from TRIX public APIs (/api/cards, /api/artworks, /api/auctions, /api/treasury, /api/mkt/preorder, /api/activity, /api/leaderboard). No individual holder, artwork owner, auction bidder, or leaderboard identity is kept or displayed. Boost Card artwork is shown from TRIX's own image URLs; the card catalog is cached for six hours. The recent-mint artwork feed is not shown. Physical packaging is not represented by any of these endpoints; the TCG flag is API-reported and false.",
+    note: "Aggregate-only counts and totals from TRIX public APIs (/api/cards, /api/artworks, /api/auctions, /api/treasury, /api/mkt/preorder, /api/activity, /api/leaderboard). No individual holder, artwork owner, auction bidder, or leaderboard identity is kept or displayed. Boost Card artwork is shown from TRIX's own image URLs; the card catalog is cached for six hours. The recent-mint artwork feed is not shown. Physical packaging is not represented by any of these endpoints; the TCG flag is API-reported and false. Limits the API itself enforces: /api/artworks caps at 200 items (pagination params are ignored), /api/leaderboard returns one page of 100, and auction rows are listings: only a share carry a live bid and most have no end time yet.",
     reason: failures.length ? `Partial: ${failures.join("; ")}.` : null,
   };
 }
@@ -3016,7 +3033,11 @@ trixGeoffCount: bySource["trix.geoff"]?.count ?? null,
       trixCardMaxMultiplier: bySource["trix.market"]?.cards?.maxMultiplier ?? null,
       trixArtworkCount: bySource["trix.market"]?.artworks?.total ?? null,
       trixArtworkPrinted: bySource["trix.market"]?.artworks?.printed ?? null,
+      trixArtworkSupply: bySource["trix.market"]?.artworks?.printedSupply ?? null,
+      trixArtworkCapped: Boolean(bySource["trix.market"]?.artworks?.capped),
       trixAuctionCount: bySource["trix.market"]?.auctions?.active ?? null,
+      trixAuctionBidCount: bySource["trix.market"]?.auctions?.withBid ?? null,
+      trixPreorderOpened: Boolean(bySource["trix.market"]?.preorder?.opened),
       trixTreasurySol: bySource["trix.market"]?.treasury?.balanceSol ?? null,
       trixTreasuryPoints: bySource["trix.market"]?.treasury?.totalPoints ?? null,
       trixActivityCount: bySource["trix.market"]?.activity?.items ?? null,

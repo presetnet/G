@@ -767,19 +767,23 @@ const PROOFS = {
   trixMarket: {
     title: "TRIX collectibles",
     explain:
-      "Aggregate-only counts read from TRIX public APIs: boost Card roster, minted artworks, live auctions, treasury, pre-order TCG flag, and the public activity feed. The recent-mint artwork strip is removed — no individual holder, artwork owner, auction bidder, or leaderboard identity is kept or displayed — totals only. The TCG flag is API-reported (false) and no endpoint represents physical packaging.",
+      "Aggregate-only counts read from TRIX public APIs: boost Card roster, minted artworks (within TRIX's 200-item /api/artworks window — pagination params are ignored by that endpoint), active listings, treasury, pre-order flag and status, and the public activity feed. The recent-mint artwork strip is removed — no individual holder, artwork owner, auction bidder, or leaderboard identity is kept or displayed — totals only. The TCG flag is API-reported (false) and no endpoint represents physical packaging.",
     sources: ["trix.market"],
     fields: [
       "trixCardCount",
       "trixCardMaxMultiplier",
       "trixArtworkCount",
       "trixArtworkPrinted",
+      "trixArtworkSupply",
+      "trixArtworkCapped",
       "trixAuctionCount",
+      "trixAuctionBidCount",
       "trixTreasurySol",
       "trixTreasuryPoints",
       "trixActivityCount",
       "trixLeaderboardEntries",
       "trixTcgActive",
+      "trixPreorderOpened",
       "trixMarketFingerprint",
     ],
     curls: [
@@ -1300,7 +1304,7 @@ function renderTrixMarket(s) {
     }
     els.trixMarketCount.textContent = text;
     els.trixMarketCount.title =
-      "Boost Card roster reported by TRIX /api/cards with their stated multiplier and SOL ask. Artwork shown from TRIX's own image URLs.";
+      "Boost Card roster reported by TRIX /api/cards with their stated multiplier and SOL ask. Artwork shown from TRIX's own image URLs. Artwork counts below are the /api/artworks window (API caps at 200 and ignores pagination).";
   } else if (els.trixMarketMeta) {
     els.trixMarketCount.textContent = finitePositive(artworks.total)
       ? `${fmt(artworks.total)} artworks`
@@ -1315,21 +1319,26 @@ function renderTrixMarket(s) {
   }
   if (els.trixMarketStats) {
     const stats = [];
+    const capNote = artworks.capped ? ` · API cap ${artworks.window}` : "";
     if (finitePositive(artworks.total)) {
       stats.push({
-        b: "Artworks minted",
-        i: `${fmt(artworks.total)} · ${fmt(artworks.printed)} editions`,
+        b: "Minted artworks",
+        i: `${fmt(artworks.total)}${capNote}`,
       });
-      if (finitePositive(artworks.printedSupply)) {
-        stats.push({ b: "Printed supply", i: fmt(artworks.printedSupply) });
-      }
+    }
+    if (finitePositive(artworks.printedSupply)) {
+      stats.push({
+        b: "Printed copies",
+        i: `${fmt(artworks.printedSupply)} · ${fmt(artworks.printed)} works`,
+      });
     }
     const auctions = marketData?.auctions || {};
     if (finitePositive(auctions.active)) {
       const range = (auctions.minStartSol != null && auctions.maxStartSol != null && Number.isFinite(Number(auctions.minStartSol)) && Number.isFinite(Number(auctions.maxStartSol)))
-        ? ` · ${Number(auctions.minStartSol).toFixed(3)}–${Number(auctions.maxStartSol).toFixed(3)} SOL`
+        ? ` · asks ${Number(auctions.minStartSol).toFixed(3)}–${Number(auctions.maxStartSol).toFixed(3)} SOL`
         : "";
-      stats.push({ b: "Live auctions", i: `${fmt(auctions.active)}${range}` });
+      const bid = finitePositive(auctions.withBid) ? ` · ${fmt(auctions.withBid)} bid` : " · no bids yet";
+      stats.push({ b: "Active listings", i: `${fmt(auctions.active)}${bid}${range}` });
     }
     const treasury = marketData?.treasury || {};
     if (treasury.balanceSol != null && Number.isFinite(Number(treasury.balanceSol))) {
@@ -1340,16 +1349,17 @@ function renderTrixMarket(s) {
     }
     const preorder = marketData?.preorder || {};
     if (preorder.pricePerPackUsd != null && Number.isFinite(Number(preorder.pricePerPackUsd))) {
-      stats.push({
-        b: "Preorder packs",
-        i: `$${Number(preorder.pricePerPackUsd).toFixed(2)}${preorder.cap != null ? ` · cap ${fmt(preorder.cap)}` : ""}`,
-      });
+      const usd = `$${Number(preorder.pricePerPackUsd).toFixed(2)}/pack`;
+      const state = preorder.opened
+        ? (preorder.cap != null ? ` · open · cap ${fmt(preorder.cap)}` : " · open")
+        : ` · not open · ${preorder.status || "warming"}`;
+      stats.push({ b: "Preorder packs", i: `${usd}${state}` });
     }
     const lb = marketData?.leaderboard || {};
     if (lb.entries != null) {
       stats.push({
         b: "Leaderboard",
-        i: `${fmt(lb.entries)} entries${lb.totalPoints != null ? ` · ${fmt(lb.totalPoints)} pts` : ""}`,
+        i: `${lb.capped ? "top" : ""} ${fmt(lb.entries)}${lb.totalPoints != null ? ` · ${fmt(lb.totalPoints)} pts` : ""}`,
       });
     }
     const activity = marketData?.activity || {};
@@ -1389,7 +1399,7 @@ function renderTrixMarket(s) {
     els.trixMarketStats.innerHTML = html;
     els.trixMarketStats.title =
       marketData?.note ||
-      "Aggregate counts from TRIX public endpoints. Boost cards shown; the recent-mint artwork strip is removed. No holder, auction, or leaderboard identities are kept or shown.";
+      "Aggregate counts from TRIX public endpoints. /api/artworks caps at the 200 newest items (pagination is ignored by the API), so 'minted artworks' is the API window, not a full ledger. Auctions are active listings, most with no bid and no end time yet. The preorder may not be open for purchase. Boost cards shown; the recent-mint artwork strip is removed. No holder, auction, or leaderboard identities are kept or shown.";
   }
 }
 function finitePositive(value) {
