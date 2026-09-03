@@ -1481,27 +1481,41 @@ function renderTrixReports() {
   if (els.trixArtworkGrid) {
     if (recentMints.length) {
       els.trixArtworkGrid.innerHTML = recentMints
+        .slice(0, 15)
         .map((art) => {
           const src = trixImageUrl(art.imageUrl);
-          const family = (art.artworkType || "").toLowerCase() === "video" ? "video" : "image";
           const mint = art.mintAddress
             ? `<span class="tx-mint" title="${escapeHtml(art.mintAddress)}">${escapeHtml(shortAddr(art.mintAddress))}</span>`
             : "";
-          return `<figure class="trix-report-art" title="${escapeHtml(art.name || "")}${art.mintAddress ? " · mint " + art.mintAddress : ""}">
+          const buyMint = art.linkedCoinMint;
+          const buyUrl = buyMint
+            ? `https://trix.market/coin/${encodeURIComponent(buyMint)}`
+            : art.id ? `https://trix.market/artwork/${encodeURIComponent(art.id)}` : null;
+          const priceTag = Number.isFinite(Number(art.buyPriceSol))
+            ? `<span class="tx-price" title="Live buy-price estimate (marketCap ÷ totalSupply)${art.buyPriceAt ? " as of " + art.buyPriceAt : ""}">${fmtSol(art.buyPriceSol)}</span>`
+            : "";
+          const coinTag = art.linkedCoinSymbol
+            ? `<span class="tx-coin">${escapeHtml(art.linkedCoinSymbol)}</span>`
+            : "";
+          const buyBtn = buyUrl
+            ? `<a class="tx-buy" href="${escapeHtml(buyUrl)}" target="_blank" rel="noopener noreferrer">Buy ${art.linkedCoinSymbol ? escapeHtml(art.linkedCoinSymbol) : ""}</a>`
+            : "";
+          return `<figure class="trix-report-art" title="${escapeHtml(art.name || "")}">
             <img src="${escapeHtml(src)}" alt="${escapeHtml(art.name || "TRIX artwork")}" loading="lazy" decoding="async">
-            <figcaption class="tx-caption"><b>${escapeHtml(art.name || "—")}</b><span class="tx-type">${family}</span>${mint}</figcaption>
+            <figcaption class="tx-caption"><b>${escapeHtml(art.name || "—")}</b>${coinTag}${mint}${priceTag}</figcaption>
+            ${buyBtn ? `<div class="tx-buy-wrap">${buyBtn}</div>` : ""}
           </figure>`;
         })
         .join("");
       els.trixArtworkGrid.title =
-        "Public artwork feed from TRIX /api/artworks/recent-activity (up to the newest 24 with a published image). Artist identity beyond TRIX's own published userId is not shown.";
+        "Public artwork feed from TRIX /api/artworks/recent-activity (newest 15 with a published image). Each Buy link opens the work's linked coin page on TRIX; price is a live estimate from marketCap ÷ totalSupply.";
     } else {
       els.trixArtworkGrid.innerHTML = '<p class="trix-report-empty">No recent artworks from the public TRIX feed.</p>';
     }
   }
   if (els.trixArtworkReportMeta) {
     const bits = [];
-    if (recentMints.length) bits.push(`${recentMints.length} shown`);
+    if (recentMints.length) bits.push(`${Math.min(15, recentMints.length)} shown · buy → linked coin`);
     if (marketData?.checkedAt) bits.push(`checked ${fmtTime(marketData.checkedAt)}`);
     if (!marketData?.ok && marketData?.reason) bits.push("partial read");
     els.trixArtworkReportMeta.textContent = bits.length ? bits.join(" · ") : "waiting on TRIX public feed…";
@@ -1549,6 +1563,14 @@ function finitePositive(value) {
 function trixImageUrl(url) {
   if (typeof url !== "string" || !url) return "";
   return /^https?:\/\//i.test(url) ? url : `https://trix.market${url.startsWith("/") ? "" : "/"}${url}`;
+}
+function fmtSol(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  if (n === 0) return "0 SOL";
+  if (n >= 0.01) return `${n.toLocaleString(undefined, { maximumFractionDigits: 4 })} SOL`;
+  if (n >= 0.000001) return `${n.toFixed(6)} SOL`;
+  return `${n.toExponential(4)} SOL`;
 }
 
 function renderSettlementStatus(s) {

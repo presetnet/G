@@ -2846,6 +2846,20 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       : null,
   };
   const activityItems = Array.isArray(results.activity?.items) ? results.activity.items : [];
+  const launches = [];
+  const launchPages = await Promise.allSettled([
+    fetchJson(`${TRIX_BASE_URL}/api/launches?limit=500&offset=0&sort=marketCap`),
+    fetchJson(`${TRIX_BASE_URL}/api/launches?limit=500&offset=500&sort=marketCap`),
+  ]);
+  for (const page of launchPages) {
+    if (page.status === "fulfilled" && Array.isArray(page.value.json?.items)) {
+      launches.push(...page.value.json.items);
+    }
+  }
+  const launchByMint = new Map();
+  for (const launch of launches) {
+    if (launch?.mintAddress) launchByMint.set(launch.mintAddress, launch);
+  }
   const leaderboard = Array.isArray(results.leaderboard?.leaderboard)
     ? results.leaderboard.leaderboard
     : [];
@@ -2865,6 +2879,12 @@ export async function sniffTrixMarket({ previous = null } = {}) {
     .slice(0, 24)
     .map((item) => {
       const full = artworksById.get(item.id) || item;
+      const linkedMint = full?.linkedCoinMint ?? null;
+      const launch = linkedMint ? launchByMint.get(linkedMint) : null;
+      const marketCap = Number.isFinite(Number(launch?.marketCap)) ? Number(launch.marketCap) : null;
+      const supply = Number.isFinite(Number(launch?.totalSupply)) ? Number(launch.totalSupply) : null;
+      const price = marketCap != null && supply && supply > 0 ? marketCap / supply : null;
+      const marketCapUpdatedAt = launch?.marketCapUpdatedAt ?? null;
       return {
         id: item.id,
         name: item?.name ?? full?.name ?? null,
@@ -2876,6 +2896,12 @@ export async function sniffTrixMarket({ previous = null } = {}) {
         mintAddress: full?.mintAddress ?? null,
         status: full?.status ?? null,
         website: full?.website ?? null,
+        linkedCoinMint: linkedMint,
+        linkedCoinSymbol: full?.linkedCoinSymbol ?? launch?.symbol ?? null,
+        linkedCoinName: full?.linkedCoinName ?? launch?.name ?? null,
+        buyPriceSol: price,
+        buyPriceMarketCap: marketCap,
+        buyPriceAt: marketCapUpdatedAt,
       };
     });
   const aggregations = {
@@ -2935,7 +2961,7 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       JSON.stringify(aggregations),
     ),
     url: `${TRIX_BASE_URL}/`,
-    note: "Aggregate-only counts and totals from TRIX public APIs (/api/cards, /api/artworks, /api/auctions, /api/treasury, /api/mkt/preorder, /api/activity, /api/leaderboard). The recent-mint artwork feed shows public artwork titles, images, creator userId, and on-chain mint address where TRIX publishes them; the leaderboard rows carry TRIX's own public username, wallet, and points. No holder, auction bidder, or artwork-owner identity beyond TRIX's own published fields is kept or displayed. Boost Card artwork is shown from TRIX's own image URLs; the card catalog is cached for six hours. Limits the API itself enforces: /api/artworks caps at 200 items (pagination params are ignored), /api/leaderboard returns one page of 100, and auction rows are listings: only a share carry a live bid and most have no end time yet.",
+    note: "Counts and market data from TRIX public APIs (/api/cards, /api/artworks, /api/auctions, /api/treasury, /api/mkt/preorder, /api/activity, /api/leaderboard, /api/launches). The recent-mint artwork feed shows public artwork titles, images, creator userId, on-chain mint address, and each work's linked coin (via /api/launches) with a live buy-price estimate (marketCap ÷ totalSupply) and a Buy link to the TRIX coin page. The leaderboard rows carry TRIX's own public username, wallet, and points. No holder, auction bidder, or artwork-owner identity beyond TRIX's own published fields is kept or displayed. Boost Card artwork is shown from TRIX's own image URLs; the card catalog is cached for six hours. Limits the API itself enforces: /api/artworks caps at 200 items (pagination params are ignored), /api/leaderboard returns one page of 100, and auction rows are listings: only a share carry a live bid and most have no end time yet. Buy price is an estimate from live marketCap ÷ totalSupply; it is not an official order-book bid or ask.",
     reason: failures.length ? `Partial: ${failures.join("; ")}.` : null,
   };
 }
