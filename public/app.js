@@ -1093,21 +1093,26 @@ function renderMetrics(latest) {
   }
   if (els.pileMeta) {
     const src = latest?.sources?.["stacknet.pile"];
-    const bits = [];
+    const tech = [];
     const pileEvt = (latest?.events || []).find((e) => e?.kind === "pile");
     if (pileEvt && Number.isFinite(pileEvt?.details?.delta) && pileEvt.details.delta !== 0) {
       const d = pileEvt.details.delta;
-      bits.push(`${d > 0 ? "▲" : "▼"}${fmtCompactNumber(Math.abs(d))} /poll`);
+      tech.push(`${d > 0 ? "▲" : "▼"}${fmtCompactNumber(Math.abs(d))} /poll`);
     }
-    if (src?.ok != null) bits.push(src.ok ? "live" : "failed");
-    if (src?.status) bits.push(`HTTP ${src.status}`);
-    if (src?.ms != null) bits.push(`${src.ms}ms`);
-    if (src?.checkedAt) bits.push(`checked ${fmtTime(src.checkedAt)}`);
-    els.pileMeta.textContent = bits.length ? bits.join(" · ") : "unredeemed key earnings";
+    if (src?.ok != null) tech.push(src.ok ? "live" : "failed");
+    if (src?.status) tech.push(`HTTP ${src.status}`);
+    if (src?.ms != null) tech.push(`${src.ms}ms`);
+    if (src?.checkedAt) tech.push(`checked ${fmtTime(src.checkedAt)}`);
+    els.pileMeta.textContent =
+      "black-box total · self-reported · may span months of mining / swap rewards / bubbles" +
+      (tech.length ? ` · ${tech.join(" · ")}` : "");
     els.pileMeta.title =
-      "Unredeemed Node Key earnings across Node Keys that are at least 10% utilized. " +
-      "Self-reported by StackNet at /api/v2/node-keys/pile — a single aggregate field, not independently " +
-      "verifiable on-chain (no per-key breakdown published). Docs: " + (src?.docsUrl || "devconsole-indol.vercel.app/aisp/node-keys");
+      "StackNet's Node-Key 'pile' — unredeemed earnings across Node Keys that are at least 10% utilized. " +
+      "It is a single self-reported aggregate field from /api/v2/node-keys/pile. This total is a speculative " +
+      "black-box number — no per-key or time breakdown is published, so it could cover previous months of mining, " +
+      "swap rewards, bubbles, and other activity that isn't public yet; it should NOT be read as live or real-time " +
+      "unredeemed earnings, and it is not independently verifiable on-chain. Docs: " +
+      (src?.docsUrl || "devconsole-indol.vercel.app/aisp/node-keys");
   }
   if (els.paperworkUsd) {
     const booked = Number(s.metaproofsPaperworkUsd);
