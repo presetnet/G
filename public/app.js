@@ -1480,8 +1480,9 @@ function renderTrixReports() {
 
   if (els.trixArtworkGrid) {
     const buyable = recentMints.filter((art) => art?.linkedCoinMint).slice(0, 12);
-    if (buyable.length) {
-      els.trixArtworkGrid.innerHTML = buyable
+    const shown = buyable.length >= 3 ? buyable : recentMints.slice(0, 12);
+    if (shown.length) {
+      els.trixArtworkGrid.innerHTML = shown
         .map((art) => {
           const src = trixImageUrl(art.imageUrl);
           const mint = art.mintAddress
@@ -1497,9 +1498,11 @@ function renderTrixReports() {
           const coinTag = art.linkedCoinSymbol
             ? `<span class="tx-coin">${escapeHtml(art.linkedCoinSymbol)}</span>`
             : "";
-          const buyBtn = buyUrl
+          const buyBtn = buyMint
             ? `<a class="tx-buy" href="${escapeHtml(buyUrl)}" target="_blank" rel="noopener noreferrer">Buy ${art.linkedCoinSymbol ? escapeHtml(art.linkedCoinSymbol) : ""}</a>`
-            : "";
+            : art.id
+              ? `<a class="tx-buy dim" href="${escapeHtml(buyUrl)}" target="_blank" rel="noopener noreferrer">View</a>`
+              : "";
           return `<figure class="trix-report-art" title="${escapeHtml(art.name || "")}">
             <img src="${escapeHtml(src)}" alt="${escapeHtml(art.name || "TRIX artwork")}" loading="lazy" decoding="async">
             <figcaption class="tx-caption"><b>${escapeHtml(art.name || "—")}</b>${coinTag}${mint}${priceTag}</figcaption>
@@ -1508,15 +1511,17 @@ function renderTrixReports() {
         })
         .join("");
       els.trixArtworkGrid.title =
-        "Buyable memes from TRIX /api/artworks/recent-activity (up to the newest 12 that carry a linked tradable coin). Each Buy link opens the coin page on TRIX; price is a live estimate from marketCap ÷ totalSupply.";
+        "Memes for sale on TRIX (up to the newest 12). Artworks that carry a linked tradable coin show a Buy button and live price (marketCap ÷ totalSupply); the rest link to their TRIX artwork page.";
     } else {
-      els.trixArtworkGrid.innerHTML = '<p class="trix-report-empty">No buyable memes with a linked coin from the public TRIX feed.</p>';
+      els.trixArtworkGrid.innerHTML = '<p class="trix-report-empty">No recent memes from the public TRIX feed.</p>';
     }
   }
   if (els.trixArtworkReportMeta) {
     const bits = [];
-    const shown = recentMints.filter((art) => art?.linkedCoinMint).length;
-    if (shown) bits.push(`${Math.min(12, shown)} for sale · buy → linked coin`);
+    const buyable = recentMints.filter((art) => art?.linkedCoinMint).length;
+    const shown = recentMints.slice(0, 12).length;
+    if (shown) bits.push(`${shown} memes`);
+    if (buyable) bits.push(`${Math.min(12, buyable)} buyable`);
     if (marketData?.checkedAt) bits.push(`checked ${fmtTime(marketData.checkedAt)}`);
     if (!marketData?.ok && marketData?.reason) bits.push("partial read");
     els.trixArtworkReportMeta.textContent = bits.length ? bits.join(" · ") : "waiting on TRIX public feed…";

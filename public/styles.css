@@ -4952,6 +4952,15 @@ details[open] > .fold-summary::after {
 .tx-buy:hover {
   filter: brightness(1.08);
 }
+.tx-buy.dim {
+  background: rgba(39, 39, 42, 0.9);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+.tx-buy.dim:hover {
+  background: rgba(63, 63, 70, 0.9);
+}
 .trix-report-empty {
   color: var(--muted);
   font-size: 0.78rem;
