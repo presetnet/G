@@ -229,12 +229,22 @@ export async function loadSharedBundle() {
   const redisBundle = await loadFromRedis().catch(() => null);
   if (redisBundle?.latest || redisBundle?.events?.length) return redisBundle;
 
-  // One-time cold seed from GitHub if Redis empty
-  const githubBundle = await loadFromGithub();
-  if ((githubBundle.latest || githubBundle.events?.length) && redisUrl() && redisToken()) {
-    await saveToRedis(githubBundle).catch(() => {});
+  // Optional one-time cold seed from GitHub when Redis is empty. A cold-seed
+  // outage (e.g. bad/stale token) must NOT kill the whole desk: when Redis is
+  // configured it simply gets seeded fresh by the next live sniff, so degrade to
+  // an empty bundle instead of throwing. Only re-throw when there is truly no
+  // readable desk (neither Redis nor GitHub).
+  try {
+    const githubBundle = await loadFromGithub();
+    if (githubBundle.latest || githubBundle.events?.length) {
+      if (redisUrl() && redisToken()) await saveToRedis(githubBundle).catch(() => {});
+      return githubBundle;
+    }
+    return emptyBundle();
+  } catch (error) {
+    if (!(redisUrl() && redisToken())) throw error;
+    return emptyBundle();
   }
-  return githubBundle.latest || githubBundle.events?.length ? githubBundle : emptyBundle();
 }
 
 export async function saveSharedBundle(bundle, { message, mirrorGithub = true } = {}) {
