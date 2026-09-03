@@ -2874,7 +2874,19 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       if (art?.id) artworksById.set(art.id, art);
     }
   }
-  const recentMintsSummary = recentMints
+  // The recent-activity feed caps at 12 (it ignores limit/pagination), so pad up
+  // to a full grid from the newest marked artworks in the /api/artworks catalog.
+  const candidates = [...recentMints];
+  const catalogArtworks = [...artworksById.values()]
+    .filter((art) => typeof art?.imageUrl === "string" && art?.id)
+    .sort((a, b) => Date.parse(b?.createdAt || 0) - Date.parse(a?.createdAt || 0));
+  const seenArt = new Set(candidates.filter((item) => item?.id).map((item) => item.id));
+  for (const art of catalogArtworks) {
+    if (!art.id || seenArt.has(art.id)) continue;
+    candidates.push({ id: art.id, name: art.name, imageUrl: art.imageUrl });
+    seenArt.add(art.id);
+  }
+  const recentMintsSummary = candidates
     .filter((item) => item?.id && typeof item?.imageUrl === "string")
     .slice(0, 24)
     .map((item) => {
