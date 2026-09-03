@@ -2126,7 +2126,7 @@ const MAX_TRIX_HISTORY_RECORDS = 2_000;
 const MAX_TRIX_HISTORY_IDS = 10_000;
 const TRIX_LAUNCH_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
 const TRIX_CARD_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
-const TRIX_ARTWORK_WINDOW = 200; // /api/artworks hard cap; pagination params (offset/page/cursor) are ignored by the API
+const TRIX_ARTWORK_WINDOW = 100; // /api/artworks hard cap; pagination params are ignored. NOTE: limit>~120 returns HTTP 500 ("Failed query"), so keep this <=100.
 const TRIX_LEADERBOARD_WINDOW = 100; // /api/leaderboard returns one ranked page from the API
 const TRIX_CARD_CLASSES = [
   { key: "common", label: "Common", oddsBps: 4_561 },
@@ -2748,7 +2748,7 @@ export async function sniffTrixMarket({ previous = null } = {}) {
   const endpointKeys = Object.keys(endpoints);
   const settled = await Promise.allSettled(endpointKeys.map((key) => fetchJson(endpoints[key])));
   const results = {};
-  const failures = [];
+  let failures = [];
   settled.forEach((result, index) => {
     const key = endpointKeys[index];
     if (result.status === "fulfilled" && result.value?.ok) {
@@ -2760,6 +2760,20 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       );
     }
   });
+  // Artwork buy-link enrichment depends on /api/artworks. That endpoint can flake
+  // (it returns HTTP 500 for limit values the API now rejects, e.g. > ~120), so
+  // re-fetch with a fallback ladder of smaller limits to keep the meme grid's buy
+  // links alive even when the configured window fails.
+  if (!Array.isArray(results.artworks) || results.artworks.length === 0) {
+    for (const retryLimit of [100, 80, 60, 40]) {
+      const retry = await fetchJson(`${TRIX_BASE_URL}/api/artworks?limit=${retryLimit}`).catch(() => null);
+      if (retry?.ok && Array.isArray(retry.json) && retry.json.length) {
+        if (!results.artworks) failures = failures.filter((f) => !f.startsWith("artworks:"));
+        results.artworks = retry.json;
+        break;
+      }
+    }
+  }
   let cardsSummary = { count: null, cards: [], maxMultiplier: null };
   if (results.cards && Array.isArray(results.cards)) {
     cardsSummary.cards = results.cards
@@ -2874,28 +2888,46 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       if (art?.id) artworksById.set(art.id, art);
     }
   }
-  // Build a grid of buyable memes only (linked coin present) so every cell has a
-  // Buy link + price. The recent-activity feed caps at 12 and not all carry a coin,
-  // so fold in the newest buyable artworks from the /api/artworks catalog to fill
-  // a full, even grid.
+  // Build an even grid of up to 12 memes. Buyable memes (a linked tradable coin is
+  // present) come first so every Buy link + live price stays reachable; minted
+  // artworks WITHOUT a linked coin are included afterwards so their easy View links
+  // are never cut off either. The recent-activity feed caps at 12, so fold in the
+  // newest catalog artworks to keep the grid full and clean.
   const enrichedRecent = recentMints
     .map((item) => ({ ...item, ...(artworksById.get(item?.id) || {}) }))
-    .filter((item) => item?.id && typeof item?.imageUrl === "string" && item?.linkedCoinMint);
+    .filter((item) => item?.id && typeof item?.imageUrl === "string");
+  const buyableRecent = [];
+  const mintedRecent = [];
+  for (const item of enrichedRecent) {
+    if (item?.linkedCoinMint) buyableRecent.push(item);
+    else mintedRecent.push(item);
+  }
+  const byCreated = (a, b) => Date.parse(b?.createdAt || 0) - Date.parse(a?.createdAt || 0);
   const catalogBuyables = [...artworksById.values()]
     .filter((art) => typeof art?.imageUrl === "string" && art?.id && art?.linkedCoinMint)
-    .sort((a, b) => Date.parse(b?.createdAt || 0) - Date.parse(a?.createdAt || 0));
+    .sort(byCreated);
+  const catalogMinted = [...artworksById.values()]
+    .filter((art) => typeof art?.imageUrl === "string" && art?.id && !art?.linkedCoinMint)
+    .sort(byCreated);
   const candidates = [];
   const seenArt = new Set();
   const addCandidate = (item) => {
-    if (!item?.id || seenArt.has(item.id)) return;
+    if (candidates.length >= 12 || !item?.id || seenArt.has(item.id)) return;
     seenArt.add(item.id);
     candidates.push(item);
   };
-  for (const item of enrichedRecent) addCandidate(item);
-  for (const art of catalogBuyables) {
-    addCandidate(art);
-    if (candidates.length >= 12) break;
-  }
+  const pushIfNew = (list) => {
+    for (const item of list) {
+      addCandidate(item);
+      if (candidates.length >= 12) break;
+    }
+  };
+  // buyables first so Buy links + prices always visible
+  pushIfNew(buyableRecent);
+  pushIfNew(catalogBuyables);
+  // then minted-only artworks so their View links survive
+  pushIfNew(mintedRecent);
+  pushIfNew(catalogMinted);
   const recentMintsSummary = candidates
     .slice(0, 12)
     .map((item) => {
