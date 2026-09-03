@@ -921,5 +921,25 @@ function glossary() {
       meaning:
         "Unofficial estimate = distinct wallets that received a mining reward (payout) in the past 60 minutes, from the wPOND payout account minus known house/relay wallets. Not all active miners are paid every hour, and claims that haven't settled are invisible — treat it as a floor, not an official census. Shows 0 while claim facet is OFF (payouts have been silent since 2026-08-27 in recent checks).",
     },
+    {
+      term: "TRIX treasury",
+      meaning:
+        "TRIX's on-chain rewards wallet H1HU4….Rtvoid (the /api/treasury balance + total points). It is also one of the two GEOFF provider rails, so its on-chain SOL balance tracks reward/treasury money directly.",
+    },
+    {
+      term: "GEOFF legs",
+      meaning:
+        "The two system-transfer wallets TRIX routes paid generations to: QR7US….TtY (a separate provider wallet) and H1HU4….Rtvoid (the treasury). The follow-the-money panel shows each one's live on-chain SOL balance.",
+    },
+    {
+      term: "Non-GEOFF fee share",
+      meaning:
+        "The parts of a TRIX coin trade that are NOT the GEOFF generation rail: the platform fee (100 bps = 1%) and creator fee (50 bps = 0.5%) split off each trade, plus the 0.2 SOL launch fee. These pools land outside the two system-transfer legs and are the money that 'does not go to GEOFF.'",
+    },
+    {
+      term: "Recent trade flow",
+      meaning:
+        "Buy/sell SOL and unique-wallet counts summed from the newest TRIX public trade feed window (/api/feed/trades, limit 50 events). Net positive means net buying in that window. It is a short sample, not a full order-book ledger.",
+    },
   ];
 }

@@ -506,6 +506,77 @@
         </div>
       </section>
 
+      <section class="panel trix-report money-report" aria-label="Follow the money">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="ico-wrap sm" data-icon="coins"></span>
+            <h2>Follow the money · TRIX</h2>
+          </div>
+          <p id="trixMoneyMeta">waiting on TRIX money feed…</p>
+        </div>
+        <p class="feed-hint">Treasury + fee accounts · fee split · recent trade flow · 24h market (live on-chain balances, API aggregates)</p>
+
+        <div class="money-grid">
+          <div class="money-tile">
+            <h3>Treasury</h3>
+            <div class="money-stats">
+              <div class="money-stat"><span class="money-label">Balance (API)</span><b id="moneyTreasurySol">—</b></div>
+              <div class="money-stat"><span class="money-label">Balance (on-chain)</span><b id="moneyTreasuryOnChain">—</b></div>
+              <div class="money-stat"><span class="money-label">Total points</span><b id="moneyTreasuryPoints">—</b></div>
+            </div>
+            <p class="money-addr" id="moneyTreasuryAddr">—</p>
+          </div>
+
+          <div class="money-tile">
+            <h3>GEOFF leg 1</h3>
+            <div class="money-stats">
+              <div class="money-stat"><span class="money-label">Balance (on-chain)</span><b id="moneyGeoLeg1Sol">—</b></div>
+            </div>
+            <p class="money-addr" id="moneyGeoLeg1Addr">—</p>
+            <p class="money-note">separate wallet; treasury is itself GEOFF leg 2</p>
+          </div>
+
+          <div class="money-tile">
+            <h3>Fee split · non-GEOFF share</h3>
+            <div class="money-stats">
+              <div class="money-stat"><span class="money-label">Platform fee</span><b id="moneyPlatformFee">—</b></div>
+              <div class="money-stat"><span class="money-label">Creator fee</span><b id="moneyCreatorFee">—</b></div>
+              <div class="money-stat"><span class="money-label">Launch fee</span><b id="moneyLaunchFee">—</b></div>
+            </div>
+            <p class="money-note">the creator + platform shares split off each coin trade before any reaches the GEOFF rails</p>
+          </div>
+
+          <div class="money-tile">
+            <h3>Recent trade flow</h3>
+            <div class="money-stats">
+              <div class="money-stat"><span class="money-label">Buys</span><b id="moneyBuysSol">—</b></div>
+              <div class="money-stat"><span class="money-label">Sells</span><b id="moneySellsSol">—</b></div>
+              <div class="money-stat"><span class="money-label">Net</span><b id="moneyNetSol">—</b></div>
+              <div class="money-stat"><span class="money-label">Unique wallets</span><b id="moneyWallets">—</b></div>
+            </div>
+          </div>
+
+          <div class="money-tile">
+            <h3>24h market</h3>
+            <div class="money-stats">
+              <div class="money-stat"><span class="money-label">Volume 24h</span><b id="moneyVolume24h">—</b></div>
+              <div class="money-stat"><span class="money-label">Liquidity</span><b id="moneyLiquidity">—</b></div>
+              <div class="money-stat"><span class="money-label">Snapshotted</span><b id="moneySnapshotAt" class="money-small">—</b></div>
+            </div>
+          </div>
+
+          <div class="money-tile money-table-tile">
+            <h3>Top coins by recent flow</h3>
+            <table class="money-coins-table">
+              <thead>
+                <tr><th>Coin</th><th>Buy (SOL)</th><th>Sell (SOL)</th></tr>
+              </thead>
+              <tbody id="moneyTopCoinsBody"><tr><td colspan="3">waiting…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <details class="raw-drawer">
         <summary>
           <span class="ico-wrap sm" data-icon="layers"></span>

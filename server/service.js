@@ -129,7 +129,31 @@ export function preserveTrixHistory(previous, current) {
 
 export async function getStoredPayload() {
   if (useSharedDesk()) {
-    return getSharedPayload({ sniffLive: false });
+    try {
+      return await getSharedPayload({ sniffLive: false });
+    } catch (error) {
+      // Shared desk unavailable (e.g. bad/stale GitHub token when Redis is empty).
+      // Degrade to the local file store so the dashboard never serves a 500.
+      const [latest, events, state, dailyActivity] = await Promise.all([
+        loadLatestSnapshot(),
+        loadEvents(),
+        loadState(),
+        loadDailyActivity(),
+      ]);
+      return withBriefing({
+        latest,
+        events,
+        dailyActivity,
+        pond0x: null,
+        state,
+        temperature: computeTemperature(events, latest),
+        config: publicConfig(),
+        sharedMeta: {
+          localFallback: true,
+          lastError: error?.message || String(error),
+        },
+      });
+    }
   }
 
   const [latest, events, state, dailyActivity] = await Promise.all([

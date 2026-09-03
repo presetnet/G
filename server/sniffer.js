@@ -2289,6 +2289,10 @@ const TRIX_PROVIDER_PAY_RECIPIENTS = new Set([
   "QR7US76WP3D4Hk65DuvF8ZPWb9E65MBgBk25j7f9TtY",
   "H1HU4Bfg6hsMz8SP2JB27urLM1TeB7UhKREsukRtvoid",
 ]);
+/** TRIX's own on-chain treasury / rewards wallet. It is also the 2nd geoff rail. */
+const TRIX_TREASURY_ADDRESS = "H1HU4Bfg6hsMz8SP2JB27urLM1TeB7UhKREsukRtvoid";
+/** The 1st geoff rail is a distinct wallet (finance/generation split, not the treasury). */
+const TRIX_GEOFF_LEG1 = "QR7US76WP3D4Hk65DuvF8ZPWb9E65MBgBk25j7f9TtY";
 const GEOF_INFER_VERIFY_LIMIT = 3;
 
 /**
@@ -3014,9 +3018,160 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       JSON.stringify(aggregations),
     ),
     url: `${TRIX_BASE_URL}/`,
-    note: "Counts and market data from TRIX public APIs (/api/cards, /api/artworks, /api/auctions, /api/treasury, /api/mkt/preorder, /api/activity, /api/leaderboard, /api/launches). The recent-mint artwork feed shows public artwork titles, images, creator userId, on-chain mint address, and each work's linked coin (via /api/launches) with a live buy-price estimate (marketCap ÷ totalSupply) and a Buy link to the TRIX coin page. The leaderboard rows carry TRIX's own public username, wallet, and points. No holder, auction bidder, or artwork-owner identity beyond TRIX's own published fields is kept or displayed. Boost Card artwork is shown from TRIX's own image URLs; the card catalog is cached for six hours. Limits the API itself enforces: /api/artworks caps at 200 items (pagination params are ignored), /api/leaderboard returns one page of 100, and auction rows are listings: only a share carry a live bid and most have no end time yet. Buy price is an estimate from live marketCap ÷ totalSupply; it is not an official order-book bid or ask.",
+    note: "Counts and market data from TRIX public APIs (/api/cards, /api/artworks, /api/auctions, /api/treasury, /api/mkt/preorder, /api/activity, /api/leaderboard, /api/launches). The recent-mint artwork feed shows public artwork titles, images, creator userId, on-chain mint address, and each work's linked coin (via /api/launches) with a live buy-price estimate (marketCap ÷ totalSupply) and a Buy link to the TRIX coin page. The leaderboard rows carry TRIX's own public username, wallet, and points. No holder, auction bidder, or artwork-owner identity beyond TRIX's own published fields is kept or displayed. Boost Card artwork is shown from TRIX's own image URLs; the card catalog is cached for six hours. Limits the API itself enforces: /api/artworks caps at 200 items (pagination params are ignored), /api/leaderboard returns one page of 100, and auction rows are listings: only a share carry a live bid and most have no end time yet. Buy price is an estimate from live marketCap ÷ totalSupply; it is not an official order-book bid or ask. The /api/artworks feed window is limited to 100 items: the API returns HTTP 500 for larger limit values.",
     reason: failures.length ? `Partial: ${failures.join("; ")}.` : null,
   };
+}
+
+/**
+ * "Follow the money" for TRIX: the treasury + fee accounts, the per-trade buy/sell
+ * split, the creator/platform fee ledger, and the live on-chain balances of the
+ * treasury and the distinct geoff leg. All values are resilient (null on failure)
+ * so a partial read never breaks the dashboard.
+ */
+export async function sniffTrixMoney({ previous = null } = {}) {
+  const started = Date.now();
+  const now = new Date().toISOString();
+  const endpoints = {
+    launchpad: `${TRIX_BASE_URL}/api/launchpad-settings/public`,
+    treasury: `${TRIX_BASE_URL}/api/treasury`,
+    trades: `${TRIX_BASE_URL}/api/feed/trades?limit=50`,
+    market: `${TRIX_BASE_URL}/api/meme-market`,
+  };
+  const fetched = await Promise.all(
+    Object.entries(endpoints).map(async ([key, url]) => {
+      try {
+        const res = await fetchJson(url);
+        if (!res?.ok) return [key, null, `${key}:${res?.status ?? 0}:${res?.reason || "error"}`];
+        if (res.json?.message && typeof res.json.message === "string") return [key, null, `${key}:${res.status}:${res.json.message}`];
+        return [key, res.json, null];
+      } catch (e) {
+        return [key, null, `${key}:${e?.message || "error"}`];
+      }
+    }),
+  );
+  const results = {};
+  const failures = [];
+  for (const [key, json, failure] of fetched) {
+    if (json != null) results[key] = json;
+    else if (failure) failures.push(failure);
+  }
+
+  const feeSplit = (() => {
+    const p = results.launchpad || {};
+    const platformBps = Number.isFinite(Number(p?.platformFeeBps)) ? Number(p.platformFeeBps) : null;
+    const creatorBps = Number.isFinite(Number(p?.creatorFeeBps)) ? Number(p.creatorFeeBps) : null;
+    return {
+      platformFeeBps: platformBps,
+      creatorFeeBps: creatorBps,
+      platformFeePct: platformBps != null ? platformBps / 100 : null,
+      creatorFeePct: creatorBps != null ? creatorBps / 100 : null,
+      platformLaunchFeeSol: Number.isFinite(Number(p?.platformLaunchFeeSol)) ? Number(p.platformLaunchFeeSol) : null,
+    };
+  })();
+
+  const treasuryApi = results.treasury || {};
+  const [balanceTreasury, balanceGeoLeg1] = await Promise.all([
+    solanaRpc("getBalance", [TRIX_TREASURY_ADDRESS, { commitment: "confirmed" }])
+      .then((res) => (typeof res?.value === "number" ? res.value / 1e9 : null))
+      .catch(() => null),
+    solanaRpc("getBalance", [TRIX_GEOFF_LEG1, { commitment: "confirmed" }])
+      .then((res) => (typeof res?.value === "number" ? res.value / 1e9 : null))
+      .catch(() => null),
+  ]);
+
+  const trades = Array.isArray(results.trades?.items) ? results.trades.items : [];
+  let buySol = 0;
+  let sellSol = 0;
+  let buyCount = 0;
+  let sellCount = 0;
+  const wallets = new Set();
+  const byCoin = new Map();
+  for (const t of trades) {
+    const side = t?.side;
+    const sol = Number.isFinite(Number(t?.solAmount)) ? Number(t.solAmount) : 0;
+    const mint = t?.mint;
+    if (side === "buy") { buySol += sol; buyCount += 1; }
+    if (side === "sell") { sellSol += sol; sellCount += 1; }
+    if (t?.walletAddress) wallets.add(t.walletAddress);
+    if (mint) {
+      const coin = byCoin.get(mint) || { mint, symbol: t?.symbol, buySol: 0, sellSol: 0, count: 0 };
+      coin.buySol += side === "buy" ? sol : 0;
+      coin.sellSol += side === "sell" ? sol : 0;
+      coin.count += 1;
+      byCoin.set(mint, coin);
+    }
+  }
+  const topCoins = [...byCoin.values()]
+    .sort((a, b) => (b.buySol + b.sellSol) - (a.buySol + a.sellSol))
+    .slice(0, 8)
+    .map((c) => ({ ...c, buySol: roundSol(c.buySol), sellSol: roundSol(c.sellSol) }));
+
+  const market = Array.isArray(results.market) ? results.market : [];
+  let marketVolume24h = 0;
+  let marketLiquidity = 0;
+  let marketCoins = 0;
+  let marketSnapshot = null;
+  if (market.length) {
+    marketCoins = market.length;
+    marketVolume24h = market.reduce((s, c) => s + (Number.isFinite(Number(c?.volume24h)) ? Number(c.volume24h) : 0), 0);
+    marketLiquidity = market.reduce((s, c) => s + (Number.isFinite(Number(c?.liquidity)) ? Number(c.liquidity) : 0), 0);
+    marketSnapshot = market[0]?.snapshotTimestamp ?? null;
+  }
+
+  const aggregations = {
+    feeSplit,
+    treasury: {
+      address: TRIX_TREASURY_ADDRESS,
+      balanceSol: Number.isFinite(Number(treasuryApi?.balance)) ? Number(treasuryApi.balance) : null,
+      totalPoints: Number.isFinite(Number(treasuryApi?.totalPoints)) ? Number(treasuryApi.totalPoints) : null,
+      balanceSolOnChain: balanceTreasury,
+      balanceSolOnChainAt: now,
+    },
+    geoffLeg1: {
+      address: TRIX_GEOFF_LEG1,
+      balanceSol: balanceGeoLeg1,
+      balanceSolOnChainAt: now,
+      isTreasury: false,
+    },
+    // 'Non-geoff' money = the creator + platform fee shares from coin trading that do
+    // NOT land on the geoff generation rail. The treasury is itself one geoff leg, so
+    // the distinct non-geoff pools are the creator fee (per-launch) and the platform
+    // fee kept outside those two system-transfer legs.
+    fees: {
+      recentBuysSol: roundSol(buySol),
+      recentSellsSol: roundSol(sellSol),
+      recentNetSol: roundSol(buySol - sellSol),
+      buyCount,
+      sellCount,
+      uniqueWallets: wallets.size,
+      topCoins,
+    },
+    market24h: {
+      coins: marketCoins,
+      volume24h: roundSol(marketVolume24h),
+      liquidity: roundSol(marketLiquidity),
+      snapshotAt: marketSnapshot,
+    },
+    checkedAt: now,
+  };
+
+  const ok = Boolean(results.launchpad || results.treasury || trades.length);
+  return {
+    source: "trix.money",
+    ok,
+    status: ok ? 200 : 0,
+    ms: Date.now() - started,
+    ...aggregations,
+    url: `${TRIX_BASE_URL}/`,
+    note: "Money-flow read from TRIX public APIs (/api/treasury, /api/launchpad-settings/public, /api/feed/trades, /api/meme-market) plus live on-chain SOL balances (getBalance) for the treasury and the distinct geoff leg. The TRIX treasury wallet H1HU4….Rtvoid is itself one of the two geoff provider rails; the other rail QR7US….TtY is a separate wallet. 'Non-geoff' money here means the creator-fee and platform-fee shares a coin trade splits off before any of it reaches the geoff rails. Buy/sell SOL totals are summed from the public trade feed window (limit 50 newest events). 24h volume/liquidity are TRIX's own /api/meme-market snapshot (stale; not live on-curve). All estimates are not an official order-book bid or ask.",
+    reason: failures.length ? `Partial: ${failures.join("; ")}.` : null,
+    fingerprint: bodyHash(JSON.stringify(aggregations)),
+  };
+}
+
+function roundSol(value) {
+  return Number.isFinite(Number(value)) ? Math.round(Number(value) * 1e6) / 1e6 : null;
 }
 
 export async function runSniff({ forceMiningSurface = false, previous = null } = {}) {
@@ -3034,6 +3189,7 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
     sniffGeoffSubscription(),
     sniffTrixGeoff({ previous: previous?.sources?.["trix.geoff"] || null }),
     sniffTrixMarket(),
+    sniffTrixMoney(),
     sniffStacknetHealth(),
     sniffStacknetRoot(),
     sniffStacknetNetwork(),
@@ -3232,6 +3388,21 @@ trixGeoffCount: bySource["trix.geoff"]?.count ?? null,
       trixLeaderboard: bySource["trix.market"]?.leaderboard?.rows ?? [],
       trixLeaderboardCap: bySource["trix.market"]?.leaderboard?.capped ?? false,
       trixMarketFingerprint: bySource["trix.market"]?.fingerprint ?? null,
+      trixMoneyOk: Boolean(bySource["trix.money"]?.ok),
+      trixMoneyTreasurySol: bySource["trix.money"]?.treasury?.balanceSol ?? null,
+      trixMoneyTreasuryOnChain: bySource["trix.money"]?.treasury?.balanceSolOnChain ?? null,
+      trixMoneyGeoLeg1Sol: bySource["trix.money"]?.geoffLeg1?.balanceSol ?? null,
+      trixMoneyTreasuryPoints: bySource["trix.money"]?.treasury?.totalPoints ?? null,
+      trixMoneyPlatformFeeBps: bySource["trix.money"]?.feeSplit?.platformFeeBps ?? null,
+      trixMoneyCreatorFeeBps: bySource["trix.money"]?.feeSplit?.creatorFeeBps ?? null,
+      trixMoneyLaunchFeeSol: bySource["trix.money"]?.feeSplit?.platformLaunchFeeSol ?? null,
+      trixMoneyRecentBuysSol: bySource["trix.money"]?.fees?.recentBuysSol ?? null,
+      trixMoneyRecentSellsSol: bySource["trix.money"]?.fees?.recentSellsSol ?? null,
+      trixMoneyRecentNetSol: bySource["trix.money"]?.fees?.recentNetSol ?? null,
+      trixMoneyTopCoins: bySource["trix.money"]?.fees?.topCoins ?? [],
+      trixMoneyMarketVolume24h: bySource["trix.money"]?.market24h?.volume24h ?? null,
+      trixMoneyMarketLiquidity: bySource["trix.money"]?.market24h?.liquidity ?? null,
+      trixMoneyFingerprint: bySource["trix.money"]?.fingerprint ?? null,
       subscriptionLiveCount: bySource["geoff.subscription"]?.liveCount ?? null,
       subscriptionTotal: bySource["geoff.subscription"]?.total ?? null,
       subscriptionFingerprint: bySource["geoff.subscription"]?.fingerprint ?? null,

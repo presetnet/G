@@ -237,6 +237,24 @@ trixPackMarket: document.getElementById("trixPackMarket"),
   trixArtworkGrid: document.getElementById("trixArtworkGrid"),
   trixLeaderboardMeta: document.getElementById("trixLeaderboardMeta"),
   trixLeaderboardBody: document.getElementById("trixLeaderboardBody"),
+  trixMoneyMeta: document.getElementById("trixMoneyMeta"),
+  moneyTreasurySol: document.getElementById("moneyTreasurySol"),
+  moneyTreasuryOnChain: document.getElementById("moneyTreasuryOnChain"),
+  moneyTreasuryPoints: document.getElementById("moneyTreasuryPoints"),
+  moneyTreasuryAddr: document.getElementById("moneyTreasuryAddr"),
+  moneyGeoLeg1Sol: document.getElementById("moneyGeoLeg1Sol"),
+  moneyGeoLeg1Addr: document.getElementById("moneyGeoLeg1Addr"),
+  moneyPlatformFee: document.getElementById("moneyPlatformFee"),
+  moneyCreatorFee: document.getElementById("moneyCreatorFee"),
+  moneyLaunchFee: document.getElementById("moneyLaunchFee"),
+  moneyBuysSol: document.getElementById("moneyBuysSol"),
+  moneySellsSol: document.getElementById("moneySellsSol"),
+  moneyNetSol: document.getElementById("moneyNetSol"),
+  moneyWallets: document.getElementById("moneyWallets"),
+  moneyVolume24h: document.getElementById("moneyVolume24h"),
+  moneyLiquidity: document.getElementById("moneyLiquidity"),
+  moneySnapshotAt: document.getElementById("moneySnapshotAt"),
+  moneyTopCoinsBody: document.getElementById("moneyTopCoinsBody"),
   keysoldUsd: document.getElementById("keysoldUsd"),
   keysoldMeta: document.getElementById("keysoldMeta"),
   keys9gValue: document.getElementById("keys9gValue"),
@@ -1282,6 +1300,7 @@ function renderMetrics(latest) {
   }
   renderTrixMarket(s);
   renderTrixReports();
+  renderTrixMoney(s);
   renderSettlementStatus(s);
   renderKeySale(s);
   renderKey9g(s);
@@ -1559,6 +1578,81 @@ function renderTrixReports() {
     if (!marketData?.ok && marketData?.reason) bits.push("partial read");
     els.trixLeaderboardMeta.textContent = bits.length ? bits.join(" · ") : "waiting on TRIX public feed…";
   }
+}
+function renderTrixMoney() {
+  if (!els.trixMoneyMeta) return;
+  const money = lastLatest?.sources?.["trix.money"];
+  const summary = lastLatest?.summary ?? {};
+  const setText = (el, value) => {
+    if (el) el.textContent = value ?? "—";
+  };
+  const setTitle = (el, value) => {
+    if (el && value) el.title = value;
+  };
+  const fmtSol = (value) => (Number.isFinite(Number(value)) ? `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 4 })} SOL` : "—");
+  const fmtPct = (bps) => (Number.isFinite(Number(bps)) ? `${bps} bps · ${(bps / 100).toFixed(1)}%` : "—");
+
+  const treasury = money?.treasury || {};
+  const geoffLeg1 = money?.geoffLeg1 || {};
+  const feeSplit = money?.feeSplit || {};
+  const fees = money?.fees || {};
+  const market24h = money?.market24h || {};
+
+  setText(els.moneyTreasurySol, fmtSol(treasury.balanceSol));
+  setText(els.moneyTreasuryOnChain, fmtSol(treasury.balanceSolOnChain));
+  setText(els.moneyTreasuryPoints, Number.isFinite(Number(treasury.totalPoints)) ? Number(treasury.totalPoints).toLocaleString() : "—");
+  setText(els.moneyTreasuryAddr, treasury.address ? shortAddr(treasury.address) : "—");
+  setTitle(els.moneyTreasuryAddr, treasury.address || "");
+  setTitle(els.moneyTreasurySol, `TRIX /api/treasury balance${treasury.address ? ` · ${treasury.address}` : ""}`);
+  setTitle(els.moneyTreasuryOnChain, `Live on-chain SOL balance${money?.checkedAt ? ` as of ${money.checkedAt}` : ""}`);
+
+  setText(els.moneyGeoLeg1Sol, fmtSol(geoffLeg1.balanceSol));
+  setText(els.moneyGeoLeg1Addr, geoffLeg1.address ? shortAddr(geoffLeg1.address) : "—");
+  setTitle(els.moneyGeoLeg1Addr, geoffLeg1.address || "");
+  setTitle(els.moneyGeoLeg1Sol, `Separate GEOFF provider wallet (not the treasury)${money?.checkedAt ? ` as of ${money.checkedAt}` : ""}`);
+
+  setText(els.moneyPlatformFee, fmtPct(feeSplit.platformFeeBps, feeSplit.platformFeeBps));
+  setText(els.moneyCreatorFee, fmtPct(feeSplit.creatorFeeBps, feeSplit.creatorFeeBps));
+  setText(els.moneyLaunchFee, fmtSol(feeSplit.platformLaunchFeeSol));
+  setTitle(els.moneyPlatformFee, "Share of each coin trade taken by TRIX as platform fee");
+  setTitle(els.moneyCreatorFee, "Share of each coin trade routed to the creator (per launch)");
+  setTitle(els.moneyLaunchFee, "Fixed SOL platform fee charged at launch (per launch)");
+
+  setText(els.moneyBuysSol, fmtSol(fees.recentBuysSol));
+  setText(els.moneySellsSol, fmtSol(fees.recentSellsSol));
+  setText(els.moneyNetSol, fmtSol(fees.recentNetSol));
+  setText(els.moneyWallets, Number.isFinite(Number(fees.uniqueWallets)) ? String(fees.uniqueWallets) : "—");
+  setTitle(els.moneyBuysSol, "Total buy SOL in the newest public trade feed window (limit 50 events)");
+  setTitle(els.moneySellsSol, "Total sell SOL in the newest public trade feed window");
+  setTitle(els.moneyNetSol, "Buy SOL minus sell SOL in the window; positive means net buying");
+
+  setText(els.moneyVolume24h, fmtSol(market24h.volume24h));
+  setText(els.moneyLiquidity, fmtSol(market24h.liquidity));
+  setText(els.moneySnapshotAt, market24h.snapshotAt ? `${String(market24h.snapshotAt).slice(0, 10)}` : "—");
+  setTitle(els.moneyVolume24h, `24h volume from TRIX /api/meme-market snapshot${market24h.snapshotAt ? ` as of ${market24h.snapshotAt}` : ""} (stale; not live)`);
+
+  const topCoins = Array.isArray(fees.topCoins) ? fees.topCoins : (Array.isArray(summary.trixMoneyTopCoins) ? summary.trixMoneyTopCoins : []);
+  if (els.moneyTopCoinsBody) {
+    if (topCoins.length) {
+      els.moneyTopCoinsBody.innerHTML = topCoins
+        .map((c) => {
+          const label = c.symbol || (c.mint ? shortAddr(c.mint) : "—");
+          const buy = Number.isFinite(Number(c.buySol)) ? Number(c.buySol).toLocaleString(undefined, { maximumFractionDigits: 4 }) : "—";
+          const sell = Number.isFinite(Number(c.sellSol)) ? Number(c.sellSol).toLocaleString(undefined, { maximumFractionDigits: 4 }) : "—";
+          return `<tr><td><b>${escapeHtml(label)}</b></td><td>${buy}</td><td>${sell}</td></tr>`;
+        })
+        .join("");
+    } else {
+      els.moneyTopCoinsBody.innerHTML = '<tr><td colspan="3">No recent trades in the feed window.</td></tr>';
+    }
+  }
+
+  const bits = [];
+  if (money?.ok) bits.push("live");
+  if (Number.isFinite(Number(treasury.balanceSol))) bits.push(`treasury ${Number(treasury.balanceSol).toFixed(1)} SOL`);
+  if (money?.checkedAt) bits.push(`checked ${fmtTime(money.checkedAt)}`);
+  if (!money?.ok && money?.reason) bits.push("partial read");
+  els.trixMoneyMeta.textContent = bits.length ? bits.join(" · ") : "waiting on TRIX money feed…";
 }
 function shortAddr(addr) {
   if (typeof addr !== "string" || addr.length < 12) return addr;
