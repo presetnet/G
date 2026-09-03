@@ -1479,9 +1479,9 @@ function renderTrixReports() {
     : "—";
 
   if (els.trixArtworkGrid) {
-    if (recentMints.length) {
-      els.trixArtworkGrid.innerHTML = recentMints
-        .slice(0, 18)
+    const buyable = recentMints.filter((art) => art?.linkedCoinMint).slice(0, 12);
+    if (buyable.length) {
+      els.trixArtworkGrid.innerHTML = buyable
         .map((art) => {
           const src = trixImageUrl(art.imageUrl);
           const mint = art.mintAddress
@@ -1508,14 +1508,15 @@ function renderTrixReports() {
         })
         .join("");
       els.trixArtworkGrid.title =
-        "Public artwork feed from TRIX /api/artworks/recent-activity (newest 18 with a published image). Each Buy link opens the work's linked coin page on TRIX; price is a live estimate from marketCap ÷ totalSupply.";
+        "Buyable memes from TRIX /api/artworks/recent-activity (up to the newest 12 that carry a linked tradable coin). Each Buy link opens the coin page on TRIX; price is a live estimate from marketCap ÷ totalSupply.";
     } else {
-      els.trixArtworkGrid.innerHTML = '<p class="trix-report-empty">No recent artworks from the public TRIX feed.</p>';
+      els.trixArtworkGrid.innerHTML = '<p class="trix-report-empty">No buyable memes with a linked coin from the public TRIX feed.</p>';
     }
   }
   if (els.trixArtworkReportMeta) {
     const bits = [];
-    if (recentMints.length) bits.push(`${Math.min(18, recentMints.length)} shown · buy → linked coin`);
+    const shown = recentMints.filter((art) => art?.linkedCoinMint).length;
+    if (shown) bits.push(`${Math.min(12, shown)} for sale · buy → linked coin`);
     if (marketData?.checkedAt) bits.push(`checked ${fmtTime(marketData.checkedAt)}`);
     if (!marketData?.ok && marketData?.reason) bits.push("partial read");
     els.trixArtworkReportMeta.textContent = bits.length ? bits.join(" · ") : "waiting on TRIX public feed…";

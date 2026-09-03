@@ -2874,21 +2874,30 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       if (art?.id) artworksById.set(art.id, art);
     }
   }
-  // The recent-activity feed caps at 12 (it ignores limit/pagination), so pad up
-  // to a full grid from the newest marked artworks in the /api/artworks catalog.
-  const candidates = [...recentMints];
-  const catalogArtworks = [...artworksById.values()]
-    .filter((art) => typeof art?.imageUrl === "string" && art?.id)
+  // Build a grid of buyable memes only (linked coin present) so every cell has a
+  // Buy link + price. The recent-activity feed caps at 12 and not all carry a coin,
+  // so fold in the newest buyable artworks from the /api/artworks catalog to fill
+  // a full, even grid.
+  const enrichedRecent = recentMints
+    .map((item) => ({ ...item, ...(artworksById.get(item?.id) || {}) }))
+    .filter((item) => item?.id && typeof item?.imageUrl === "string" && item?.linkedCoinMint);
+  const catalogBuyables = [...artworksById.values()]
+    .filter((art) => typeof art?.imageUrl === "string" && art?.id && art?.linkedCoinMint)
     .sort((a, b) => Date.parse(b?.createdAt || 0) - Date.parse(a?.createdAt || 0));
-  const seenArt = new Set(candidates.filter((item) => item?.id).map((item) => item.id));
-  for (const art of catalogArtworks) {
-    if (!art.id || seenArt.has(art.id)) continue;
-    candidates.push({ id: art.id, name: art.name, imageUrl: art.imageUrl });
-    seenArt.add(art.id);
+  const candidates = [];
+  const seenArt = new Set();
+  const addCandidate = (item) => {
+    if (!item?.id || seenArt.has(item.id)) return;
+    seenArt.add(item.id);
+    candidates.push(item);
+  };
+  for (const item of enrichedRecent) addCandidate(item);
+  for (const art of catalogBuyables) {
+    addCandidate(art);
+    if (candidates.length >= 12) break;
   }
   const recentMintsSummary = candidates
-    .filter((item) => item?.id && typeof item?.imageUrl === "string")
-    .slice(0, 24)
+    .slice(0, 12)
     .map((item) => {
       const full = artworksById.get(item.id) || item;
       const linkedMint = full?.linkedCoinMint ?? null;
