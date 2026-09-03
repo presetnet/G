@@ -233,6 +233,10 @@ trixPackMarket: document.getElementById("trixPackMarket"),
   trixMarketCount: document.getElementById("trixMarketCount"),
   trixMarketMeta: document.getElementById("trixMarketMeta"),
   trixMarketStats: document.getElementById("trixMarketStats"),
+  trixArtworkReportMeta: document.getElementById("trixArtworkReportMeta"),
+  trixArtworkGrid: document.getElementById("trixArtworkGrid"),
+  trixLeaderboardMeta: document.getElementById("trixLeaderboardMeta"),
+  trixLeaderboardBody: document.getElementById("trixLeaderboardBody"),
   keysoldUsd: document.getElementById("keysoldUsd"),
   keysoldMeta: document.getElementById("keysoldMeta"),
   keys9gValue: document.getElementById("keys9gValue"),
@@ -251,6 +255,9 @@ trixPackMarket: document.getElementById("trixPackMarket"),
   x402Meta: document.getElementById("x402Meta"),
   subscriptionCount: document.getElementById("subscriptionCount"),
   subscriptionMeta: document.getElementById("subscriptionMeta"),
+  miningMiners: document.getElementById("miningMiners"),
+  miningMeta: document.getElementById("miningMeta"),
+  miningReceipt: document.getElementById("miningReceipt"),
   docsCue: document.getElementById("docsCue"),
   docsCueLink: document.getElementById("docsCueLink"),
   lanesCue: document.getElementById("lanesCue"),
@@ -764,10 +771,28 @@ const PROOFS = {
       "curl -s https://registry.npmjs.org/@stacknet/x402payg/latest",
     ],
   },
+  mining: {
+    title: "Mining desk · 60m miners (est)",
+    explain:
+      "Unofficial estimate = distinct wallets that received a mining reward (on-chain wPOND transfer) from the mining payout account in the past 60 minutes, minus known house/relay/token accounts. Not all active miners are paid every hour and unpaid claims are invisible on-chain, so treat it as a floor, not a census. The payout ledger is read from the public Solana RPC; the facet ON/OFF and band come from the mining dashboard surface. 'Silent since' is the last payout timestamp.",
+    sources: ["surface.mining"],
+    fields: [
+      "miningMiners60m",
+      "miningPayouts60m",
+      "miningMiners60mAt",
+      "miningSilentSince",
+      "miningClaimsOn",
+      "miningFacetState",
+    ],
+    curls: [
+      "curl -s 'https://wpond-mining-dashboard.vercel.app/'",
+      "curl -s 'https://api.mainnet-beta.solana.com' -X POST -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getSignaturesForAddress\",\"params\":[\"2Ag1QgyyJj2nS6nD6SLbpAUFaWPhaDrmHwrGwWpMqV9K\",{\"limit\":100}]}'",
+    ],
+  },
   trixMarket: {
     title: "TRIX collectibles",
     explain:
-      "Aggregate-only counts read from TRIX public APIs: boost Card roster, minted artworks (within TRIX's 200-item /api/artworks window — pagination params are ignored by that endpoint), active listings, treasury, pre-order flag and status, and the public activity feed. The recent-mint artwork strip is removed — no individual holder, artwork owner, auction bidder, or leaderboard identity is kept or displayed — totals only. The TCG flag is API-reported (false) and no endpoint represents physical packaging.",
+      "Counts read from TRIX public APIs: boost Card roster, minted artworks (within TRIX's 200-item /api/artworks window — pagination params are ignored by that endpoint), active listings, treasury, pre-order flag and status, and the public activity feed. The bottom community reports show TRIX's own published identity only: newest artwork titles/images/mint addresses plus the leaderboard's top-100 username + wallet rows — no holder, auction bidder, or artwork-owner data beyond what TRIX itself publishes is kept or displayed. The TCG flag is API-reported (false) and no endpoint represents physical packaging.",
     sources: ["trix.market"],
     fields: [
       "trixCardCount",
@@ -811,6 +836,7 @@ const CARD_PROOF_ORDER = [
   "fleetCount",
   "x402Downloads",
   "trixMarket",
+  "mining",
 ];
 
 function openProof(key) {
@@ -1162,6 +1188,11 @@ function renderMetrics(latest) {
     const formatCount = (value) => hasNumber(value)
       ? Number(value).toLocaleString()
       : "—";
+    const packDelta = (value) => {
+      if (!hasNumber(value)) return "N/A";
+      const delta = Number(value);
+      return `${delta > 0 ? "+" : ""}${delta.toLocaleString()}`;
+    };
     const formatUsd = (value) => hasNumber(value)
       ? `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
       : "—";
@@ -1185,6 +1216,8 @@ function renderMetrics(latest) {
     };
     const stats = [
       { label: "Packs left", value: formatCount(trixPacks?.available) },
+      { label: "Packs left Δ/60m", value: packDelta(trixPacks?.packAvailableDelta) },
+      { label: "Minted Δ/60m", value: packDelta(trixPacks?.packMintedDelta) },
       { label: "Mints/hour", value: mintRate },
       { label: "Base paid max", value: observedSol(trixPacks?.purchaseAudit?.baseMaxPaidSol) },
       { label: "Base all-in max", value: observedSol(trixPacks?.purchaseAudit?.baseMaxAllInSol) },
@@ -1204,7 +1237,7 @@ function renderMetrics(latest) {
       ? ` State Base $${basePrice.toFixed(2)} vs Genesis $${genesisPrice.toFixed(2)}: ${Math.abs(basePrice - genesisPrice) <= 0.01 ? "match" : "mismatch"}.`
       : "";
     els.trixPackMarket.title =
-      `Mints/hour is calculated from recent same-round TRIX API-reported mint totals over a rolling window of up to 60 minutes; it does not prove queueing or throttling. Base paid max is observed Pack consideration. Base all-in max also includes buyer-funded account rent and network fees. TRIX bulk checkout submits one transaction per Pack. Premium Pack levels are excluded from both Base maxima. Most ripped, buyback, and meme status are TRIX Genesis API reports. Prices are current API quotes, not verified realized sales.${priceCrossCheck}`;
+      `Packs left is the TRIX /api/mkt/state base-level 'available'. Packs left Δ and Minted Δ are the change over the same rolling window as mints/hour (up to 60 min). During the 'warming'/pre-order phase TRIX can raise its round/genesis cap, which makes BOTH 'Packs left' and 'Minted' rise at once (more packs created on the cap, none consumed) — so a positive 'Packs left Δ' is not proof of pack buyback. Mints/hour is calculated from recent same-round TRIX API-reported mint totals over that rolling window; it does not prove queueing or throttling. Base paid max is observed Pack consideration. Base all-in max also includes buyer-funded account rent and network fees. TRIX bulk checkout submits one transaction per Pack. Premium Pack levels are excluded from both Base maxima. Most ripped, buyback, and meme status are TRIX Genesis API reports. Prices are current API quotes, not verified realized sales.${priceCrossCheck}`;
   }
   if (els.trixPackTraits) {
     const classes = Array.isArray(trixPacks?.classes) ? trixPacks.classes : [];
@@ -1223,7 +1256,32 @@ function renderMetrics(latest) {
     els.trixPackTraits.title =
       "Gross reward multiplier applies to Pack USD price before owner, creator, and meme-pool shares. Early claims may pay less than the owner's full share.";
   }
-renderTrixMarket(s);
+  if (els.miningMiners) {
+    const mining = latest?.sources?.["surface.mining"];
+    const miners = mining?.miners60m;
+    const payouts = mining?.payouts60m;
+    const valid =
+      mining?.ok && Number.isFinite(Number(miners)) && miners > 0;
+    els.miningMiners.textContent = valid
+      ? `${Number(miners).toLocaleString()} wallets paid / 60m`
+      : "—";
+    if (els.miningReceipt) els.miningReceipt.hidden = !valid;
+    if (els.miningMeta) {
+      const bits = [];
+      if (mining?.claimsOn === false) bits.push("claim facet OFF — payout silent");
+      if (mining?.payoutDate) bits.push(mining.payoutDate);
+      if (Number.isFinite(Number(payouts))) bits.push(`${payouts} payouts / 60m`);
+      if (mining?.miners60mAt) bits.push(`estimated ${fmtTime(mining.miners60mAt)}`);
+      if (!mining?.ok && mining?.reason) bits.push("market read failed");
+      els.miningMeta.textContent = bits.length ? bits.join(" · ") : "waiting on payout ledger";
+    }
+    if (els.miningMiners && valid) {
+      els.miningMiners.title =
+        `Distinct wallets that received a mining reward in the last 60 minutes (TRIX surface + on-chain payout ledger). Not all miners are paid every hour and unpaid claims are invisible on-chain, so this is a floor, not an official census. ${mining?.miners60mAt ? `Estimated at ${mining.miners60mAt}.` : ""}${mining?.silentSince ? ` Last payout ${mining.silentSince}.` : ""}`;
+    }
+  }
+  renderTrixMarket(s);
+  renderTrixReports();
   renderSettlementStatus(s);
   renderKeySale(s);
   renderKey9g(s);
@@ -1399,8 +1457,90 @@ function renderTrixMarket(s) {
     els.trixMarketStats.innerHTML = html;
     els.trixMarketStats.title =
       marketData?.note ||
-      "Aggregate counts from TRIX public endpoints. /api/artworks caps at the 200 newest items (pagination is ignored by the API), so 'minted artworks' is the API window, not a full ledger. Auctions are active listings, most with no bid and no end time yet. The preorder may not be open for purchase. Boost cards shown; the recent-mint artwork strip is removed. No holder, auction, or leaderboard identities are kept or shown.";
+      "Aggregate counts from TRIX public endpoints. /api/artworks caps at the 200 newest items (pagination is ignored by the API), so 'minted artworks' is the API window, not a full ledger. Auctions are active listings, most with no bid and no end time yet. The preorder may not be open for purchase. Boost cards shown; identity details (leaderboard usernames/wallets, artwork creators) appear in the bottom TRIX reports section."
   }
+}
+function renderTrixReports() {
+  if (!els.trixArtworkGrid && !els.trixLeaderboardBody) return;
+  const marketData = lastLatest?.sources?.["trix.market"];
+  const summary = lastLatest?.summary ?? {};
+  const recentMints = Array.isArray(marketData?.recentMints)
+    ? marketData.recentMints
+    : Array.isArray(summary.trixRecentMints)
+      ? summary.trixRecentMints
+      : [];
+  const lbRows = Array.isArray(marketData?.leaderboard?.rows)
+    ? marketData.leaderboard.rows
+    : Array.isArray(summary.trixLeaderboard)
+      ? summary.trixLeaderboard
+      : [];
+  const fmt = (value) => Number.isFinite(Number(value))
+    ? Number(value).toLocaleString()
+    : "—";
+
+  if (els.trixArtworkGrid) {
+    if (recentMints.length) {
+      els.trixArtworkGrid.innerHTML = recentMints
+        .map((art) => {
+          const src = trixImageUrl(art.imageUrl);
+          const family = (art.artworkType || "").toLowerCase() === "video" ? "video" : "image";
+          const mint = art.mintAddress
+            ? `<span class="tx-mint" title="${escapeHtml(art.mintAddress)}">${escapeHtml(shortAddr(art.mintAddress))}</span>`
+            : "";
+          return `<figure class="trix-report-art" title="${escapeHtml(art.name || "")}${art.mintAddress ? " · mint " + art.mintAddress : ""}">
+            <img src="${escapeHtml(src)}" alt="${escapeHtml(art.name || "TRIX artwork")}" loading="lazy" decoding="async">
+            <figcaption class="tx-caption"><b>${escapeHtml(art.name || "—")}</b><span class="tx-type">${family}</span>${mint}</figcaption>
+          </figure>`;
+        })
+        .join("");
+      els.trixArtworkGrid.title =
+        "Public artwork feed from TRIX /api/artworks/recent-activity (up to the newest 24 with a published image). Artist identity beyond TRIX's own published userId is not shown.";
+    } else {
+      els.trixArtworkGrid.innerHTML = '<p class="trix-report-empty">No recent artworks from the public TRIX feed.</p>';
+    }
+  }
+  if (els.trixArtworkReportMeta) {
+    const bits = [];
+    if (recentMints.length) bits.push(`${recentMints.length} shown`);
+    if (marketData?.checkedAt) bits.push(`checked ${fmtTime(marketData.checkedAt)}`);
+    if (!marketData?.ok && marketData?.reason) bits.push("partial read");
+    els.trixArtworkReportMeta.textContent = bits.length ? bits.join(" · ") : "waiting on TRIX public feed…";
+  }
+
+  if (els.trixLeaderboardBody) {
+    if (lbRows.length) {
+      const rows = lbRows
+        .map((row) => {
+          const verified = row.verified
+            ? '<span class="tx-verified" title="Verified">✓</span>'
+            : "";
+          const wallet = row.wallet
+            ? `<code title="${escapeHtml(row.wallet)}">${escapeHtml(shortAddr(row.wallet))}</code>`
+            : "—";
+          return `<tr>
+            <td class="tx-rank">${Number.isFinite(Number(row.rank)) ? Number(row.rank) : "—"}</td>
+            <td class="tx-user"><b>${escapeHtml(row.username || "—")}</b>${verified}</td>
+            <td class="tx-wallet">${wallet}</td>
+            <td class="tx-points">${fmt(row.points)}</td>
+          </tr>`;
+        })
+        .join("");
+      els.trixLeaderboardBody.innerHTML = rows;
+    } else {
+      els.trixLeaderboardBody.innerHTML = '<tr><td colspan="4">No leaderboard rows from the public TRIX feed.</td></tr>';
+    }
+  }
+  if (els.trixLeaderboardMeta) {
+    const bits = [];
+    if (lbRows.length) bits.push(`top ${lbRows.length}`);
+    if (marketData?.checkedAt) bits.push(`checked ${fmtTime(marketData.checkedAt)}`);
+    if (!marketData?.ok && marketData?.reason) bits.push("partial read");
+    els.trixLeaderboardMeta.textContent = bits.length ? bits.join(" · ") : "waiting on TRIX public feed…";
+  }
+}
+function shortAddr(addr) {
+  if (typeof addr !== "string" || addr.length < 12) return addr;
+  return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
 }
 function finitePositive(value) {
   const n = Number(value);

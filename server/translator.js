@@ -1146,12 +1146,15 @@ export function translate(previous, current) {
         event({
           kind: "zen",
           rank: "spike",
-          title: "wPOND MINING PAYOUTS",
-          summary: `${countLabel} claims · ${Number(currMine.payoutTotal || 0).toLocaleString()} wPOND verified · ${recipients.size} wallets${currMine.payoutDate ? ` · ${currMine.payoutDate}` : ""}`,
+          title: "MINING REWARDS PAID",
+          summary: `${countLabel} reward payments settled · ${recipients.size} wallet${recipients.size === 1 ? "" : "s"}${currMine.payoutDate ? ` · ${currMine.payoutDate}` : ""} — rewards are mining events that got paid out; unpaid claims aren't observable on-chain`,
           details: {
             payoutWallet: currMine.payoutWallet,
             payoutMint: currMine.payoutMint,
             payouts: currMine.payouts,
+            payouts60m: currMine.payouts60m,
+            miners60m: currMine.miners60m,
+            silentSince: currMine.silentSince,
           },
         }),
       );
@@ -1170,8 +1173,8 @@ export function translate(previous, current) {
         event({
           kind: "zen",
           rank: "spike",
-          title: "wPOND CLAIMS OPEN",
-          summary: `claim facet flipped ON${currMine.band ? ` · ${currMine.band}` : ""}`,
+          title: "MINING CLAIMS OPEN",
+          summary: `claim facet flipped ON${currMine.band ? ` · ${currMine.band}` : ""} — claims are mining events awaiting a reward payment`,
           details: { was: prevMine, now: currMine },
         }),
       );
@@ -1180,8 +1183,8 @@ export function translate(previous, current) {
         event({
           kind: "zen",
           rank: "move",
-          title: "wPOND claims closed",
-          summary: "claim facet back to OFF",
+          title: "Mining claims closed",
+          summary: "claim facet back to OFF — claims (unpaid mining events) are paused",
           details: { was: prevMine, now: currMine },
         }),
       );

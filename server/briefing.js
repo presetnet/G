@@ -906,5 +906,20 @@ function glossary() {
       meaning:
         "Public monthly seats on docs.geoff.ai: Basic $19 / Pro $199 / Max $499 / Turbo $999 — shared token pool + rate limits.",
     },
+    {
+      term: "Mining reward",
+      meaning:
+        "A mining event that was PAID OUT — an on-chain wPOND transfer from the mining payout account to a miner. Our ledger counts these as paid; they are the only mining events observable publicly.",
+    },
+    {
+      term: "Mining claim",
+      meaning:
+        "A mining event that has NOT been paid out yet. Claims are not publicly observable; the mining desk only signals whether the claim facet is ON or OFF. A claim only becomes visible to us once it is settled as a reward.",
+    },
+    {
+      term: "Total miners · 60m (estimate)",
+      meaning:
+        "Unofficial estimate = distinct wallets that received a mining reward (payout) in the past 60 minutes, from the wPOND payout account minus known house/relay wallets. Not all active miners are paid every hour, and claims that haven't settled are invisible — treat it as a floor, not an official census. Shows 0 while claim facet is OFF (payouts have been silent since 2026-08-27 in recent checks).",
+    },
   ];
 }

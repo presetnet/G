@@ -4815,3 +4815,115 @@ details[open] > .fold-summary::after {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
+
+/* ---- TRIX community reports (bottom of page) ---- */
+.trix-reports {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 0.65rem;
+  margin-bottom: 1.15rem;
+}
+.trix-report {
+  min-width: 0;
+}
+.leaderboard-table-wrap {
+  overflow-x: auto;
+  margin-top: 0.5rem;
+}
+.leaderboard-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+.leaderboard-table th,
+.leaderboard-table td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid rgba(74, 222, 128, 0.1);
+  text-align: left;
+  white-space: nowrap;
+}
+.leaderboard-table th {
+  color: var(--accent);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.leaderboard-table td {
+  color: rgba(226, 232, 240, 0.82);
+}
+.leaderboard-table tr:last-child td { border-bottom: 0; }
+.leaderboard-table code {
+  color: var(--green-bright);
+  font: inherit;
+}
+.leaderboard-table .tx-rank { color: var(--accent); font-weight: 700; }
+.leaderboard-table .tx-user b { color: var(--ink); }
+.leaderboard-table .tx-points { color: var(--green-bright); text-align: right; }
+.tx-verified {
+  color: var(--green-bright);
+  margin-left: 0.35rem;
+  font-weight: 700;
+}
+.trix-artwork-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.trix-report-art {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(24, 24, 27, 0.8);
+}
+.trix-report-art img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  background: #0b0b0e;
+}
+.tx-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.4rem;
+  font-size: 0.66rem;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.82), rgba(0, 0, 0, 0));
+}
+.tx-caption b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-weight: 600;
+}
+.tx-type {
+  flex: 0 0 auto;
+  color: var(--accent);
+  text-transform: uppercase;
+  font-size: 0.56rem;
+  letter-spacing: 0.06em;
+}
+.tx-mint {
+  margin-left: auto;
+  color: var(--green-bright);
+  font-family: var(--font-mono);
+}
+.trix-report-empty {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin: 0.5rem 0 0;
+}
+@media (max-width: 900px) {
+  .trix-reports { grid-template-columns: 1fr; }
+}

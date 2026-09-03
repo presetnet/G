@@ -228,6 +228,15 @@
           <strong id="subscriptionCount">—</strong>
           <em id="subscriptionMeta">—</em>
         </article>
+        <article id="miningTile" data-proof="mining" class="metric" style="--i:15">
+          <div class="metric-top">
+            <span class="ico-wrap" data-icon="layers"></span>
+            <span class="k">Mining · 60m miners <span class="pill as-reported">est · not official</span></span>
+          </div>
+          <strong id="miningMiners">—</strong>
+          <em id="miningMeta">waiting on payout ledger</em>
+          <a id="miningReceipt" class="metric-receipt" href="https://mining.aisp.live" target="_blank" rel="noopener noreferrer" hidden>miner desk ↗</a>
+        </article>
       </section>
 
       <p class="deck-label"><span>02</span> Plain English · what it means</p>
@@ -462,6 +471,40 @@
           </summary>
           <div id="glossary" class="glossary"></div>
         </details>
+      </div>
+
+      <p class="deck-label"><span>07</span> TRIX reports · community board</p>
+      <div class="trix-reports">
+        <section class="panel trix-report artwork-report" aria-label="Latest TRIX artworks">
+          <div class="panel-head">
+            <div class="panel-title">
+              <span class="ico-wrap sm" data-icon="image"></span>
+              <h2>Latest TRIX artworks</h2>
+            </div>
+            <p id="trixArtworkReportMeta">waiting on TRIX public feed…</p>
+          </div>
+          <p class="feed-hint">Newest minted works · artwork titles and mint addresses as TRIX publishes them</p>
+          <div id="trixArtworkGrid" class="trix-artwork-grid"></div>
+        </section>
+
+        <section class="panel trix-report leaderboard-report" aria-label="TRIX points leaderboard">
+          <div class="panel-head">
+            <div class="panel-title">
+              <span class="ico-wrap sm" data-icon="trophy"></span>
+              <h2>TRIX points leaderboard</h2>
+            </div>
+            <p id="trixLeaderboardMeta">waiting on TRIX public feed…</p>
+          </div>
+          <p class="feed-hint">Top 100 by all-time points · username · wallet — as TRIX publishes them</p>
+          <div class="leaderboard-table-wrap">
+            <table class="leaderboard-table">
+              <thead>
+                <tr><th>Rank</th><th>User</th><th>Wallet</th><th>Points</th></tr>
+              </thead>
+              <tbody id="trixLeaderboardBody"><tr><td colspan="4">waiting…</td></tr></tbody>
+            </table>
+          </div>
+        </section>
       </div>
 
       <details class="raw-drawer">

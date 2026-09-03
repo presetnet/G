@@ -473,9 +473,34 @@ const MINING_PAYOUT_WALLET = "AYg4dKoZJudVkD7Eu3ZaJjkzfoaATUqfiv8w8pS53opT";
 const MINING_PAYOUT_TOKEN_ACCOUNT = "2Ag1QgyyJj2nS6nD6SLbpAUFaWPhaDrmHwrGwWpMqV9K";
 const WPOND_MINT = "3JgFwoYV74f6LwWjQWnr3YDPFnmBdwQfNyubv99jqUoq";
 const MINING_CLAIM_MIN = 100_000_000;
-const MINING_TX_DECODE_LIMIT = 12;
+const MINING_TX_DECODE_LIMIT = 24;
+// The mining dashboard itself excludes these house / relay / token accounts
+// from its miner roster. We mirror that so the 60-minute estimate counts only
+// wallets that look like individual miners, and we never show a wPOND total.
+const MINING_HOUSE_WALLETS = new Set([
+  "2Ag1QgyyJj2nS6nD6SLbpAUFaWPhaDrmHwrGwWpMqV9K",
+  "HwyJtiPXQ5ZosJQRpUmcmV6E2J9ffKfhqjNcY1R8Gt29",
+  "7VocnjpSyCAvhk3zNVu5DqeGAvxbi8MMxEUvLznDFnok",
+  "Hjzfr1BzWizuasoYJLa5Z7b1GFG9xWJcMSLpqfvctK82",
+  "AYg4dKoZJudVkD7Eu3ZaJjkzfoaATUqfiv8w8pS53opT",
+  "1orFCnFfgwPzSgUaoK6Wr3MjgXZ7mtk8NGz9Hh4iWWL",
+  "HdM9481g5mXApUUsMSMxwVcRVcTde7nqLjGsgqMMf4P2",
+  "5KXZCyUaqHJ1T2wbcMXvLt9jYR87tDJS2Bf71gxYSZNt",
+  "9z9H5dA6AejJ1LpXbyENhXog3jfpjVFdDEFbuymHjFSL",
+  "Fk6PvoxW9LcjSg9ix7EJAnrAViHmqoKonX15WDau2NYv",
+  "G5YGpBWvwFo2Ah1HXmCrmMMMPrnmvsaNs7TwW3win4Qw",
+  "CYaXLzjVneHu2tXNN5KtyiithTeiyEZFdniu8nk4wNGi",
+  "HvYahPhM2ANz4cWKDmN8NCDP4aFbdrsRdrPNJEk8KQpQ",
+]);
+const MINING_60M_WINDOW_MS = 60 * 60 * 1_000;
+const MINING_60M_TTL_MS = 6 * 60 * 1_000; // the 60m estimate refreshes every full pass
 
-async function sniffMiningPayouts() {
+let mining60mCache = { at: 0, value: null };
+
+async function sniffMiningPayouts({ force = false } = {}) {
+  if (!force && mining60mCache.at && Date.now() - mining60mCache.at < MINING_60M_TTL_MS) {
+    return mining60mCache.value;
+  }
   const signatures = await solanaRpc("getSignaturesForAddress", [
     MINING_PAYOUT_TOKEN_ACCOUNT,
     { limit: 100, commitment: "confirmed" },
@@ -491,8 +516,15 @@ async function sniffMiningPayouts() {
           new Date(row.blockTime * 1000).toISOString().startsWith(latestActivityDay),
       )
     : [];
+  const minBlockTime = (Date.now() - MINING_60M_WINDOW_MS) / 1000;
+  const inWindow = successful.filter(
+    (row) => row.blockTime != null && row.blockTime >= minBlockTime,
+  );
   const payouts = [];
-  for (const row of latestActivity.slice(0, MINING_TX_DECODE_LIMIT)) {
+  const windowRecipients = new Set();
+  let payouts60m = 0;
+  const decodeRows = (inWindow.length ? inWindow : latestActivity).slice(0, MINING_TX_DECODE_LIMIT);
+  for (const row of decodeRows) {
     const tx = await solanaRpc("getTransaction", [
       row.signature,
       { encoding: "jsonParsed", maxSupportedTransactionVersion: 0, commitment: "confirmed" },
@@ -518,19 +550,27 @@ async function sniffMiningPayouts() {
       const decimals = Number(balance.uiTokenAmount?.decimals || 0);
       const amount = Number(info.amount) / 10 ** decimals;
       if (!Number.isFinite(amount) || amount < MINING_CLAIM_MIN) continue;
+      const recipient = balance.owner || info.destination || null;
       payouts.push({
         signature: row.signature,
         at: row.blockTime != null ? new Date(row.blockTime * 1000).toISOString() : null,
         amount,
-        recipient: balance.owner || null,
+        recipient,
         destination: info.destination,
       });
+      if (inWindow.length && row.blockTime >= minBlockTime) {
+        payouts60m += 1;
+        if (recipient && !MINING_HOUSE_WALLETS.has(recipient)) windowRecipients.add(recipient);
+      }
     }
   }
   payouts.sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0));
   const latestDay = payouts[0]?.at?.slice(0, 10) || null;
   const latestBatch = latestDay ? payouts.filter((row) => row.at?.startsWith(latestDay)) : [];
-  return {
+  const silentSince = successful[0]?.blockTime != null
+    ? new Date(successful[0].blockTime * 1000).toISOString()
+    : null;
+  const result = {
     payouts,
     latestDay,
     latestBatch,
@@ -539,14 +579,40 @@ async function sniffMiningPayouts() {
     latestTotal: latestBatch.reduce((sum, row) => sum + row.amount, 0),
     activityCount: latestActivity.length,
     truncated: latestActivity.length > MINING_TX_DECODE_LIMIT,
+    miners60m: windowRecipients.size || 0,
+    payouts60m,
+    miners60mWindowMs: MINING_60M_WINDOW_MS,
+    miners60mAt: new Date().toISOString(),
+    silentSince,
   };
+  mining60mCache = { at: Date.now(), value: result };
+  return result;
 }
 
 function bodyHash(input) {
   return createHash("sha256").update(input || "", "utf8").digest("hex").slice(0, 16);
 }
 
+function miningPayoutFields(payoutData) {
+  return {
+    payoutCount: payoutData.latestBatch.length,
+    payoutTotal: payoutData.latestTotal,
+    payoutDate: payoutData.latestDay,
+    payoutLatestAt: payoutData.latestAt,
+    payoutLatestSignature: payoutData.latestSignature,
+    payoutActivityCount: payoutData.activityCount,
+    payoutTruncated: payoutData.truncated,
+    payouts: payoutData.latestBatch,
+    miners60m: payoutData.miners60m,
+    payouts60m: payoutData.payouts60m,
+    miners60mWindowMs: payoutData.miners60mWindowMs,
+    miners60mAt: payoutData.miners60mAt,
+    silentSince: payoutData.silentSince,
+  };
+}
+
 export async function sniffMiningSurface(force = false) {
+  const payoutData = await sniffMiningPayouts();
   if (!force) {
     const cached = await loadMiningSurfaceCache().catch(() => null);
     const cachedAt = cached?.cachedAt ? Date.parse(cached.cachedAt) : NaN;
@@ -555,14 +621,18 @@ export async function sniffMiningSurface(force = false) {
       Number.isFinite(cachedAt) &&
       Date.now() - cachedAt < MINING_SURFACE_CACHE_MS
     ) {
-      return { ...cached.source, cached: true, ageMs: Date.now() - cachedAt };
+      return {
+        ...cached.source,
+        cached: true,
+        ageMs: Date.now() - cachedAt,
+        ...miningPayoutFields(payoutData),
+      };
     }
   }
   try {
-    const [res, archiveRes, payoutData] = await Promise.all([
+    const [res, archiveRes] = await Promise.all([
       fetchJson(MINING_SURFACE_URL, { timeoutMs: 9_000 }),
       fetchJson(`${MINING_SURFACE_URL}band-claims-archive.json`, { timeoutMs: 18_000 }),
-      sniffMiningPayouts(),
     ]);
     const text = res.text || "";
     const title = (text.match(/<title>([^<]{0,120})<\/title>/i) || [])[1] || null;
@@ -584,14 +654,7 @@ export async function sniffMiningSurface(force = false) {
       payoutTokenAccount: MINING_PAYOUT_TOKEN_ACCOUNT,
       payoutMint: WPOND_MINT,
       payoutMinimum: MINING_CLAIM_MIN,
-      payoutCount: payoutData.latestBatch.length,
-      payoutTotal: payoutData.latestTotal,
-      payoutDate: payoutData.latestDay,
-      payoutLatestAt: payoutData.latestAt,
-      payoutLatestSignature: payoutData.latestSignature,
-      payoutActivityCount: payoutData.activityCount,
-      payoutTruncated: payoutData.truncated,
-      payouts: payoutData.latestBatch,
+      ...miningPayoutFields(payoutData),
       archiveClaims: archiveRes.json?.summary?.totalClaims ?? null,
       archiveWallets: archiveRes.json?.summary?.uniqueWallets ?? null,
       archiveTotalWpond: archiveRes.json?.summary?.periods?.all?.totalWpond ?? null,
@@ -615,6 +678,7 @@ export async function sniffMiningSurface(force = false) {
       claimsOn: null,
       facetState: null,
       band: null,
+      ...miningPayoutFields(payoutData),
       fingerprint: null,
       reason: error?.message || String(error),
     };
@@ -2591,31 +2655,49 @@ export function mergeTrixGeoffHistory(previous = null, observed = null) {
   if (observed.packs?.ok) {
     const currentAt = Date.parse(packs.checkedAt || 0);
     const currentMinted = Number(packs.minted);
+    const currentAvailable = Number(packs.available);
     const sameRound = previous?.packs?.round === packs.round;
-    const priorSamples = sameRound && Array.isArray(previous.packs.mintSamples)
-      ? previous.packs.mintSamples
+    const priorSamples = sameRound && Array.isArray(previous.packs.packSamples)
+      ? previous.packs.packSamples
       : sameRound && Number.isFinite(Number(previous.packs.minted))
-        ? [{ at: previous.packs.checkedAt, minted: Number(previous.packs.minted) }]
+        ? [{
+            at: previous.packs.checkedAt,
+            minted: Number(previous.packs.minted),
+            available: Number(previous.packs.available),
+          }]
         : [];
-    const mintSamples = [...priorSamples, { at: packs.checkedAt, minted: currentMinted }]
+    const packSamples = [...priorSamples, {
+      at: packs.checkedAt,
+      minted: currentMinted,
+      available: currentAvailable,
+    }]
       .filter((sample) => Number.isFinite(Date.parse(sample.at)) && Number.isFinite(sample.minted))
       .filter((sample, index, samples) =>
         samples.findIndex((entry) => entry.at === sample.at) === index
       )
       .filter((sample) => Date.parse(sample.at) >= currentAt - 60 * 60_000)
       .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
-    const firstSample = mintSamples[0];
+    const firstSample = packSamples[0];
     const windowMinutes = firstSample ? (currentAt - Date.parse(firstSample.at)) / 60_000 : 0;
     const mintedInWindow = firstSample ? currentMinted - firstSample.minted : 0;
+    const availableInWindow = firstSample ? currentAvailable - firstSample.available : 0;
     packs = {
       ...packs,
-      mintSamples,
+      packSamples,
+      mintSamples: packSamples,
       mintsPerHour: windowMinutes >= 0.25 && mintedInWindow >= 0
         ? mintedInWindow * 60 / windowMinutes
         : null,
       mintRateWindowMinutes: windowMinutes >= 0.25 ? windowMinutes : null,
       mintRateMinted: windowMinutes >= 0.25 && mintedInWindow >= 0 ? mintedInWindow : null,
       mintRateCheckedAt: packs.checkedAt,
+      packAvailableDelta: Number.isFinite(firstSample?.available) && Number.isFinite(currentAvailable)
+        ? currentAvailable - firstSample.available
+        : null,
+      packMintedDelta: Number.isFinite(firstSample?.minted) && Number.isFinite(currentMinted)
+        ? currentMinted - firstSample.minted
+        : null,
+      packRateWindowMinutes: windowMinutes >= 0.25 ? windowMinutes : null,
     };
   }
   return {
@@ -2772,17 +2854,30 @@ export async function sniffTrixMarket({ previous = null } = {}) {
     0,
   );
   const recentMints = Array.isArray(results.recentMints) ? results.recentMints : [];
+  const artworksById = new Map();
+  if (Array.isArray(results.artworks)) {
+    for (const art of results.artworks) {
+      if (art?.id) artworksById.set(art.id, art);
+    }
+  }
   const recentMintsSummary = recentMints
     .filter((item) => item?.id && typeof item?.imageUrl === "string")
-    .slice(0, 12)
-    .map((item) => ({
-      id: item.id,
-      name: item?.name ?? null,
-      artworkType: item?.artworkType ?? null,
-      imageUrl: typeof item.imageUrl === "string" && item.imageUrl.startsWith("/")
-        ? `${TRIX_BASE_URL}${item.imageUrl}`
-        : item.imageUrl,
-    }));
+    .slice(0, 24)
+    .map((item) => {
+      const full = artworksById.get(item.id) || item;
+      return {
+        id: item.id,
+        name: item?.name ?? full?.name ?? null,
+        artworkType: item?.artworkType ?? full?.artworkType ?? null,
+        imageUrl: typeof item.imageUrl === "string" && item.imageUrl.startsWith("/")
+          ? `${TRIX_BASE_URL}${item.imageUrl}`
+          : item.imageUrl,
+        userId: full?.userId ?? null,
+        mintAddress: full?.mintAddress ?? null,
+        status: full?.status ?? null,
+        website: full?.website ?? null,
+      };
+    });
   const aggregations = {
     cards: cardsSummary,
     artworks: {
@@ -2814,6 +2909,13 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       totalPoints: leaderboardPoints || null,
       window: leaderboard.length >= TRIX_LEADERBOARD_WINDOW ? TRIX_LEADERBOARD_WINDOW : null,
       capped: leaderboard.length >= TRIX_LEADERBOARD_WINDOW,
+      rows: leaderboard.slice(0, TRIX_LEADERBOARD_WINDOW).map((entry) => ({
+        rank: Number(entry?.rank) || null,
+        username: typeof entry?.username === "string" ? entry.username : null,
+        wallet: typeof entry?.walletAddress === "string" ? entry.walletAddress : null,
+        points: Number.isFinite(Number(entry?.points)) ? Number(entry.points) : null,
+        verified: Boolean(entry?.isVerified),
+      })),
     },
     recentMints: recentMintsSummary,
   };
@@ -2833,7 +2935,7 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       JSON.stringify(aggregations),
     ),
     url: `${TRIX_BASE_URL}/`,
-    note: "Aggregate-only counts and totals from TRIX public APIs (/api/cards, /api/artworks, /api/auctions, /api/treasury, /api/mkt/preorder, /api/activity, /api/leaderboard). No individual holder, artwork owner, auction bidder, or leaderboard identity is kept or displayed. Boost Card artwork is shown from TRIX's own image URLs; the card catalog is cached for six hours. The recent-mint artwork feed is not shown. Physical packaging is not represented by any of these endpoints; the TCG flag is API-reported and false. Limits the API itself enforces: /api/artworks caps at 200 items (pagination params are ignored), /api/leaderboard returns one page of 100, and auction rows are listings: only a share carry a live bid and most have no end time yet.",
+    note: "Aggregate-only counts and totals from TRIX public APIs (/api/cards, /api/artworks, /api/auctions, /api/treasury, /api/mkt/preorder, /api/activity, /api/leaderboard). The recent-mint artwork feed shows public artwork titles, images, creator userId, and on-chain mint address where TRIX publishes them; the leaderboard rows carry TRIX's own public username, wallet, and points. No holder, auction bidder, or artwork-owner identity beyond TRIX's own published fields is kept or displayed. Boost Card artwork is shown from TRIX's own image URLs; the card catalog is cached for six hours. Limits the API itself enforces: /api/artworks caps at 200 items (pagination params are ignored), /api/leaderboard returns one page of 100, and auction rows are listings: only a share carry a live bid and most have no end time yet.",
     reason: failures.length ? `Partial: ${failures.join("; ")}.` : null,
   };
 }
@@ -2979,6 +3081,10 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
       miningSurfaceStatus: bySource["surface.mining"]?.status ?? null,
       miningSurfaceTitle: bySource["surface.mining"]?.title ?? null,
       miningClaimsOn: bySource["surface.mining"]?.claimsOn ?? null,
+      miningMiners60m: bySource["surface.mining"]?.miners60m ?? null,
+      miningPayouts60m: bySource["surface.mining"]?.payouts60m ?? null,
+      miningMiners60mAt: bySource["surface.mining"]?.miners60mAt ?? null,
+      miningSilentSince: bySource["surface.mining"]?.silentSince ?? null,
       miningFacetState: bySource["surface.mining"]?.facetState ?? null,
       miningBand: bySource["surface.mining"]?.band ?? null,
       miningPayoutWallet: bySource["surface.mining"]?.payoutWallet ?? null,
@@ -3044,6 +3150,8 @@ trixGeoffCount: bySource["trix.geoff"]?.count ?? null,
       trixLeaderboardEntries: bySource["trix.market"]?.leaderboard?.entries ?? null,
       trixTcgActive: Boolean(bySource["trix.market"]?.preorder?.tcg),
       trixRecentMints: bySource["trix.market"]?.recentMints ?? [],
+      trixLeaderboard: bySource["trix.market"]?.leaderboard?.rows ?? [],
+      trixLeaderboardCap: bySource["trix.market"]?.leaderboard?.capped ?? false,
       trixMarketFingerprint: bySource["trix.market"]?.fingerprint ?? null,
       subscriptionLiveCount: bySource["geoff.subscription"]?.liveCount ?? null,
       subscriptionTotal: bySource["geoff.subscription"]?.total ?? null,

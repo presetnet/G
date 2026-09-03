@@ -23,6 +23,7 @@ export const icons = {
   layers: `<path d="M12 3 3 8l9 5 9-5-9-5z"/><path d="M3 12l9 5 9-5M3 16l9 5 9-5"/>`,
   plug: `<path d="M9 7V3M15 7V3M8 7h8v4a4 4 0 0 1-4 4h0a4 4 0 0 1-4-4V7z"/><path d="M12 15v6"/>`,
   tag: `<path d="M20.5 13.5 12 22l-9-9V4h9l8.5 9.5z"/><circle cx="7.5" cy="7.5" r="1.3"/>`,
+  trophy: `<path d="M7 4h10l-.5 8a4.5 4.5 0 0 1-9 0L7 4z"/><path d="M7 5H4v1a3 3 0 0 0 3 3M17 5h3v1a3 3 0 0 1-3 3M9 15.5V19h6v-3.5M10 19h4v2h-4z"/>`,
 };
 
 export function icon(name, className = "ico") {
