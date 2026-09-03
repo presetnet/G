@@ -2127,6 +2127,7 @@ const MAX_TRIX_HISTORY_IDS = 10_000;
 const TRIX_LAUNCH_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
 const TRIX_CARD_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
 const TRIX_ARTWORK_WINDOW = 100; // /api/artworks hard cap; pagination params are ignored. NOTE: limit>~120 returns HTTP 500 ("Failed query"), so keep this <=100.
+const TRIX_RECENT_MEME_LIMIT = 18; // newest memes shown in the grid; recent-activity feed itself caps at 12, so catalog fold-in fills the rest
 const TRIX_LEADERBOARD_WINDOW = 100; // /api/leaderboard returns one ranked page from the API
 const TRIX_CARD_CLASSES = [
   { key: "common", label: "Common", oddsBps: 4_561 },
@@ -2892,11 +2893,12 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       if (art?.id) artworksById.set(art.id, art);
     }
   }
-  // Build an even grid of up to 12 memes. Buyable memes (a linked tradable coin is
-  // present) come first so every Buy link + live price stays reachable; minted
-  // artworks WITHOUT a linked coin are included afterwards so their easy View links
-  // are never cut off either. The recent-activity feed caps at 12, so fold in the
-  // newest catalog artworks to keep the grid full and clean.
+  // Build an even grid of up to TRIX_RECENT_MEME_LIMIT memes. Buyable memes (a linked
+  // tradable coin is present) come first so every Buy link + live price stays
+  // reachable; minted artworks WITHOUT a linked coin are included afterwards so
+  // their easy View links are never cut off either. The recent-activity feed caps
+  // at 12 regardless of its limit param, so fold in the newest catalog artworks to
+  // keep the grid full and clean.
   const enrichedRecent = recentMints
     .map((item) => ({ ...item, ...(artworksById.get(item?.id) || {}) }))
     .filter((item) => item?.id && typeof item?.imageUrl === "string");
@@ -2916,14 +2918,14 @@ export async function sniffTrixMarket({ previous = null } = {}) {
   const candidates = [];
   const seenArt = new Set();
   const addCandidate = (item) => {
-    if (candidates.length >= 12 || !item?.id || seenArt.has(item.id)) return;
+    if (candidates.length >= TRIX_RECENT_MEME_LIMIT || !item?.id || seenArt.has(item.id)) return;
     seenArt.add(item.id);
     candidates.push(item);
   };
   const pushIfNew = (list) => {
     for (const item of list) {
       addCandidate(item);
-      if (candidates.length >= 12) break;
+      if (candidates.length >= TRIX_RECENT_MEME_LIMIT) break;
     }
   };
   // buyables first so Buy links + prices always visible
@@ -2933,7 +2935,7 @@ export async function sniffTrixMarket({ previous = null } = {}) {
   pushIfNew(mintedRecent);
   pushIfNew(catalogMinted);
   const recentMintsSummary = candidates
-    .slice(0, 12)
+    .slice(0, TRIX_RECENT_MEME_LIMIT)
     .map((item) => {
       const full = artworksById.get(item.id) || item;
       const linkedMint = full?.linkedCoinMint ?? null;

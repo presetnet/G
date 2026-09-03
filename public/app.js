@@ -22,6 +22,7 @@ const FEED_RECENT_LIMIT = 20;
 const MAX_MEMORY_EVENTS = 2000;
 const HEATMAP_DAYS = DEFAULT_HEATMAP_DAYS;
 const MAX_DAILY_INGEST_IDS = 800;
+const RECENT_MEME_LIMIT = 18;
 
 /** Website deploys = Note. Spike/Crazy are rare. Never trust "Big deal". */
 function inferRank(e = {}) {
@@ -1498,8 +1499,7 @@ function renderTrixReports() {
     : "—";
 
   if (els.trixArtworkGrid) {
-    const all = recentMints.slice(0, 12);
-    const shown = all.length ? all : recentMints.slice(0, 12);
+    const shown = recentMints.slice(0, RECENT_MEME_LIMIT);
     if (shown.length) {
       els.trixArtworkGrid.innerHTML = shown
         .map((art) => {
@@ -1530,16 +1530,16 @@ function renderTrixReports() {
         })
         .join("");
       els.trixArtworkGrid.title =
-        "Memes for sale on TRIX (up to the newest 12). Artworks with a linked tradable coin show a Buy button and live price (marketCap ÷ totalSupply); other minted artworks link to their TRIX artwork page.";
+        "Memes for sale on TRIX (up to the newest 18). Artworks with a linked tradable coin show a Buy button and live price (marketCap ÷ totalSupply); other minted artworks link to their TRIX artwork page.";
     } else {
       els.trixArtworkGrid.innerHTML = '<p class="trix-report-empty">No recent memes from the public TRIX feed.</p>';
     }
   }
   if (els.trixArtworkReportMeta) {
     const bits = [];
-    const buyable = recentMints.filter((art) => art?.linkedCoinMint).slice(0, 12).length;
-    const minted = recentMints.slice(0, 12).filter((art) => !art?.linkedCoinMint).length;
-    const shown = recentMints.slice(0, 12).length;
+    const buyable = recentMints.filter((art) => art?.linkedCoinMint).slice(0, RECENT_MEME_LIMIT).length;
+    const minted = recentMints.slice(0, RECENT_MEME_LIMIT).filter((art) => !art?.linkedCoinMint).length;
+    const shown = recentMints.slice(0, RECENT_MEME_LIMIT).length;
     if (shown) bits.push(`${shown} memes`);
     if (buyable) bits.push(`${buyable} buyable`);
     if (minted) bits.push(`${minted} minted`);
