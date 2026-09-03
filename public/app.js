@@ -1233,8 +1233,8 @@ function renderMetrics(latest) {
       };
     };
     const stats = [
-      { label: "Packs left", value: formatCount(trixPacks?.available) },
-      { label: "Packs left Δ/60m", value: packDelta(trixPacks?.packAvailableDelta) },
+      { label: "Memes created", value: formatCount(trixPacks?.available) },
+      { label: "Memes Δ/60m", value: packDelta(trixPacks?.packAvailableDelta) },
       { label: "Minted Δ/60m", value: packDelta(trixPacks?.packMintedDelta) },
       { label: "Mints/hour", value: mintRate },
       { label: "Base paid max", value: observedSol(trixPacks?.purchaseAudit?.baseMaxPaidSol) },
@@ -1255,7 +1255,7 @@ function renderMetrics(latest) {
       ? ` State Base $${basePrice.toFixed(2)} vs Genesis $${genesisPrice.toFixed(2)}: ${Math.abs(basePrice - genesisPrice) <= 0.01 ? "match" : "mismatch"}.`
       : "";
     els.trixPackMarket.title =
-      `Packs left is the TRIX /api/mkt/state base-level 'available'. Packs left Δ and Minted Δ are the change over the same rolling window as mints/hour (up to 60 min). During the 'warming'/pre-order phase TRIX can raise its round/genesis cap, which makes BOTH 'Packs left' and 'Minted' rise at once (more packs created on the cap, none consumed) — so a positive 'Packs left Δ' is not proof of pack buyback. Mints/hour is calculated from recent same-round TRIX API-reported mint totals over that rolling window; it does not prove queueing or throttling. Base paid max is observed Pack consideration. Base all-in max also includes buyer-funded account rent and network fees. TRIX bulk checkout submits one transaction per Pack. Premium Pack levels are excluded from both Base maxima. Most ripped, buyback, and meme status are TRIX Genesis API reports. Prices are current API quotes, not verified realized sales.${priceCrossCheck}`;
+      `Memes created is the TRIX /api/mkt/state base-level 'available' — the total count of memes currently available in the pool. It is NOT packs left to buy: it grows over time as people create memes (the owner reported 6000+ being generated). Memes Δ is the change over the same rolling window as mints/hour (up to 60 min). Mints/hour is calculated from recent same-round TRIX API-reported mint totals over that rolling window; it does not prove queueing or throttling. Base paid max is observed Pack consideration. Base all-in max also includes buyer-funded account rent and network fees. TRIX bulk checkout submits one transaction per Pack. Premium Pack levels are excluded from both Base maxima. Most ripped, buyback, and meme status are TRIX Genesis API reports. Prices are current API quotes, not verified realized sales.${priceCrossCheck}`;
   }
   if (els.trixPackTraits) {
     const classes = Array.isArray(trixPacks?.classes) ? trixPacks.classes : [];
