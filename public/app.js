@@ -2866,10 +2866,16 @@ async function pollNow() {
   }
 }
 
+let lastStreamEventAt = 0;
+
+const streamWatchdogIntervalMs = 30_000;
+const streamStaleMs = 75_000;
+
 function connectStream() {
   if (mode === "vercel") return null;
   const source = new EventSource("/api/stream");
   source.addEventListener("status", (event) => {
+    lastStreamEventAt = Date.now();
     try {
       const payload = JSON.parse(event.data);
       mode = payload.config?.mode || mode;
@@ -2978,6 +2984,22 @@ async function boot() {
       applyPayload(status);
       setConnection("live", "live");
       connectStream();
+      setInterval(() => {
+        const stale = Date.now() - lastStreamEventAt > streamStaleMs;
+        if (document.visibilityState === "visible" && stale) {
+          setConnection("error", "reconnecting");
+          pollNow();
+        }
+      }, streamWatchdogIntervalMs);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+          const stale = Date.now() - lastStreamEventAt > streamStaleMs;
+          if (stale) {
+            setConnection("error", "reconnecting");
+            pollNow();
+          }
+        }
+      });
     }
     refreshTraffic().catch(() => {});
   } catch (error) {
