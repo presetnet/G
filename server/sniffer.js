@@ -2140,12 +2140,12 @@ const TRIX_ARTWORK_WINDOW = 100; // /api/artworks hard cap; pagination params ar
 const TRIX_RECENT_MEME_LIMIT = 18; // newest memes shown in the grid; recent-activity feed itself caps at 12, so catalog fold-in fills the rest
 const TRIX_LEADERBOARD_WINDOW = 100; // /api/leaderboard returns one ranked page from the API
 const TRIX_CARD_CLASSES = [
-  { key: "common", label: "Common", oddsBps: 4_561 },
-  { key: "uncommon", label: "Uncommon", oddsBps: 900 },
-  { key: "rare", label: "Rare", oddsBps: 200 },
-  { key: "epic", label: "Epic", oddsBps: 35 },
-  { key: "mythic", label: "Mythic", oddsBps: 4 },
-  { key: "trix", label: "Void", oddsBps: 4_300 },
+  { key: "common", label: "Common" },
+  { key: "uncommon", label: "Uncommon" },
+  { key: "rare", label: "Rare" },
+  { key: "epic", label: "Epic" },
+  { key: "mythic", label: "Mythic" },
+  { key: "trix", label: "Void" },
 ];
 
 export function normalizeTrixGeoffRecord(record, post = null) {
@@ -2212,11 +2212,16 @@ export function parseTrixPackMarket(
   const minted = levels.reduce((sum, level) => sum + (Number(level?.minted) || 0), 0);
   const classes = TRIX_CARD_CLASSES.map((entry) => {
     const band = Array.isArray(base?.bands?.[entry.key]) ? base.bands[entry.key] : [];
+    const rawOdds = state.economy?.oddsBp?.[entry.key];
+    const oddsBps = Number.isFinite(rawOdds) && rawOdds >= 0 && rawOdds <= 10_000
+      ? rawOdds
+      : null;
     return {
       ...entry,
-      oddsPercent: entry.oddsBps / 100,
-      payoutMin: Number.isFinite(Number(band[0])) ? Number(band[0]) : null,
-      payoutMax: Number.isFinite(Number(band[1])) ? Number(band[1]) : null,
+      oddsBps,
+      oddsPercent: oddsBps === null ? null : oddsBps / 100,
+      payoutMin: Number.isFinite(band[0]) ? band[0] : null,
+      payoutMax: Number.isFinite(band[1]) ? band[1] : null,
     };
   });
   const fingerprint = bodyHash(JSON.stringify({
@@ -2224,6 +2229,7 @@ export function parseTrixPackMarket(
     roundStatus: state.roundStatus,
     tcg: state.tcg,
     roundPacks: state.roundPacks,
+    oddsBp: classes.map(({ key, oddsBps }) => [key, oddsBps]),
     genesis: genesisOk ? {
       round: genesis.round,
       status: genesis.status,
@@ -2286,8 +2292,8 @@ export function parseTrixPackMarket(
     checkedAt: new Date().toISOString(),
     sourceUrl: `${TRIX_BASE_URL}/api/mkt/state`,
     genesisSourceUrl: `${TRIX_BASE_URL}/api/mkt/g`,
-    oddsSourceUrl: `${TRIX_BASE_URL}/assets/c-BkGleqvg.js`,
-    note: "Minted and market values are TRIX API-reported. Class odds come from the current TRIX frontend bundle. Market-state bands are gross reward multiples of Pack USD price before reward shares, not actual revealed-card counts or direct owner payouts.",
+    oddsSourceUrl: `${TRIX_BASE_URL}/api/mkt/state`,
+    note: "Minted, market values, and class odds are TRIX API-reported, not observed card outcomes. Class odds use economy.oddsBp without normalization; absent or invalid odds are unknown. Market-state bands are gross reward multiples of Pack USD price before reward shares, not actual revealed-card counts or direct owner payouts.",
     reason: null,
   };
 }

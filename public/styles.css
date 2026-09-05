@@ -3352,12 +3352,33 @@ details[open] > .fold-summary::after {
   display: block;
 }
 
-.trix-trait.trait-mythic { border-color: #ef35df; }
-.trix-trait.trait-epic { border-color: #fff23d; }
-.trix-trait.trait-rare { border-color: #56e960; }
-.trix-trait.trait-uncommon { border-color: #d8e2f0; }
-.trix-trait.trait-common { border-color: #f13b32; }
-.trix-trait.trait-trix { border-image: linear-gradient(180deg, #ef35df, #56e960) 1; }
+/* User-supplied CSS reference palette, not an outcome-decoding rule. */
+.trix-trait.trait-mythic { --trait-color: #ff00ff; }
+.trix-trait.trait-epic { --trait-color: #ffff00; }
+.trix-trait.trait-rare { --trait-color: #00ff00; }
+.trix-trait.trait-uncommon { --trait-color: #000000; }
+.trix-trait.trait-common { --trait-color: #ff0000; }
+.trix-trait { border-color: var(--trait-color, var(--muted)); }
+.trix-trait::before {
+  content: "";
+  display: block;
+  height: 5px;
+  margin-bottom: 0.3rem;
+  background: var(--trait-color, var(--muted));
+  outline: 1px solid #737373;
+}
+/* Gradient stops were not visible in the reference; this is a visual approximation. */
+.trix-trait.trait-trix::before {
+  background: repeating-linear-gradient(315deg, #000 0px, #ff00ff 12px, #00ff00 24px, #000 36px);
+  background-size: 51px 51px;
+  animation: trait-void-sheen 4s linear infinite;
+}
+@keyframes trait-void-sheen {
+  to { background-position: 51px 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trix-trait.trait-trix::before { animation: none; }
+}
 
 .metric-receipt {
   justify-self: start;

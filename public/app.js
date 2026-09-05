@@ -1290,19 +1290,19 @@ function renderMetrics(latest) {
   if (els.trixPackTraits) {
     const classes = Array.isArray(trixPacks?.classes) ? trixPacks.classes : [];
     els.trixPackTraits.innerHTML = classes.map((item) => {
-      const odds = Number(item.oddsPercent).toLocaleString(undefined, {
+      const odds = Number.isFinite(item.oddsPercent) ? item.oddsPercent.toLocaleString(undefined, {
         minimumFractionDigits: item.oddsPercent < 1 ? 2 : 0,
         maximumFractionDigits: 2,
-      });
-      const min = Number(item.payoutMin);
-      const max = Number(item.payoutMax);
+      }) + "%" : "unknown";
+      const min = item.payoutMin;
+      const max = item.payoutMax;
       const multiple = Number.isFinite(min) && Number.isFinite(max)
         ? min === max ? `${min}x` : `${min}–${max}x`
         : "—";
-      return `<span class="trix-trait trait-${escapeHtml(item.key)}"><b>${escapeHtml(item.label)}</b><i><span>odds ${odds}%</span><span>gross ${multiple}</span></i></span>`;
+      return `<span class="trix-trait trait-${escapeHtml(item.key)}"><b>${escapeHtml(item.label)}</b><i><span>odds ${odds}</span><span>gross ${multiple}</span></i></span>`;
     }).join("");
     els.trixPackTraits.title =
-      "Gross reward multiplier applies to Pack USD price before owner, creator, and meme-pool shares. Early claims may pay less than the owner's full share.";
+      "API-reported odds, not measured reveal frequencies. Gross multiplier applies to Pack USD price before owner, creator, and meme-pool shares. Early claims may pay less. Colors follow the supplied CSS reference, not binary outcome rules; Void sheen is approximate.";
   }
   if (els.miningMiners) {
     const mining = latest?.sources?.["surface.mining"];
