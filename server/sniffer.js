@@ -642,6 +642,7 @@ export async function sniffMiningSurface(force = false) {
     const band = (text.match(/class="subtitle"[^>]*>\s*([^<]{0,160})</i) || [])[1]?.trim() || null;
     const source = {
       source: "surface.mining",
+      checkedAt: new Date().toISOString(),
       ok: true,
       status: res.status,
       ms: res.ms,
@@ -670,6 +671,7 @@ export async function sniffMiningSurface(force = false) {
   } catch (error) {
     const source = {
       source: "surface.mining",
+      checkedAt: new Date().toISOString(),
       ok: false,
       status: 0,
       ms: null,
@@ -867,6 +869,7 @@ export async function sniffOpencodeReleases() {
     const latest = rows.find((r) => !r.draft) ?? null;
     const value = {
       source: "opencode.releases",
+      checkedAt: new Date().toISOString(),
       ok: res.ok && rows.length > 0,
       status: res.status,
       ms: Date.now() - started,
@@ -886,6 +889,8 @@ export async function sniffOpencodeReleases() {
   } catch (error) {
     return {
       source: "opencode.releases",
+      checkedAt: new Date().toISOString(),
+      latestCheckedAt: releasesCache.value?.checkedAt ?? null,
       ok: false,
       status: 0,
       ms: Date.now() - started,
@@ -916,6 +921,7 @@ export async function sniffZenErrorShape() {
     const leakHit = /magma|stacknet|metaproof|6008/i.test(body);
     const value = {
       source: "opencode.zenerr",
+      checkedAt: new Date().toISOString(),
       ok: true,
       status: res.status,
       ms: Date.now() - started,
@@ -930,6 +936,7 @@ export async function sniffZenErrorShape() {
   } catch (error) {
     return {
       source: "opencode.zenerr",
+      checkedAt: new Date().toISOString(),
       ok: false,
       status: 0,
       ms: Date.now() - started,
@@ -979,6 +986,7 @@ export async function sniffSolanaTreasury(address = DEFAULT_TREASURY_ADDRESS) {
       ]);
       const rows = Array.isArray(sigRes) ? sigRes : [];
       sigs = {
+        checkedAt: new Date().toISOString(),
         count: rows.length,
         pageFull: rows.length >= 1000,
         latestSlot: rows[0]?.slot ?? null,
@@ -999,6 +1007,7 @@ export async function sniffSolanaTreasury(address = DEFAULT_TREASURY_ADDRESS) {
       lamports,
       sol: lamports !== null ? lamports / 1e9 : null,
       sigCount: sigs.count,
+      signaturesCheckedAt: sigs.checkedAt ?? null,
       sigPageFull: sigs.pageFull,
       latestActivitySlot: sigs.latestSlot,
       latestActivityAt: sigs.latestAt,
@@ -1016,6 +1025,7 @@ export async function sniffSolanaTreasury(address = DEFAULT_TREASURY_ADDRESS) {
       lamports: null,
       sol: null,
       sigCount: sigCache.value?.count ?? null,
+      signaturesCheckedAt: sigCache.value?.checkedAt ?? null,
       sigPageFull: false,
       latestActivitySlot: null,
       latestActivityAt: null,
@@ -3176,79 +3186,72 @@ function roundSol(value) {
   return Number.isFinite(Number(value)) ? Math.round(Number(value) * 1e6) / 1e6 : null;
 }
 
-export async function runSniff({ forceMiningSurface = false, previous = null } = {}) {
-  const startedAt = new Date().toISOString();
-  const settled = await Promise.allSettled([
-    sniffGeoffVersion(),
-    sniffGeoffDeploy(),
-    sniffGeoffCatalog(),
-    sniffGeoffTokenPlan(),
-    sniffGeoffDocsSurface(),
-    sniffGeoffExplore(),
-    sniffGeoffMaxSolana(),
-    sniffGeoffProductLanes(),
-    sniffGeoffPublicSurfaces(),
-    sniffGeoffSubscription(),
-    sniffTrixGeoff({ previous: previous?.sources?.["trix.geoff"] || null }),
-    sniffTrixMarket(),
-    sniffTrixMoney(),
-    sniffStacknetHealth(),
-    sniffStacknetRoot(),
-    sniffStacknetNetwork(),
-    sniffStacknetPile(),
-    sniffStacknetKeySale(),
-    sniffStacknetX402(),
-    sniffStacknetNode(),
-    sniffStacknetModels(),
-    sniffStacknetWidgets(),
-    sniffOpencodeZen(),
-    sniffOpencodeRegistry(),
-    sniffOpencodeReleases(),
-    sniffOpencodeGo(),
-    sniffMiningSurface(forceMiningSurface),
-    sniffNodeKeys9g(),
-    sniffZenErrorShape(),
-  ]);
-
-  const sources = settled.map((result, index) => {
-    if (result.status === "fulfilled") return result.value;
+// Stamp each observation as it settles, not when the whole batch finishes.
+// A cache hit without provenance is legacy data: its age must stay unknown.
+async function observeSource(source, attempt) {
+  try {
+    const value = await attempt;
+    if (Object.hasOwn(value, "checkedAt") || value.cached || value.skipped) return value;
+    return { ...value, checkedAt: new Date().toISOString() };
+  } catch (error) {
     return {
-      source: `source-${index}`,
+      source,
       ok: false,
       status: 0,
-      error: result.reason?.message || String(result.reason),
+      checkedAt: new Date().toISOString(),
+      error: error?.message || String(error),
     };
-  });
+  }
+}
+
+export async function runSniff({ forceMiningSurface = false, previous = null } = {}) {
+  const startedAt = new Date().toISOString();
+  const sources = await Promise.all([
+    ["geoff.version", sniffGeoffVersion()],
+    ["geoff.deploy", sniffGeoffDeploy()],
+    ["geoff.catalog", sniffGeoffCatalog()],
+    ["geoff.docs.pricing", sniffGeoffTokenPlan()],
+    ["geoff.docs.surface", sniffGeoffDocsSurface()],
+    ["geoff.explore", sniffGeoffExplore()],
+    ["geoff.max.solana", sniffGeoffMaxSolana()],
+    ["geoff.product.lanes", sniffGeoffProductLanes()],
+    ["geoff.public.surfaces", sniffGeoffPublicSurfaces()],
+    ["geoff.subscription", sniffGeoffSubscription()],
+    ["trix.geoff", sniffTrixGeoff({ previous: previous?.sources?.["trix.geoff"] || null })],
+    ["trix.market", sniffTrixMarket()],
+    ["trix.money", sniffTrixMoney()],
+    ["stacknet.health", sniffStacknetHealth()],
+    ["stacknet.root", sniffStacknetRoot()],
+    ["stacknet.network", sniffStacknetNetwork()],
+    ["stacknet.pile", sniffStacknetPile()],
+    ["stacknet.keysale", sniffStacknetKeySale()],
+    ["stacknet.x402", sniffStacknetX402()],
+    ["stacknet.node", sniffStacknetNode()],
+    ["stacknet.models", sniffStacknetModels()],
+    ["stacknet.widgets", sniffStacknetWidgets()],
+    ["opencode.zen", sniffOpencodeZen()],
+    ["opencode.registry", sniffOpencodeRegistry()],
+    ["opencode.releases", sniffOpencodeReleases()],
+    ["opencode.go", sniffOpencodeGo()],
+    ["surface.mining", sniffMiningSurface(forceMiningSurface)],
+    ["geoff.keys.9g", sniffNodeKeys9g()],
+    ["opencode.zenerr", sniffZenErrorShape()],
+  ].map(([source, attempt]) => observeSource(source, attempt)));
 
   const treasuryAddress =
     sources.find((s) => s.source === "stacknet.network")?.treasury?.treasuryAddress ||
     DEFAULT_TREASURY_ADDRESS;
-  try {
-    sources.push(await sniffSolanaTreasury(treasuryAddress));
-  } catch (error) {
-    sources.push({
-      source: "solana.treasury",
-      ok: false,
-      status: 0,
-      address: treasuryAddress,
-      reason: error?.message || String(error),
-    });
-  }
-
-  try {
-    sources.push(await sniffSolanaTokens());
-  } catch (error) {
-    sources.push({
-      source: "solana.tokens",
-      ok: false,
-      status: 0,
-      owner: DEFAULT_TOKEN_OWNER,
-      mints: [],
-      reason: error?.message || String(error),
-    });
-  }
+  sources.push(await observeSource("solana.treasury", sniffSolanaTreasury(treasuryAddress)));
+  sources.push(await observeSource("solana.tokens", sniffSolanaTokens()));
 
   const bySource = Object.fromEntries(sources.map((s) => [s.source, s]));
+  // service.js can retain old mint values after an empty/failed read.
+  // Keep their provenance separate from this attempt's checkedAt.
+  const tokens = bySource["solana.tokens"];
+  const previousTokens = previous?.sources?.["solana.tokens"];
+  tokens.mintsCheckedAt = tokens.mints?.length
+    ? tokens.checkedAt
+    : previousTokens?.mintsCheckedAt ?? null;
 
   return {
     id: `snap_${Date.now().toString(36)}`,
@@ -3431,31 +3434,13 @@ trixGeoffCount: bySource["trix.geoff"]?.count ?? null,
 export async function sniffStacknetMinute() {
   const takenAt = new Date().toISOString();
   const started = Date.now();
-  const settled = await Promise.allSettled([
-    sniffStacknetHealth(),
-    sniffStacknetRoot(),
-    sniffStacknetNetwork(),
-    sniffStacknetNode(),
-    sniffStacknetModels(),
-  ]);
-  const fallbackSources = [
-    "stacknet.health",
-    "stacknet.root",
-    "stacknet.network",
-    "stacknet.node",
-    "stacknet.models",
-  ];
-  const sources = settled.map((result, index) => ({
-    ...(result.status === "fulfilled"
-      ? result.value
-      : {
-          source: fallbackSources[index],
-          ok: false,
-          status: 0,
-          error: result.reason?.message || String(result.reason),
-        }),
-    checkedAt: takenAt,
-  }));
+  const sources = await Promise.all([
+    ["stacknet.health", sniffStacknetHealth()],
+    ["stacknet.root", sniffStacknetRoot()],
+    ["stacknet.network", sniffStacknetNetwork()],
+    ["stacknet.node", sniffStacknetNode()],
+    ["stacknet.models", sniffStacknetModels()],
+  ].map(([source, attempt]) => observeSource(source, attempt)));
   const bySource = Object.fromEntries(sources.map((source) => [source.source, source]));
   return {
     takenAt,

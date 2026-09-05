@@ -5,6 +5,8 @@ window.onerror = function(msg, src, line, col, err) {
 };
 import { icon } from "./icons.js";
 import { CLIENT_TOKEN_PLAN } from "./token-plan-fallback.js";
+import { initCompactView } from "./compact-view.js";
+import { renderProvenance, sourceDescription } from "./provenance.js";
 import {
   DEFAULT_HEATMAP_DAYS,
   buildHeatmapGrid,
@@ -706,7 +708,7 @@ const PROOFS = {
   paperworkUsd: {
     title: "Paperwork ledger",
     explain:
-      "Booked-vs-paid metaproof values from /network/summary, cross-checked against the Solana chain: treasury balance AND lifetime signature count via public RPC. Their books, our math.",
+      "Booked and paid USD are StackNet ledger claims from /network/summary, not verified revenue. Solana RPC supplies treasury balance and a capped signature page, not a lifetime transaction count or proof that the ledger was paid.",
     sources: ["stacknet.network", "solana.treasury"],
     fields: [
       "metaproofsPaperworkUsd",
@@ -875,7 +877,7 @@ function openProof(key) {
           ? `<span class="ps-ok">HTTP ${src.status ?? 200} · ${src.ms ?? "?"}ms</span>`
           : `<span class="ps-bad">FAILED · ${escapeHtml(src.reason || "error")}</span>`
         : '<span class="ps-warn">not in this sniff</span>';
-      return `<div class="ps-row"><span>${escapeHtml(name)}</span>${status}</div>`;
+      return `<div class="ps-row"><span>${escapeHtml(name)}</span>${status}</div><pre class="proof-provenance">${escapeHtml(sourceDescription(name, src))}</pre>`;
     })
     .join("");
 
@@ -1039,6 +1041,7 @@ setInterval(() => fetchPaperworkHistory(true), 5 * 60 * 1000);
 
 function renderMetrics(latest) {
   lastLatest = latest ?? null;
+  renderProvenance(latest);
   const s = latest?.summary ?? {};
   if (els.stacknetChangeNotice) {
     const shellOnline = ["healthy", "ok"].includes(s.stacknetStatus);
@@ -1468,7 +1471,7 @@ function renderTrixMarket(s) {
     }
     const activity = marketData?.activity || {};
     if (finitePositive(activity.items)) {
-      stats.push({ b: "Live sales", i: fmt(activity.items) });
+      stats.push({ b: "Activity records", i: fmt(activity.items) });
     }
     let html = stats
       .map(({ b, i }) => `<span><b>${escapeHtml(b)}</b><i>${escapeHtml(i)}</i></span>`)
@@ -2475,8 +2478,8 @@ function renderTokenPlan(plan) {
     const overview = plan.sourceUrls?.overview || "https://docs.geoff.ai/token-plan/overview";
     const usage = plan.sourceUrls?.usage || "https://docs.geoff.ai/token-plan/usage";
     const note = plan.sections?.plans?.live && plan.sections?.limits?.live
-      ? "Prices, token pools, and limits sniffed live from public docs"
-      : plan.reason || "Bundled values pending a complete live docs parse";
+      ? "Prices and limits read from public docs; not a current-price guarantee. See source checks for collection age."
+      : "Includes bundled/static Token Plan fallback; not live-checked. Publication age unknown.";
     els.priceSource.innerHTML = `${escapeHtml(note)} ·
       <a href="${escapeHtml(overview)}" target="_blank" rel="noopener noreferrer">Overview sheet</a>
       ·
@@ -2857,7 +2860,7 @@ async function pollNow() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Poll failed");
     applyPayload(data);
-    setConnection("live", "live");
+    setConnection("live", "connected");
   } catch (error) {
     setConnection("error", "refresh failed");
     console.error(error);
@@ -2880,7 +2883,7 @@ function connectStream() {
       const payload = JSON.parse(event.data);
       mode = payload.config?.mode || mode;
       applyPayload(payload);
-      setConnection("live", "live");
+      setConnection("live", "connected");
     } catch (error) {
       console.error(error);
     }
@@ -2940,6 +2943,8 @@ function startMatrix() {
 }
 
 els.pollBtn.addEventListener("click", pollNow);
+initCompactView();
+renderProvenance(memory.latest);
 hydrateIcons();
 startMatrix();
 // Paint the value sheet immediately — don't wait on a cold sniff.
@@ -2970,7 +2975,7 @@ async function boot() {
         const status = await fetch("/api/status", { cache: "no-store" }).then((r) => r.json());
         if (!status.error) {
           applyPayload(status);
-          setConnection("live", "live");
+          setConnection("live", "connected");
         }
         setInterval(() => {
           if (document.visibilityState === "visible") pollNow();
@@ -2982,7 +2987,7 @@ async function boot() {
       const status = await fetch("/api/status").then((r) => r.json());
       mode = status.config?.mode || mode;
       applyPayload(status);
-      setConnection("live", "live");
+      setConnection("live", "connected");
       connectStream();
       setInterval(() => {
         const stale = Date.now() - lastStreamEventAt > streamStaleMs;

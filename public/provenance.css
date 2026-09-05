@@ -1,0 +1,121 @@
+/* Load after styles.css. Keep provenance visible in compact/mobile layouts. */
+.metrics .metric.has-provenance {
+  min-width: 0;
+  height: auto;
+  max-height: none;
+  overflow-wrap: anywhere;
+}
+
+.metrics .metric.has-provenance > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.metrics .metric.has-provenance .metric-top {
+  flex-wrap: wrap;
+}
+
+.metrics .trix-stats-bar > span {
+  white-space: normal;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.metrics .trix-card figcaption i {
+  flex-wrap: wrap;
+  white-space: normal;
+}
+
+.metrics .metric .metric-provenance {
+  display: block;
+  min-width: 0;
+  margin-top: 0.5rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--line, #34343b);
+  font: 400 0.75rem/1.5 var(--font-sans, "Inter", sans-serif);
+  color: var(--muted, #a1a1aa);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.metric-provenance p {
+  margin: 0;
+}
+
+.metric-provenance .provenance-meaning {
+  color: var(--ink, #f4f4f5);
+  margin-bottom: 0.35rem;
+}
+
+.metric-provenance .provenance-ages {
+  white-space: pre-line;
+}
+
+.vitals-provenance {
+  min-width: 0;
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border-left: 2px solid var(--muted, #a1a1aa);
+  color: var(--muted, #a1a1aa);
+  font: 400 0.78rem/1.55 var(--font-sans, "Inter", sans-serif);
+  overflow-wrap: anywhere;
+}
+
+.vitals-provenance p {
+  margin: 0;
+}
+
+.provenance-details summary {
+  padding: 0.45rem 0;
+  color: var(--ink, #f4f4f5);
+  cursor: pointer;
+}
+
+.provenance-source-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.provenance-source {
+  min-width: 0;
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--line, #34343b);
+}
+
+.provenance-source-text {
+  white-space: pre-wrap;
+}
+
+.proof-provenance {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 400 0.75rem/1.5 var(--font-mono, monospace);
+  color: var(--muted);
+}
+
+#compactViewBtn[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: rgba(255, 214, 10, 0.2);
+}
+
+.provenance-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1rem;
+}
+
+.provenance-links a {
+  min-width: 0;
+  padding: 0.35rem 0;
+  color: var(--ink, #f4f4f5);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.provenance-details summary:focus-visible,
+.provenance-links a:focus-visible {
+  outline: 2px solid var(--accent, #ffd60a);
+  outline-offset: 3px;
+}
