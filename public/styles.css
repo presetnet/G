@@ -2957,6 +2957,49 @@ details[open] > .fold-summary::after {
   padding: 0.4rem 0;
 }
 
+@media (max-width: 1199px) {
+  .metrics > .trix-packs-tile,
+  .metrics > .trix-pack-metric {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    min-height: 0;
+    align-self: start;
+  }
+
+  .topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand actions"
+      "gauge gauge";
+    gap: 0.55rem 0.65rem;
+    padding-inline: 0.85rem;
+  }
+  .brand-lockup {
+    grid-area: brand;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .brand-full { display: none; }
+  .brand-short { display: inline; }
+  .gauge-inline { grid-area: gauge; }
+  .top-actions {
+    grid-area: actions;
+    gap: 0.4rem;
+    justify-self: end;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .top-actions #connection { display: none; }
+  .top-actions #trustMode {
+    display: inline-flex;
+    max-width: 8.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .btn-label-full { display: none; }
+  .btn-label-short { display: inline; }
+}
+
 @media (max-width: 1100px) {
   .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .pieces { grid-template-columns: repeat(2, minmax(0, 1fr)); }
