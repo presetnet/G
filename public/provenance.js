@@ -1,5 +1,22 @@
 const AGE_NOTICE_MS = 20 * 60_000;
 
+const MINI = {
+  stackVersion: "Reported software & health",
+  stackNodes: "Reported nodes & GPUs",
+  vramText: "Reported free GPU memory",
+  paperworkUsd: "Ledger claims, not verified revenue",
+  paperSupply: "PAPER supply on Solana",
+  trixGeoffCount: "Observed Geoff generation records",
+  keysoldUsd: "Reported key price & sales",
+  pileValue: "Reported unredeemed earnings",
+  trixPacksMinted: "Pack counts, quotes & receipts",
+  trixMarketCount: "Reported collectible counts",
+  keys9gValue: "Sampled wallet inflows on Solana",
+  x402Downloads: "Weekly SDK downloads, not users",
+  subscriptionCount: "Billing routes, not subscribers",
+  miningMiners: "Estimated paid miners, not all miners",
+};
+
 // IDs are value elements, not card positions or proof-popup aliases.
 const METRICS = [
   ["stackVersion", "Reported", "StackNet's software version and health claim; not an independent uptime test.", ["stacknet.health", "stacknet.root"]],
@@ -161,11 +178,25 @@ export function renderProvenance(latest) {
     let footer = card.querySelector(".metric-provenance");
     if (!footer) {
       footer = element("footer", "metric-provenance");
-      footer.append(element("p", "provenance-meaning", `${evidence}: ${meaning}`), element("p", "provenance-ages"));
+      const details = element("details", "metric-source-details");
+      const summary = element("summary", "", MINI[id]);
+      summary.title = "Show explanation, sources and data age";
+      details.append(summary, element("p", "provenance-meaning", `${evidence}: ${meaning}`), element("div", "provenance-ages"));
+      // Do not also trigger the card's legacy proof-popup click handler.
+      details.addEventListener("click", (event) => event.stopPropagation());
+      footer.append(details);
       card.append(footer);
     }
-    footer.querySelector(".provenance-ages").textContent = sources
-      .map((name) => sourceBrief(name, getSource(latest, name), now)).join("\n");
+    const ages = footer.querySelector(".provenance-ages");
+    for (const name of sources) {
+      let row = [...ages.children].find((child) => child.dataset.sourceId === name);
+      if (!row) {
+        row = element("p", "provenance-source-text");
+        row.dataset.sourceId = name;
+        ages.append(row);
+      }
+      row.textContent = sourceDescription(name, getSource(latest, name), now);
+    }
   }
 
   let note = document.getElementById("vitalsProvenance");
@@ -173,9 +204,8 @@ export function renderProvenance(latest) {
     note = element("aside", "vitals-provenance");
     note.id = "vitalsProvenance";
     note.setAttribute("aria-label", "How to read metric sources and ages");
-    note.append(element("p", "", "Reading these numbers: collection age is time since a source check, NOT publication or event age. Fetching this dashboard does not mean a new source check. Unknown stays unknown; missing values do not mean zero. \"Older than 20 min\" is an informational age marker, not an SLA or a guarantee of freshness."));
     const details = element("details", "provenance-details");
-    details.append(element("summary", "", "Source checks, exact UTC times and fallback states"), element("ul", "provenance-source-list"));
+    details.append(element("summary", "", "Sources & data age"), element("p", "", "Collection age means time since a source check, not publication or event age. Refreshing this page does not refresh every source. Unknown stays unknown; missing does not mean zero. Older than 20 min is an age marker, not a service guarantee."), element("ul", "provenance-source-list"));
     note.append(details);
     grid.before(note);
   }

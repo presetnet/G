@@ -42,6 +42,30 @@
   margin: 0;
 }
 
+.metric-source-details > summary {
+  cursor: pointer;
+  color: var(--muted);
+  padding: 0.35rem 0;
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.metric-source-details > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.metric-source-details[open] > summary {
+  color: var(--ink);
+  margin-bottom: 0.5rem;
+}
+
+.metric-source-details .provenance-source-text {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--line);
+}
+
 .metric-provenance .provenance-meaning {
   color: var(--ink, #f4f4f5);
   margin-bottom: 0.35rem;
