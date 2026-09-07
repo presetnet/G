@@ -106,6 +106,13 @@ function sourceBrief(name, src, now) {
   }
   if (src?.genesisStale) lines.push("Genesis: last-known fallback; value age unknown.");
   else if (src?.genesisOk === false) lines.push("Genesis check failed; NOT fresh.");
+  if (src?.snapshotStale === true) lines.push("TRIX flags its own pack snapshot as stale.");
+  else if (Number.isFinite(src?.snapshotAgeMs)) {
+    lines.push(`TRIX snapshot ${src.snapshotAgeMs <= 60_000 ? "fresh" : "aging"} at our read.`);
+  }
+  if (src?.vaultBacked != null) {
+    lines.push(`Vault coverage (TRIX-reported): ${src.vaultBacked ? "covered" : "shortfall"}; not chain-reconciled.`);
+  }
   if (src?.cardsCached) lines.push("Card catalog cached; exact value check time unknown.");
   if (typeof src?.reason === "string" && /^Partial:/i.test(src.reason)) lines.push("Partial check: some endpoints failed; NOT all fields fresh.");
   if (name === "trix.geoff") lines.push("Collection includes retained history; check time does not revalidate every record.");

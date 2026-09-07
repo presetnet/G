@@ -2134,9 +2134,12 @@ async function sniffGeoffTokenPlan() {
 const TRIX_BASE_URL = "https://trix.market";
 const MAX_TRIX_HISTORY_RECORDS = 2_000;
 const MAX_TRIX_HISTORY_IDS = 10_000;
+const MAX_TRIX_MINTS = 3_000;
+const MAX_TRIX_SCANNED_MINTS = 3_000;
+const MAX_TRIX_INFERRED_SIGS = 3_000;
 const TRIX_LAUNCH_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
 const TRIX_CARD_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
-const TRIX_ARTWORK_WINDOW = 100; // /api/artworks hard cap; pagination params are ignored. NOTE: limit>~120 returns HTTP 500 ("Failed query"), so keep this <=100.
+const TRIX_ARTWORK_WINDOW = 100; // /api/artworks hard cap; pagination params are ignored; values above ~100 return HTTP 500
 const TRIX_RECENT_MEME_LIMIT = 18; // newest memes shown in the grid; recent-activity feed itself caps at 12, so catalog fold-in fills the rest
 const TRIX_LEADERBOARD_WINDOW = 100; // /api/leaderboard returns one ranked page from the API
 const TRIX_CARD_CLASSES = [
@@ -2147,6 +2150,10 @@ const TRIX_CARD_CLASSES = [
   { key: "mythic", label: "Mythic" },
   { key: "trix", label: "Void" },
 ];
+
+function tailCapped(values, max) {
+  return Array.isArray(values) ? values.slice(-Math.max(0, max)) : [];
+}
 
 export function normalizeTrixGeoffRecord(record, post = null) {
   const feeLamports = Number(record?.feeLamports);
@@ -2206,6 +2213,9 @@ export function parseTrixPackMarket(
   }
   const levels = Array.isArray(state.levels) ? state.levels : [];
   const base = levels.find((level) => level?.id === "base") || levels[0] || null;
+  const snapshot = state.snapshot && typeof state.snapshot === "object" ? state.snapshot : null;
+  const numFin = (value) => (value == null || value === "" ? null
+    : Number.isFinite(Number(value)) ? Number(value) : null);
   const genesisOk = Boolean(
     genesis && typeof genesis === "object" && genesisStatus >= 200 && genesisStatus < 300,
   );
@@ -2238,6 +2248,12 @@ export function parseTrixPackMarket(
       pricePerPackUsd: genesis.pricePerPackUsd,
       mostRipped: genesis.mostRipped,
       memeStatus: genesis.memeStatus,
+      topMemed: (Array.isArray(genesis.topMemed) ? genesis.topMemed : []).slice(0, 10),
+      botUnlocked: genesis.botUnlocked ?? null,
+      maxPerBuy: genesis.maxPerBuy ?? null,
+      owned: genesis.owned ?? null,
+      opened: genesis.opened ?? null,
+      endsAt: genesis.endsAt ?? null,
     } : null,
     levels: levels.map((level) => ({
       id: level.id,
@@ -2246,7 +2262,30 @@ export function parseTrixPackMarket(
       priceSol: level.priceSol,
       priceUsd: level.priceUsd,
       bands: level.bands,
+      soldOut: level.soldOut,
+      maxSupply: level.maxSupply,
+      maxMultiple: level.maxMultiple,
+      isNew: level.isNew,
     })),
+    snapshot: snapshot ? {
+      stale: snapshot.stale,
+      generatedAt: snapshot.generatedAt,
+      ageMs: snapshot.ageMs,
+      refreshInFlight: snapshot.refreshInFlight,
+      lastRefreshFailedAt: snapshot.lastRefreshFailedAt,
+    } : null,
+    coverage: [
+      state.rewardValueUsd,
+      state.memesRemaining,
+      state.vaultBacked,
+      state.vaultShortfallLamports,
+      state.memePoolFloor,
+      state.coverableUsd,
+      state.outstandingLiabilityUsd,
+      state.sharedLockCoverageBps,
+      state.sharedLockNominalLamports,
+    ],
+    agedPool: state.agedPool ?? null,
   }));
   return {
     ok: true,
@@ -2258,6 +2297,36 @@ export function parseTrixPackMarket(
     minted,
     roundPacks: Number(state.roundPacks) || 0,
     stakedPacks: Number(state.agedPool?.stakedPacks) || 0,
+    rewardValueUsd: numFin(state.rewardValueUsd),
+    memesRemaining: numFin(state.memesRemaining),
+    vaultBacked: typeof state.vaultBacked === "boolean" ? state.vaultBacked : null,
+    vaultShortfallLamports: numFin(state.vaultShortfallLamports),
+    memePoolFloor: numFin(state.memePoolFloor),
+    coverableUsd: numFin(state.coverableUsd),
+    outstandingLiabilityUsd: numFin(state.outstandingLiabilityUsd),
+    sharedLockCoverageBps: numFin(state.sharedLockCoverageBps),
+    sharedLockNominalLamports: numFin(state.sharedLockNominalLamports),
+    roundFloor: numFin(state.roundFloor),
+    roundEndsAt: typeof state.roundEndsAt === "string" ? state.roundEndsAt : null,
+    snapshotStale: typeof snapshot?.stale === "boolean" ? snapshot.stale : null,
+    snapshotGeneratedAt: typeof snapshot?.generatedAt === "string" ? snapshot.generatedAt : null,
+    snapshotAgeMs: numFin(snapshot?.ageMs),
+    snapshotRefreshInFlight: Boolean(snapshot?.refreshInFlight),
+    snapshotLastRefreshFailedAt: typeof snapshot?.lastRefreshFailedAt === "string"
+      ? snapshot.lastRefreshFailedAt
+      : null,
+    agedPool: state.agedPool && typeof state.agedPool === "object" ? {
+      stakedPacks: numFin(state.agedPool.stakedPacks),
+      accPerShare: state.agedPool.accPerShare != null ? String(state.agedPool.accPerShare) : null,
+      totalShares: numFin(state.agedPool.totalShares),
+      undistributedLamports: numFin(state.agedPool.undistributedLamports),
+      fundedLamports: numFin(state.agedPool.fundedLamports),
+      paidLamports: numFin(state.agedPool.paidLamports),
+      owedLamports: numFin(state.agedPool.owedLamports),
+      fundedUsd: numFin(state.agedPool.fundedUsd),
+      paidUsd: numFin(state.agedPool.paidUsd),
+      owedUsd: numFin(state.agedPool.owedUsd),
+    } : null,
     genesisOk,
     genesisStatus,
     genesisCap: genesisOk && Number.isFinite(Number(genesis.cap)) ? Number(genesis.cap) : null,
@@ -2274,6 +2343,20 @@ export function parseTrixPackMarket(
       ? Number(genesis.mostRipped.buybackUsd)
       : null,
     memeStatus: genesisOk && typeof genesis.memeStatus === "string" ? genesis.memeStatus : null,
+    genesisTopMemed: Array.isArray(genesis?.topMemed)
+      ? genesis.topMemed.slice(0, 10).map((row) => ({
+          symbol: typeof row?.symbol === "string" ? row.symbol : null,
+          name: typeof row?.name === "string" ? row.name : null,
+          memes: numFin(row?.memes),
+        }))
+      : [],
+    genesisBotUnlocked: genesisOk && typeof genesis.botUnlocked === "boolean"
+      ? genesis.botUnlocked
+      : null,
+    genesisMaxPerBuy: genesisOk ? numFin(genesis.maxPerBuy) : null,
+    genesisOwned: genesisOk ? numFin(genesis.owned) : null,
+    genesisOpened: genesisOk && typeof genesis.opened === "boolean" ? genesis.opened : null,
+    genesisEndsAt: genesisOk && typeof genesis.endsAt === "string" ? genesis.endsAt : null,
     holders: null,
     holderReason: "TRIX does not publish a global Pack/Card holder count or collection mint.",
     available: Number(base?.available) || 0,
@@ -2287,13 +2370,17 @@ export function parseTrixPackMarket(
       available: Number(level.available) || 0,
       priceSol: Number(level.priceSol) || null,
       priceUsd: Number(level.priceUsd) || null,
+      soldOut: Boolean(level.soldOut),
+      maxSupply: numFin(level.maxSupply),
+      maxMultiple: numFin(level.maxMultiple),
+      isNew: Boolean(level.isNew),
     })),
     fingerprint,
     checkedAt: new Date().toISOString(),
     sourceUrl: `${TRIX_BASE_URL}/api/mkt/state`,
     genesisSourceUrl: `${TRIX_BASE_URL}/api/mkt/g`,
-    oddsSourceUrl: `${TRIX_BASE_URL}/api/mkt/state`,
-    note: "Minted, market values, and class odds are TRIX API-reported, not observed card outcomes. Class odds use economy.oddsBp without normalization; absent or invalid odds are unknown. Market-state bands are gross reward multiples of Pack USD price before reward shares, not actual revealed-card counts or direct owner payouts.",
+oddsSourceUrl: `${TRIX_BASE_URL}/api/mkt/state`,
+    note: "Minted, market values, and class odds are TRIX API-reported, not observed card outcomes. Class odds use economy.oddsBp without normalization; absent or invalid odds are unknown. Market-state bands are gross reward multiples of Pack USD price before reward shares, not actual revealed-card counts or direct owner payouts. Vault coverage, snapshot freshness, and aged-pool values are TRIX-reported accounting, not independently reconciled to chain balances.",
     reason: null,
   };
 }
@@ -2566,9 +2653,10 @@ export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
     selectedMints.length === 0 ||
     resolvedRequests.length > 0
   );
-  const scannedTokenMints = [
-    ...new Set([...(previous?.scannedTokenMints || []), ...resolvedTokenMints]),
-  ];
+  const scannedTokenMints = tailCapped(
+    [...new Set([...(previous?.scannedTokenMints || []), ...resolvedTokenMints])],
+    MAX_TRIX_SCANNED_MINTS,
+  );
   return {
     source: "trix.geoff",
     ok,
@@ -2580,10 +2668,13 @@ export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
     unlabeledCount: unlabeledPaid.length,
     inferredCount: infer.count,
     inferenceOk: infer.ok,
-    inferredSigs: infer.inferredSigs,
-    infer: { inferredSigs: infer.inferredSigs, verifiedAt: infer.checkedAt },
+    inferredSigs: tailCapped(infer.inferredSigs, MAX_TRIX_INFERRED_SIGS),
+    infer: {
+      inferredSigs: tailCapped(infer.inferredSigs, MAX_TRIX_INFERRED_SIGS),
+      verifiedAt: infer.checkedAt,
+    },
     providerLabelInferred: infer.count > 0,
-    tokenMints,
+    tokenMints: tailCapped(tokenMints, MAX_TRIX_MINTS),
     resolvedTokenMints,
     scannedTokenMints,
     recentCount: recentRecords.length,
@@ -2641,10 +2732,14 @@ export function mergeTrixGeoffHistory(previous = null, observed = null) {
     0,
   );
   const latest = records.find((record) => record.imageUrl) || records[0] || null;
-  const tokenMints = [...new Set([...(previous?.tokenMints || []), ...(observed.tokenMints || [])])];
-  const scannedTokenMints = [
-    ...new Set([...(previous?.scannedTokenMints || []), ...(observed.scannedTokenMints || [])]),
-  ];
+  const tokenMints = tailCapped(
+    [...new Set([...(previous?.tokenMints || []), ...(observed.tokenMints || [])])],
+    MAX_TRIX_MINTS,
+  );
+  const scannedTokenMints = tailCapped(
+    [...new Set([...(previous?.scannedTokenMints || []), ...(observed.scannedTokenMints || [])])],
+    MAX_TRIX_SCANNED_MINTS,
+  );
   const previousPacksValid =
     previous?.packs?.ok &&
     previous.packs.status >= 200 &&
@@ -3036,7 +3131,7 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       JSON.stringify(aggregations),
     ),
     url: `${TRIX_BASE_URL}/`,
-    note: "Counts and market data from TRIX public APIs (/api/cards, /api/artworks, /api/auctions, /api/treasury, /api/mkt/preorder, /api/activity, /api/leaderboard, /api/launches). The recent-mint artwork feed shows public artwork titles, images, creator userId, on-chain mint address, and each work's linked coin (via /api/launches) with a live buy-price estimate (marketCap ÷ totalSupply) and a Buy link to the TRIX coin page. The leaderboard rows carry TRIX's own public username, wallet, and points. No holder, auction bidder, or artwork-owner identity beyond TRIX's own published fields is kept or displayed. Boost Card artwork is shown from TRIX's own image URLs; the card catalog is cached for six hours. Limits the API itself enforces: /api/artworks caps at 200 items (pagination params are ignored), /api/leaderboard returns one page of 100, and auction rows are listings: only a share carry a live bid and most have no end time yet. Buy price is an estimate from live marketCap ÷ totalSupply; it is not an official order-book bid or ask. The /api/artworks feed window is limited to 100 items: the API returns HTTP 500 for larger limit values.",
+    note: "Counts and market data from TRIX public APIs (/api/cards, /api/artworks, /api/auctions, /api/treasury, /api/mkt/preorder, /api/activity, /api/leaderboard, /api/launches). The recent-mint artwork feed shows public artwork titles, images, creator userId, on-chain mint address, and each work's linked coin (via /api/launches) with a live buy-price estimate (marketCap ÷ totalSupply) and a Buy link to the TRIX coin page. The leaderboard rows carry TRIX's own public username, wallet, and points. No holder, auction bidder, or artwork-owner identity beyond TRIX's own published fields is kept or displayed. Boost Card artwork is shown from TRIX's own image URLs; the card catalog is cached for six hours. Limits the API itself enforces: /api/artworks caps at 100 items (pagination params are ignored; larger limit values return HTTP 500, so the collector retries at 100 then 80/60/40), /api/leaderboard returns one page of 100, and auction rows are listings: only a share carry a live bid and most have no end time yet. Buy price is an estimate from live marketCap; it is not an official order-book bid or ask.",
     reason: failures.length ? `Partial: ${failures.join("; ")}.` : null,
   };
 }

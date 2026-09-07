@@ -1224,6 +1224,10 @@ function renderMetrics(latest) {
     if (trixPacks?.stale) bits.unshift("last valid reading");
     if (trixPacks?.round != null) bits.push(`round ${trixPacks.round}`);
     if (trixPacks?.roundStatus) bits.push(trixPacks.roundStatus);
+    if (trixPacks?.snapshotStale === true) bits.push("snapshot stale");
+    else if (Number.isFinite(trixPacks?.snapshotAgeMs)) {
+      bits.push(trixPacks.snapshotAgeMs <= 60_000 ? "snapshot fresh" : "snapshot aging");
+    }
     if (!trixPacks?.ok && trixPacks?.reason) bits.push("market read failed");
     els.trixPacksMeta.textContent = bits.join(" · ");
     els.trixPacksMeta.title = trixPacks?.holderReason ||
@@ -1262,6 +1266,18 @@ function renderMetrics(latest) {
         muted: true,
       };
     };
+    let vaultCoverageText = null;
+    if (trixPacks?.vaultBacked != null) {
+      const sharedPct = Number.isFinite(trixPacks.sharedLockCoverageBps)
+        ? `${Math.round(trixPacks.sharedLockCoverageBps / 100)}%`
+        : "";
+      const shortSol = (Number(trixPacks.vaultShortfallLamports) || 0) / 1e9;
+      vaultCoverageText = trixPacks.vaultBacked
+        ? `covered${sharedPct ? ` ${sharedPct}` : ""}`
+        : shortSol > 0
+          ? `shortfall ${shortSol.toLocaleString(undefined, { maximumFractionDigits: 2 })} SOL`
+          : "uncovered";
+    }
     const stats = [
       { label: "Memes created", value: formatCount(trixPacks?.available) },
       { label: "Memes Δ/60m", value: packDelta(trixPacks?.packAvailableDelta) },
@@ -1272,6 +1288,7 @@ function renderMetrics(latest) {
       { label: "Most ripped", value: trixPacks?.mostRippedSymbol || "N/A" },
       { label: "Reported buyback", value: formatUsd(trixPacks?.mostRippedBuybackUsd) },
       { label: "Meme status", value: trixPacks?.memeStatus || "N/A" },
+      ...(vaultCoverageText ? [{ label: "Vault coverage", value: vaultCoverageText }] : []),
       priceStat("base", "Base"),
       priceStat("viral", "Viral"),
       priceStat("hype", "Hype"),
@@ -1284,8 +1301,14 @@ function renderMetrics(latest) {
     const priceCrossCheck = Number.isFinite(genesisPrice) && Number.isFinite(basePrice)
       ? ` State Base $${basePrice.toFixed(2)} vs Genesis $${genesisPrice.toFixed(2)}: ${Math.abs(basePrice - genesisPrice) <= 0.01 ? "match" : "mismatch"}.`
       : "";
+    const snapshotBit = Number.isFinite(trixPacks?.snapshotAgeMs)
+      ? ` TRIX refreshed its own snapshot ${Math.round(trixPacks.snapshotAgeMs / 1000)}s before our read${trixPacks?.snapshotStale ? " and flags it stale" : ""}.`
+      : "";
+    const coverageBit = trixPacks?.vaultBacked == null
+      ? ""
+      : ` Vault coverage is TRIX-reported (vault-backed flag with shared-lock coverage bps; collateral coverable $${Number.isFinite(Number(trixPacks.coverableUsd)) ? Number(trixPacks.coverableUsd).toLocaleString(undefined, { maximumFractionDigits: 0 }) : "N/A"} vs outstanding liability $${Number.isFinite(Number(trixPacks.outstandingLiabilityUsd)) ? Number(trixPacks.outstandingLiabilityUsd).toLocaleString(undefined, { maximumFractionDigits: 0 }) : "N/A"}); not chain-reconciled.`;
     els.trixPackMarket.title =
-      `Memes created is the TRIX /api/mkt/state base-level 'available' — the total count of memes currently available in the pool. It is NOT packs left to buy: it grows over time as people create memes (the owner reported 6000+ being generated). Memes Δ is the change over the same rolling window as mints/hour (up to 60 min). Mints/hour is calculated from recent same-round TRIX API-reported mint totals over that rolling window; it does not prove queueing or throttling. Base paid max is observed Pack consideration. Base all-in max also includes buyer-funded account rent and network fees. TRIX bulk checkout submits one transaction per Pack. Premium Pack levels are excluded from both Base maxima. Most ripped, buyback, and meme status are TRIX Genesis API reports. Prices are current API quotes, not verified realized sales.${priceCrossCheck}`;
+      `Memes created is the TRIX /api/mkt/state base-level 'available' — the total count of memes currently available in the pool. It is NOT packs left to buy: it grows over time as people create memes (the owner reported 6000+ being generated). Memes Δ is the change over the same rolling window as mints/hour (up to 60 min). Mints/hour is calculated from recent same-round TRIX API-reported mint totals over that rolling window; it does not prove queueing or throttling. Base paid max is observed Pack consideration. Base all-in max also includes buyer-funded account rent and network fees. TRIX bulk checkout submits one transaction per Pack. Premium Pack levels are excluded from both Base maxima. Most ripped, buyback, and meme status are TRIX Genesis API reports. Prices are current API quotes, not verified realized sales.${priceCrossCheck}${snapshotBit}${coverageBit}`;
   }
   if (els.trixPackTraits) {
     const classes = Array.isArray(trixPacks?.classes) ? trixPacks.classes : [];
