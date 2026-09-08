@@ -1405,9 +1405,17 @@ function renderTrixMemeMarket(s) {
   if (!els.trixMemeMarketCount) return;
   const memeMarket = lastLatest?.sources?.["trix.meme.market"];
   const summary = lastLatest?.summary ?? {};
-  const coins = memeMarket?.coins || summary.trixMemeMarketCoins || [];
-  const top10 = memeMarket?.top10 || coins.slice(0, 10);
-  const totalCoins = memeMarket?.totalCoins || summary.trixMemeMarketCoins?.length || 0;
+  const coins = Array.isArray(memeMarket?.coins) ? memeMarket.coins : [];
+  const top10 = Array.isArray(memeMarket?.top10) ? memeMarket.top10 : coins.slice(0, 10);
+  const totalCoins = Number.isFinite(Number(memeMarket?.totalCoins))
+    ? Number(memeMarket.totalCoins)
+    : Number(summary.trixMemeMarketCoins) || 0;
+  const frontpage = lastLatest?.sources?.["trix.frontpage"];
+  const frontpageByMint = new Map(
+    [...(frontpage?.featured || []), ...(frontpage?.boosted || []), ...(frontpage?.recent || [])]
+      .filter((row) => row?.mintAddress)
+      .map((row) => [row.mintAddress, row]),
+  );
   const totalMc = memeMarket?.totalMarketCap || summary.trixMemeMarketTotalMc || 0;
   const totalVol = memeMarket?.totalVolume24h || summary.trixMemeMarketTotalVol || 0;
   const totalLiq = memeMarket?.totalLiquidity || summary.trixMemeMarketTotalLiq || 0;
@@ -1420,7 +1428,6 @@ function renderTrixMemeMarket(s) {
   const fmtPct = (value) =>
     Number.isFinite(Number(value)) ? `${value >= 0 ? "+" : ""}${Number(value).toFixed(2)}%` : "—";
   if (els.trixMemeMarketCount) {
-    const frontpage = lastLatest?.sources?.["trix.frontpage"];
     const featuredN = frontpage?.featuredCount ?? summary.trixFrontpageFeatured ?? 0;
     const boostedN = frontpage?.boostedCount ?? summary.trixFrontpageBoosted ?? 0;
     const recentN = frontpage?.recentCount ?? summary.trixFrontpageRecent ?? 0;
@@ -1462,12 +1469,20 @@ function renderTrixMemeMarket(s) {
         <div class="trix-meme-table-wrap">
         <table class="trix-meme-table">
           <thead>
-            <tr><th>#</th><th>Token</th><th>Market Cap</th><th>Change 24h</th><th>Vol 24h</th><th>Liq</th><th>Holders</th><th>Buys/Sells</th><th>Wallets</th><th>Price</th></tr>
+            <tr><th>#</th><th>Token</th><th>Type</th><th>Market Cap</th><th>Change 24h</th><th>Vol 24h</th><th>Liq</th><th>Holders</th><th>Buys/Sells</th><th>Wallets</th><th>Price</th></tr>
           </thead>
           <tbody>
             ${top10
               .map((c, i) => {
                 const name = c.tokenName || c.ticker || "—";
+                const lane = frontpageByMint.get(c.mintAddress);
+                const type = lane?.isCoinAgent
+                  ? "agent"
+                  : lane?.boosted
+                    ? "boosted"
+                    : lane?.chain
+                      ? String(lane.chain).toUpperCase()
+                      : "meme";
                 const mc = fmt(c.currentMarketCap, 0);
                 const change = fmtPct(c.priceChange24hPercent);
                 const vol = fmt(c.volume24h, 0);
@@ -1482,6 +1497,7 @@ function renderTrixMemeMarket(s) {
                 return `<tr>
                   <td class="tx-rank">${i + 1}</td>
                   <td class="tx-name"><b>${escapeHtml(name)}</b> <code title="${escapeHtml(c.mintAddress || "")}">${escapeHtml(shortAddr(c.mintAddress || ""))}</code></td>
+                  <td><span class="trix-type">${escapeHtml(type)}</span></td>
                   <td>${mc}</td>
                   <td class="${change.startsWith("+") ? "tx-up" : change.startsWith("-") ? "tx-down" : ""}">${change}</td>
                   <td>${vol}</td>
@@ -1504,7 +1520,7 @@ function renderTrixMemeMarket(s) {
     els.trixMemeMarketStats.innerHTML = html;
     els.trixMemeMarketStats.title =
       memeMarket?.note ||
-      "TRIX /api/meme-market leaderboard — top 10 meme tokens by market cap. Data is a TRIX API snapshot (not live on-curve). Columns: token name, market cap, 24h price change, 24h volume, liquidity, holder count, current price. All values are TRIX-reported from their internal indexer; snapshot age noted when available. No on-chain verification is performed; treat as informational only.";
+      "TRIX /api/meme-market leaderboard — top 10 meme tokens by market cap. Data is a TRIX API snapshot (not live on-curve). Type tags are sourced frontpage lanes or chain labels, not box rarity. All values are TRIX-reported from their internal indexer; snapshot age noted when available. No on-chain verification is performed; treat as informational only.";
   }
 }
 function renderTrixReports() {

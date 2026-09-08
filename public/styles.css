@@ -5234,19 +5234,29 @@ details[open] > .fold-summary::after {
 }
 .trix-meme-table .tx-rank { color: var(--accent); font-weight: 700; }
 .trix-meme-table .tx-name b { color: var(--ink); }
+.trix-type {
+  display: inline-block;
+  padding: 0.12rem 0.28rem;
+  border: 1px solid rgba(255, 214, 0, 0.22);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 0.55rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 .trix-meme-table .tx-up { color: var(--green-bright); }
 .trix-meme-table .tx-down { color: var(--heat-bright); }
-.trix-meme-table td:nth-child(3),
-.trix-meme-table td:nth-child(5),
+.trix-meme-table td:nth-child(4),
 .trix-meme-table td:nth-child(6),
 .trix-meme-table td:nth-child(7),
 .trix-meme-table td:nth-child(8),
 .trix-meme-table td:nth-child(9),
 .trix-meme-table td:nth-child(10),
-.trix-meme-table th:nth-child(3),
-.trix-meme-table th:nth-child(5),
+.trix-meme-table td:nth-child(11),
+.trix-meme-table th:nth-child(4),
 .trix-meme-table th:nth-child(6),
 .trix-meme-table th:nth-child(7),
 .trix-meme-table th:nth-child(8),
 .trix-meme-table th:nth-child(9),
-.trix-meme-table th:nth-child(10) { text-align: right; }
+.trix-meme-table th:nth-child(10),
+.trix-meme-table th:nth-child(11) { text-align: right; }

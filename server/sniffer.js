@@ -3254,7 +3254,7 @@ export async function sniffTrixFrontpage({ previous = null } = {}) {
   try {
     const res = await fetchJson(`${TRIX_BASE_URL}/api/frontpage`);
     const data = res.json || {};
-    const ok = res.ok && data;
+    const ok = Boolean(res.ok && data && typeof data === "object");
     const featured = Array.isArray(data.featured) ? data.featured : [];
     const boosted = Array.isArray(data.boosted) ? data.boosted : [];
     const recent = Array.isArray(data.recent) ? data.recent : [];
@@ -3267,7 +3267,7 @@ export async function sniffTrixFrontpage({ previous = null } = {}) {
       featured,
       boosted,
       recent,
-      builtAt: typeof data.builtAt === "string" ? data.builtAt : null,
+      builtAt: data.builtAt != null ? data.builtAt : null,
       featuredCount: featured.length,
       boostedCount: boosted.length,
       recentCount: recent.length,
@@ -3345,7 +3345,7 @@ export async function sniffTrixFeeConfig({ previous = null } = {}) {
   try {
     const res = await fetchJson(`${TRIX_BASE_URL}/api/fee-config`);
     const data = res.json || {};
-    const ok = res.ok && data;
+    const ok = Boolean(res.ok && data && typeof data === "object");
     return {
       source: "trix.fee.config",
       ok,

@@ -12,7 +12,12 @@ import {
 import {
   runSniff,
   sniffStacknetMinute,
+  sniffTrixFeeConfig,
+  sniffTrixFrontpage,
   sniffTrixGeoff,
+  sniffTrixMarket,
+  sniffTrixMemeMarket,
+  sniffTrixTiers,
 } from "../server/sniffer.js";
 import { computeTemperature, translate } from "../server/translator.js";
 import {
@@ -79,11 +84,16 @@ export default async function handler(req, res) {
         ),
       );
     } else {
-      const [observed, stacknet] = await Promise.all([
+      const [observed, stacknet, trixMarket, memeMarket, frontpage, tiers, feeConfig] = await Promise.all([
         sniffTrixGeoff({
           previous: previous.latest?.sources?.["trix.geoff"] || null,
         }),
         sniffStacknetMinute(),
+        sniffTrixMarket(),
+        sniffTrixMemeMarket(),
+        sniffTrixFrontpage(),
+        sniffTrixTiers(),
+        sniffTrixFeeConfig(),
       ]);
       const base = previous.latest || {
         takenAt: stacknet.takenAt,
@@ -100,6 +110,11 @@ export default async function handler(req, res) {
           ...(base.sources || {}),
           ...stacknet.sources,
           "trix.geoff": observed,
+          "trix.market": trixMarket,
+          "trix.meme.market": memeMarket,
+          "trix.frontpage": frontpage,
+          "trix.tiers": tiers,
+          "trix.fee.config": feeConfig,
         },
         summary: {
           ...(base.summary || {}),
