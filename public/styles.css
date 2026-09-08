@@ -5196,3 +5196,57 @@ details[open] > .fold-summary::after {
 .money-coins-table th:last-child { text-align: right; }
 .money-coins-table tr:last-child td { border-bottom: 0; }
 .money-coins-table b { color: var(--green-bright); }
+
+.trix-meme-table-wrap {
+  overflow-x: auto;
+  margin-top: 0.5rem;
+  max-height: 32rem;
+  overflow-y: auto;
+}
+.trix-meme-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+.trix-meme-table th,
+.trix-meme-table td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid rgba(74, 222, 128, 0.1);
+  text-align: left;
+  white-space: nowrap;
+}
+.trix-meme-table th {
+  color: var(--accent);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.trix-meme-table td {
+  color: rgba(226, 232, 240, 0.82);
+}
+.trix-meme-table tr:last-child td { border-bottom: 0; }
+.trix-meme-table code {
+  color: var(--green-bright);
+  font: inherit;
+}
+.trix-meme-table .tx-rank { color: var(--accent); font-weight: 700; }
+.trix-meme-table .tx-name b { color: var(--ink); }
+.trix-meme-table .tx-up { color: var(--green-bright); }
+.trix-meme-table .tx-down { color: var(--heat-bright); }
+.trix-meme-table td:nth-child(3),
+.trix-meme-table td:nth-child(5),
+.trix-meme-table td:nth-child(6),
+.trix-meme-table td:nth-child(7),
+.trix-meme-table td:nth-child(8),
+.trix-meme-table td:nth-child(9),
+.trix-meme-table td:nth-child(10),
+.trix-meme-table th:nth-child(3),
+.trix-meme-table th:nth-child(5),
+.trix-meme-table th:nth-child(6),
+.trix-meme-table th:nth-child(7),
+.trix-meme-table th:nth-child(8),
+.trix-meme-table th:nth-child(9),
+.trix-meme-table th:nth-child(10) { text-align: right; }

@@ -117,12 +117,6 @@ export function preserveTrixHistory(previous, current) {
       trixGeoffCount: trix.count,
       trixGeoffPaidSol: trix.paidSol,
       trixGeoffFingerprint: trix.fingerprint,
-      trixPacksMinted: trix.packs?.minted ?? null,
-      trixPacksFingerprint: trix.packs?.fingerprint ?? null,
-      trixPacksAvailable: trix.packs?.available ?? null,
-      trixPacksRound: trix.packs?.round ?? null,
-      trixPacksAvailableDelta: trix.packs?.packAvailableDelta ?? null,
-      trixPacksMintedDelta: trix.packs?.packMintedDelta ?? null,
     },
   };
 }
