@@ -157,17 +157,18 @@ function renderBoxes(official, board, chain) {
     ? `Round ${fmt(board.round, 0)} ${esc(board.roundStatus || "warming")} · ${chainLive ? `${fmt(chain.eventsSinceLaunch, 0)} on-chain events` : `${fmt(board.mintedTotal, 0)} minted`} · snapshot ${fmt(board.mintedTotal, 0)}`
     : !good(official) && hasData ? unavailable(official, "Last-known box results") : "Official box leaderboard");
   if (fromBoard) {
+    const delta = chainLive && number(board?.chain?.boxEvents) !== null ? chain.eventsSinceLaunch - board.chain.boxEvents : null;
     const chainStamp = chainLive
-      ? `On-chain box events ${fmt(chain.eventsSinceLaunch, 0)} · newest ${clock(chain.newestAt, "Newest box event")} · treasury ${short(chain.treasury)}`
+      ? `On-chain box events ${fmt(chain.eventsSinceLaunch, 0)} · newest ${clock(chain.newestAt, "Newest box event")}${delta !== null ? ` · ${delta >= 0 ? "+" : ""}${fmt(delta, 0)} since Sep 6 scan` : ""} · treasury ${short(chain.treasury)}`
       : `On-chain count unavailable${chain?.reason ? ` · ${esc(chain.reason)}` : ""}`;
-    const snapshotStamp = `TRIX snapshot ${fmt(board.mintedTotal, 0)} minted · ${fmt(board.boxesLeft, 0)} left · taken ${clock(board.dataUpdatedAt, "Aggregator snapshot")}${board.fallbackReason ? ` · TRIX source ${esc(board.fallbackReason)}` : ""}`;
+    const snapshotStamp = `TRIX snapshot ${fmt(board.mintedTotal, 0)} minted · ${fmt(board.boxesLeft, 0)} left · last published before /api/mkt/state retired — left is not provable live · taken ${clock(board.dataUpdatedAt, "Aggregator snapshot")}${board.fallbackReason ? ` · TRIX source ${esc(board.fallbackReason)}` : ""}`;
     const chainBit = board.chain?.walletsScanned != null
       ? `Aggregator scan · ${fmt(board.chain.walletsScanned, 0)} wallets · ${fmt(board.chain.boxEvents, 0)} events`
       : "";
     const stamp = `<p class="desk-context">${chainStamp} · ${snapshotStamp}${chainBit ? ` · ${chainBit}` : ""}</p>`;
     const boxTiles = board.boxes.map((b) => `<section class="box-tile${b.inRound ? " in-round" : ""}" style="--box-hex:${esc(b.hex || "#444")}">
       <b>${esc(b.type)}</b><span class="box-color">${esc(b.color)}</span>
-      <dl><dt>Minted</dt><dd>${fmt(b.minted, 0)}</dd><dt>Left</dt><dd>${fmt(b.left, 0)}</dd><dt>Price</dt><dd>${usd(b.priceUsd)} · ${sol(b.priceSol)}</dd></dl>
+      <dl><dt>Minted · snap</dt><dd>${fmt(b.minted, 0)}</dd><dt>Left · snap</dt><dd title="Last published by TRIX before the state API retired; not verifiable now">${fmt(b.left, 0)}</dd><dt>Price · snap</dt><dd>${usd(b.priceUsd)} · ${sol(b.priceSol)}</dd></dl>
       <span class="desk-badge">${b.inRound ? "In round" : "Not in round"}</span>
     </section>`).join("");
     const collectorBody = board.collectors.slice(0, 50).map((c) => `<tr>

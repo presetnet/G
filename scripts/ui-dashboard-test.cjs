@@ -159,7 +159,9 @@ async function main() {
     await page.locator('#tab-boxes').click();
     assert.match(await page.locator('#boxStatus').textContent(), /Round 1 warming/);
     assert.match(await page.locator('#boxRows').textContent(), /On-chain box events 4,301/);
+    assert.match(await page.locator('#boxRows').textContent(), /\+377 since Sep 6 scan/);
     assert.match(await page.locator('#boxRows').textContent(), /TRIX snapshot 3,874 minted/);
+    assert.match(await page.locator('#boxRows').textContent(), /not provable live/);
     assert.match(await page.locator('#boxRows').textContent(), /BASE BOX/);
     assert.match(await page.locator('#boxRows').textContent(), /VIRAL BOX/);
     assert.match(await page.locator('#boxRows').textContent(), /BoxWhale0/);
