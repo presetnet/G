@@ -28,6 +28,35 @@ let catalogPages = null;
 let catalogTotal = 983;
 let boxesStatus = 404;
 let boxesPayload = { message: "Not found" };
+let boxboardStatus = 200;
+let boxboardPayload = {
+  updatedAt: "2026-09-08T05:12:09.669Z",
+  round: 1, roundStatus: "warming", mintedTotal: 3874, boxesLeft: 4978,
+  fallbackReason: "Trix HTTP 404 https://trix.market/api/mkt/state",
+  chain: { engine: "helius", source: "helius into box treasury", treasury: "D8LYYH-treasury", walletsScanned: 669, boxEvents: 3924, updatedAt: "2026-09-08T05:12:09.669Z" },
+  boxes: [
+    { id: "base", type: "BASE BOX", color: "WHITE", hex: "#f4f4f4", minted: 3874, available: 4978, left: 4978, soldOut: false, inRound: true, priceUsd: 35.1, priceSol: 0.34, remoteArtUrl: "https://trix.market/atomic/base.png" },
+    { id: "viral", type: "VIRAL BOX", color: "HOLO", hex: "#7ecbff", minted: 0, left: 4978, inRound: true, priceUsd: 175.51, priceSol: 1.7 },
+    { id: "hype", type: "HYPE BOX", color: "MAGENTA", hex: "#c2187a", minted: 0, left: 4978, inRound: true, priceUsd: 87.76, priceSol: 0.85 },
+    { id: "silver", type: "SILVER BOX", minted: 0, left: 0, inRound: false, priceUsd: 0, priceSol: 0 },
+    { id: "gold", type: "GOLD BOX", minted: 0, left: 0, inRound: false, priceUsd: 0, priceSol: 0 },
+  ],
+  collectors: [
+    { rank: 1, username: "boxwhale", wallet: "A".repeat(32), boxes: 105, rips: 0, mythics: 0, earnedUsd: 0, verified: true, kinds: { base: 105 }, lastAt: Date.parse("2026-09-07T00:00:00Z") },
+    { rank: 2, username: "collector2", wallet: "B".repeat(32), boxes: 61, rips: 0, mythics: 0, earnedUsd: 0, kinds: { base: 61 }, lastAt: null },
+    { rank: 3, wallet: "C".repeat(32), boxes: 7, kinds: { base: 4, viral: 3 } },
+  ],
+  rarities: [
+    { id: "mythic", type: "MYTHIC", oddsPct: 0.04, band: [200, 400] },
+    { id: "common", type: "COMMON", oddsPct: 45.61, band: [0.5, 0.75] },
+    { id: "trix", type: "VOID", oddsPct: 43, band: [0, 0] },
+  ],
+  cards: [
+    { type: "GOLD", multiplier: 1.69, priceSol: 0.69, active: true },
+    { type: "VOID", multiplier: 10, priceSol: 6, active: true },
+  ],
+  public: { tcg: false, boxesMinted: 3874, boxesLeft: 4978, memesLeft: 4988, vaultBacked: true, stakedBoxes: 3874, snapshotAt: "2026-09-08T00:04:49.079Z", stale: false },
+};
 let tradeItems = [];
 const tokenHistories = new Map();
 let providerTransfers = [];
@@ -106,6 +135,12 @@ const context = vm.createContext({
       assert.equal(url.hostname, "www.trix.market");
       assert.equal(url.search, "");
       json = boxesPayload;
+    }
+    else if (url.pathname === "/api/trix-boxes") {
+      assert.equal(url.hostname, "doswapz.com");
+      assert.equal(options.method || "GET", "GET");
+      json = boxboardStatus === 404 ? { message: "Not found" } : boxboardPayload;
+      if (boxboardStatus === 404) { return { ok: false, status: 404, url: String(url), headers: new Map(), text: async () => JSON.stringify(json), json: async () => json }; }
     }
     else if (url.pathname === "/api/launchpad-settings/public") json = { platformFeeBps: 0, creatorFeeBps: null, platformLaunchFeeSol: "0" };
     else if (url.pathname === "/api/feed/trades") json = { items: tradeItems };
@@ -312,6 +347,35 @@ assert.equal(unavailableBoxes.fingerprint, null);
 assert.match(unavailableBoxes.reason, /HTTP 404.*Not found/);
 for (const key of ["topCoins", "biggestPulls", "topCollectors"]) assert.equal(unavailableBoxes[key], null);
 for (const key of ["count", "totalCoins", "types"]) assert.equal(Object.hasOwn(unavailableBoxes, key), false);
+
+// The public third-party box board carries the on-chain collector scan when the official endpoint is down.
+const board = await api.sniffTrixBoxBoard();
+assert.equal(board.source, "trix.boxboard");
+assert.equal(board.ok, true);
+assert.equal(board.round, 1);
+assert.equal(board.roundStatus, "warming");
+assert.equal(board.mintedTotal, 3874);
+assert.equal(board.boxesLeft, 4978);
+assert.equal(board.dataUpdatedAt, "2026-09-08T05:12:09.669Z");
+assert.equal(board.fallbackReason, "Trix HTTP 404 https://trix.market/api/mkt/state");
+assert.equal(board.boxes.length, 5);
+assert.deepEqual(plain(board.boxes[0]), { id: "base", type: "BASE BOX", color: "WHITE", hex: "#f4f4f4", minted: 3874, left: 4978, inRound: true, priceUsd: 35.1, priceSol: 0.34, artUrl: "https://trix.market/atomic/base.png" });
+assert.deepEqual(plain(board.collectors[0]), { rank: 1, username: "boxwhale", wallet: "A".repeat(32), boxes: 105, rips: 0, mythics: 0, earnedUsd: 0, verified: true, kinds: { base: 105 }, lastAt: "2026-09-07T00:00:00.000Z" });
+assert.deepEqual(plain(board.collectors[2].kinds), { base: 4, viral: 3 });
+assert.equal(board.chain.treasury, "D8LYYH-treasury");
+assert.equal(board.chain.boxEvents, 3924);
+assert.equal(board.publicState.tcg, false);
+assert.equal(board.publicState.vaultBacked, true);
+assert.deepEqual(plain(board.rarities.map((r) => r.type)), ["MYTHIC", "COMMON", "VOID"]);
+assert.equal(board.cards[1].multiplier, 10);
+boxboardStatus = 404;
+const boardDown = await api.sniffTrixBoxBoard({ previous: board });
+assert.equal(boardDown.ok, false);
+assert.equal(boardDown.stale, true);
+assert.equal(boardDown.status, 404);
+assert.equal(boardDown.collectors[0].username, "boxwhale");
+boxboardStatus = 200;
+
 now += 1000;
 const stillUnavailable = await api.sniffTrixBoxes({ previous: unavailableBoxes });
 assert.equal(stillUnavailable.checkedAt, iso());
@@ -573,16 +637,19 @@ failures.clear();
 
 // Full/minute summaries use the same source contract, including coverage.
 const coldMinute = await api.runMinuteSniff();
-assert.equal(Object.keys(coldMinute.sources).length, 13);
-assert.equal(coldMinute.summary.totalSources, 13);
+assert.equal(Object.keys(coldMinute.sources).length, 14);
+assert.equal(coldMinute.summary.totalSources, 14);
 assert.equal(coldMinute.sources["trix.boxes"].status, 404);
+assert.equal(coldMinute.sources["trix.boxboard"].ok, true);
 const full = service.preserveTrixHistory(null, await api.runSniff());
-assert.equal(Object.keys(full.sources).length, 36);
+assert.equal(Object.keys(full.sources).length, 37);
 assert.equal(full.sources["trix.boxes"].status, 404);
 assert.equal(full.summary.trixBoxesOk, false);
 assert.equal(full.summary.trixBoxesStatus, 404);
 assert.equal(full.summary.trixBoxesTopCoins, null);
 assert.equal(full.summary.coverage.find((source) => source.source === "trix.boxes").optional, true);
+assert.equal(full.summary.trixBoxBoardOk, true);
+assert.equal(full.summary.trixBoxBoardCollectorCount, 3);
 const baseline = {
   ...plain(full),
   sources: { ...plain(full.sources), untouched: { source: "untouched", ok: true, checkedAt: oldAt } },
@@ -711,7 +778,7 @@ await pending;
 assert.ok(timed);
 assert.ok(now - timeoutStart <= 18000, `minute took ${now - timeoutStart}ms`);
 assert.ok(timed.durationMs < 60000);
-assert.ok(requests.length - timedRequestStart <= 23);
+assert.ok(requests.length - timedRequestStart <= 24);
 assert.ok(timeouts.every((timeout) => timeout <= 18000));
 for (const [name, source] of Object.entries(timed.sources)) {
   if (name.startsWith("trix.") || ["stacknet.health", "stacknet.root", "stacknet.network", "stacknet.node", "stacknet.models"].includes(name)) {

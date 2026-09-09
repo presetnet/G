@@ -2146,6 +2146,7 @@ const TRIX_LAUNCH_PAGE_SIZE = 500;
 const TRIX_LAUNCH_SOURCE_URL = `${TRIX_BASE_URL}/api/launches?limit=500&offset=0&sort=marketCap`;
 const TRIX_BOXES_SOURCE_URL = "https://www.trix.market/api/mkt/leaderboard";
 const TRIX_BOXES_ROW_LIMIT = 25;
+const TRIX_BOXBOARD_SOURCE_URL = "https://doswapz.com/api/trix-boxes";
 const TRIX_ARTWORK_WINDOW = 100; // /api/artworks hard cap; pagination params are ignored; values above ~100 return HTTP 500
 const TRIX_RECENT_MEME_LIMIT = 18; // newest memes shown in the grid; recent-activity feed itself caps at 12, so catalog fold-in fills the rest
 const TRIX_LEADERBOARD_WINDOW = 100; // /api/leaderboard returns one ranked page from the API
@@ -3279,6 +3280,131 @@ export async function sniffTrixBoxes({ previous = null } = {}) {
   return retainFailedSource("trix.boxes", value, previous);
 }
 
+/**
+ * Public third-party box board (DOSWAPZ). Aggregates a cached snapshot of TRIX's
+ * retired /api/mkt/state with an on-chain scan (Helius) of the TRIX box treasury
+ * and joins wallet box counts to public TRIX usernames. It is not an official
+ * TRIX endpoint: dataUpdatedAt is their snapshot time, checkedAt is our read.
+ */
+export async function sniffTrixBoxBoard({ previous = null } = {}) {
+  const started = Date.now();
+  const count = (input) => {
+    const number = trixNumber(input);
+    return number !== null && Number.isSafeInteger(number) && number >= 0 ? number : null;
+  };
+  const value = {
+    source: "trix.boxboard",
+    optional: true,
+    ok: false,
+    stale: false,
+    status: 0,
+    sourceUrl: TRIX_BOXBOARD_SOURCE_URL,
+    engineUrl: "https://doswapz.com/classic/pages/geoffwatch-box.html",
+    reason: null,
+    dataUpdatedAt: null,
+    fallbackReason: null,
+    round: null,
+    roundStatus: null,
+    mintedTotal: null,
+    boxesLeft: null,
+    boxes: [],
+    collectors: [],
+    rarities: [],
+    cards: [],
+    chain: null,
+    publicState: null,
+  };
+  try {
+    const res = await fetchJson(TRIX_BOXBOARD_SOURCE_URL, { timeoutMs: TRIX_TIMEOUT_MS });
+    value.status = res.status;
+    if (!res.ok || !res.json || typeof res.json !== "object") {
+      value.reason = `Box board unavailable (HTTP ${res.status || 0})`;
+    } else {
+      const j = res.json;
+      const box = (row) => row && typeof row === "object" ? {
+        id: trixString(row.id),
+        type: trixString(row.type) || trixString(row.name),
+        color: trixString(row.color),
+        hex: trixString(row.hex),
+        minted: count(row.minted),
+        left: count(row.left),
+        inRound: row.inRound === true,
+        priceUsd: trixNumber(row.priceUsd),
+        priceSol: trixNumber(row.priceSol),
+        artUrl: trixString(row.remoteArtUrl) || (typeof row.artUrl === "string" ? new URL(row.artUrl, "https://doswapz.com/").href : null),
+      } : null;
+      const collector = (row) => row && typeof row === "object" ? {
+        rank: count(row.rank),
+        username: trixString(row.username),
+        wallet: trixString(row.wallet),
+        boxes: count(row.boxes),
+        rips: count(row.rips),
+        mythics: count(row.mythics),
+        earnedUsd: trixNumber(row.earnedUsd),
+        verified: row.verified === true,
+        kinds: row.kinds && typeof row.kinds === "object" ? Object.fromEntries(
+          Object.entries(row.kinds).filter(([, n]) => count(n) !== null),
+        ) : null,
+        lastAt: trixDate(row.lastAt),
+      } : null;
+      const rarity = (row) => row && typeof row === "object" ? {
+        id: trixString(row.id),
+        type: trixString(row.type),
+        color: trixString(row.color),
+        oddsPct: trixNumber(row.oddsPct),
+        band: Array.isArray(row.band) ? row.band.map((n) => trixNumber(n)) : null,
+      } : null;
+      const card = (row) => row && typeof row === "object" ? {
+        type: trixString(row.type) || trixString(row.name),
+        color: trixString(row.color),
+        multiplier: trixNumber(row.multiplier),
+        priceSol: trixNumber(row.priceSol),
+        active: row.active === true,
+      } : null;
+      const chain = j.chain && typeof j.chain === "object" ? {
+        engine: trixString(j.chain.engine),
+        source: trixString(j.chain.source),
+        treasury: trixString(j.chain.treasury),
+        walletsScanned: count(j.chain.walletsScanned),
+        boxEvents: count(j.chain.boxEvents),
+        updatedAt: trixDate(j.chain.updatedAt),
+      } : null;
+      const state = j.public && typeof j.public === "object" ? {
+        tcg: j.public.tcg === true ? true : j.public.tcg === false ? false : null,
+        boxesMinted: count(j.public.boxesMinted),
+        boxesLeft: count(j.public.boxesLeft),
+        memesLeft: count(j.public.memesLeft),
+        rewardValueUsd: trixNumber(j.public.rewardValueUsd),
+        outstandingLiabilityUsd: trixNumber(j.public.outstandingLiabilityUsd),
+        vaultBacked: typeof j.public.vaultBacked === "boolean" ? j.public.vaultBacked : null,
+        stakedBoxes: count(j.public.stakedBoxes),
+        snapshotAt: trixDate(j.public.snapshotAt),
+        stale: Boolean(j.public.stale),
+      } : null;
+      Object.assign(value, {
+        ok: true,
+        dataUpdatedAt: trixDate(j.updatedAt),
+        fallbackReason: trixString(j.fallbackReason),
+        round: count(j.round),
+        roundStatus: trixString(j.roundStatus),
+        mintedTotal: count(j.mintedTotal),
+        boxesLeft: count(j.boxesLeft),
+        boxes: Array.isArray(j.boxes) ? j.boxes.map(box).filter(Boolean) : [],
+        collectors: Array.isArray(j.collectors) ? j.collectors.slice(0, 100).map(collector).filter(Boolean) : [],
+        rarities: Array.isArray(j.rarities) ? j.rarities.map(rarity).filter(Boolean) : [],
+        cards: Array.isArray(j.cards) ? j.cards.map(card).filter(Boolean) : [],
+        chain,
+        publicState: state,
+      });
+    }
+  } catch (error) {
+    value.reason = error?.message || String(error);
+  }
+  value.checkedAt = new Date().toISOString();
+  value.ms = Date.now() - started;
+  return retainFailedSource("trix.boxboard", value, previous);
+}
+
 /** Persisted source name; live rows now come only from the current launch catalog. */
 export async function sniffTrixMemeMarket({ previous = null } = {}) {
   const started = Date.now();
@@ -3525,6 +3651,7 @@ function trixAttempts(previous) {
     ["trix.market", sniffTrixMarket()],
     ["trix.money", sniffTrixMoney()],
     ["trix.boxes", sniffTrixBoxes()],
+    ["trix.boxboard", sniffTrixBoxBoard()],
     ["trix.meme.market", sniffTrixMemeMarket()],
     ["trix.frontpage", sniffTrixFrontpage()],
     ["trix.tiers", sniffTrixTiers()],
@@ -3721,6 +3848,7 @@ export function summarizeTrix(bySource) {
   const fee = bySource["trix.fee.config"];
   const money = bySource["trix.money"];
   const boxes = bySource["trix.boxes"];
+  const board = bySource["trix.boxboard"];
   return {
     trixGeoffOk: Boolean(geoff?.ok),
     trixGeoffCount: geoff?.count ?? null,
@@ -3781,6 +3909,17 @@ export function summarizeTrix(bySource) {
     trixBoxesTopCollectors: boxes?.topCollectors ?? null,
     trixBoxesReason: boxes?.reason ?? null,
     trixBoxesFingerprint: boxes?.fingerprint ?? null,
+    trixBoxBoardOk: Boolean(board?.ok),
+    trixBoxBoardDataUpdatedAt: board?.dataUpdatedAt ?? null,
+    trixBoxBoardCheckedAt: board?.checkedAt ?? null,
+    trixBoxBoardRound: board?.round ?? null,
+    trixBoxBoardRoundStatus: board?.roundStatus ?? null,
+    trixBoxBoardMintedTotal: board?.mintedTotal ?? null,
+    trixBoxBoardBoxesLeft: board?.boxesLeft ?? null,
+    trixBoxBoardCollectorCount: board?.collectors?.length ?? null,
+    trixBoxBoardChainTreasury: board?.chain?.treasury ?? null,
+    trixBoxBoardFallbackReason: board?.fallbackReason ?? null,
+    trixBoxBoardReason: board?.reason ?? null,
     trixMoneyOk: Boolean(money?.ok),
     trixMoneyRecentTrades: money?.recentTrades ?? null,
     trixMoneyTreasurySol: money?.treasury?.balanceSol ?? null,

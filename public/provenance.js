@@ -49,6 +49,7 @@ const NAMES = {
   "trix.geoff.packs": "TRIX Pack market",
   "trix.geoff.packs.purchaseAudit": "TRIX Pack receipts",
   "trix.market": "TRIX collectibles APIs",
+  "trix.boxboard": "DOSWAPZ public box board",
   "trix.meme.market": "TRIX launch ranking",
   "geoff.keys.9g": "Solana 9G wallet RPC",
   "geoff.subscription": "Geoff public route probes",

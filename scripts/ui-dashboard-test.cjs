@@ -17,6 +17,12 @@ function fixture() {
   Object.assign(sources, {
     'trix.meme.market': { ...base, source: 'trix.meme.market', sourceUrl: 'https://trix.market/api/launches?limit=500', coins, totalCoins: 45, catalogTotal: 45, totalMarketCap: 4398750, dataUpdatedAt: at },
     'trix.boxes': { ok: false, status: 404, stale: true, checkedAt: at, sourceUrl: 'https://www.trix.market/api/mkt/leaderboard', topCoins: null, biggestPulls: null, topCollectors: null, reason: 'Not found' },
+    'trix.boxboard': { ok: true, status: 200, checkedAt: at, sourceUrl: 'https://doswapz.com/api/trix-boxes', dataUpdatedAt: at, fallbackReason: 'Trix HTTP 404 https://trix.market/api/mkt/state', round: 1, roundStatus: 'warming', mintedTotal: 3874, boxesLeft: 4978,
+      boxes: [{ id: 'base', type: 'BASE BOX', color: 'WHITE', hex: '#f4f4f4', minted: 3874, left: 4978, inRound: true, priceUsd: 35.1, priceSol: 0.34 }, { id: 'viral', type: 'VIRAL BOX', color: 'HOLO', hex: '#7ecbff', minted: 0, left: 4978, inRound: true, priceUsd: 175.51, priceSol: 1.7 }, { id: 'silver', type: 'SILVER BOX', minted: 0, left: 0, inRound: false, priceUsd: 0, priceSol: 0 }],
+      collectors: Array.from({ length: 3 }, (_, i) => ({ rank: i + 1, username: `BoxWhale${i}`, wallet: String.fromCharCode(65 + i).repeat(32), boxes: 105 - i * 40, rips: 0, mythics: 0, earnedUsd: 0, verified: i === 0, kinds: { base: 105 - i * 40 } })),
+      rarities: [{ type: 'MYTHIC', oddsPct: 0.04 }, { type: 'COMMON', oddsPct: 45.61 }, { type: 'VOID', oddsPct: 43 }],
+      cards: [{ type: 'GOLD', multiplier: 1.69, priceSol: 0.69, active: true }],
+      chain: { treasury: 'D8LYYH' + 'x'.repeat(35), walletsScanned: 669, boxEvents: 3924 } },
     'trix.geoff': { ...base, count: 780, paidSol: 9.36, records: [], latest: { createdAt: at } },
     'trix.market': { ...base, endpoints: { leaderboard: base, recentMints: base }, leaderboard: { rows: Array.from({ length: 100 }, (_, i) => ({ rank: i + 1, username: `Collector ${i}`, wallet: `fixture-wallet-${i}`, points: (100 - i) * 100, verified: i < 2 })) }, recentMints: [{ id: 'art1', name: 'A new artwork', imageUrl: 'http://127.0.0.1:3851/test-logo.svg', linkedCoinMint: 'fixture-mint-0', linkedCoinSymbol: 'COIN0' }] },
     'trix.tiers': { ...base, tiers: [{ name: 'Starter', minPoints: 0 }, { name: 'Explorer', minPoints: 5000 }] },
@@ -150,8 +156,16 @@ async function main() {
     console.log('PASS: auto-refresh changes market cap and adds a new trade without resetting filters');
 
     await page.locator('#tab-boxes').click();
-    assert.match(await page.locator('#boxRows').textContent(), /404/);
-    assert.equal(await page.locator('#boxRows table').count(), 0);
+    assert.match(await page.locator('#boxStatus').textContent(), /Round 1 warming/);
+    assert.match(await page.locator('#boxRows').textContent(), /BASE BOX/);
+    assert.match(await page.locator('#boxRows').textContent(), /VIRAL BOX/);
+    assert.match(await page.locator('#boxRows').textContent(), /BoxWhale0/);
+    assert.match(await page.locator('#boxRows').textContent(), /MYTHIC 0.04%/);
+    assert.match(await page.locator('#boxRows').textContent(), /On-chain scan/);
+    assert.match(await page.locator('#deskSourceText').textContent(), /trix.boxboard/);
+    // Real collector rows replace the 404 official feed; aggregator snapshot is stamped, not "live".
+    assert.equal(await page.locator('#boxRows a[href*="solscan.io/account"]').count(), 3);
+    payload.latest.sources['trix.boxboard'] = { ok: false, status: 404, stale: true, checkedAt: new Date().toISOString(), sourceUrl: 'https://doswapz.com/api/trix-boxes', boxes: [], collectors: [] };
     payload.latest.sources['trix.boxes'] = { ok: true, checkedAt: new Date().toISOString(), status: 200, topCoins: [{ mint: 'box-token', symbol: 'BOX', rips: 32 }], biggestPulls: [{ ripper: 'Public user', rarity: 'Mythic', coinSymbol: 'BOX', rewardUsd: 30 }], topCollectors: [{ username: 'Collector', rips: 12, mythics: 1, earnedUsd: 30 }] };
     await page.locator('#pollBtn').click();
     await page.waitForFunction(() => document.querySelector('#boxRows').textContent.includes('Mythic'));
@@ -161,10 +175,13 @@ async function main() {
     await page.setViewportSize({ width: 320, height: 844 });
     await page.waitForFunction(() => document.querySelector('#boxRows').textContent.includes('A'.repeat(40)));
     assert.equal(await page.evaluate(() => [...document.querySelectorAll('.box-board-grid > section')].every(el => el.getBoundingClientRect().width <= document.getElementById('boxRows').getBoundingClientRect().width + 1)), true);
+    payload.latest.sources['trix.boxes'] = { ok: false, status: 404, stale: true, topCoins: null, biggestPulls: null, topCollectors: null };
+    await page.locator('#pollBtn').click();
+    await page.waitForFunction(() => document.querySelector('#boxRows').textContent.includes('404'));
     await page.locator('#tab-boxes').focus();
     await page.keyboard.press('ArrowRight');
     assert.equal(await page.locator('#tab-activity').getAttribute('aria-selected'), 'true');
-    console.log('PASS: real box rows recover from 404; keyboard tabs retain accessible state');
+    console.log('PASS: on-chain box leaderboard, box types, fallback to official rows, and keyboard tabs');
 
     payload.latest.takenAt = new Date(Date.now() - 3600000).toISOString();
     await page.locator('#pollBtn').click();

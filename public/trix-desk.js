@@ -2,7 +2,7 @@ import { sourceDescription } from "./provenance.js";
 
 const TABS = ["coins", "boxes", "activity", "points", "art", "money"];
 const STATUS = { coins: "coinSummary", boxes: "boxStatus", activity: "activityStatus", points: "pointsStatus", art: "artStatus", money: "moneyStatus" };
-const SOURCES = { coins: ["trix.meme.market", "trix.frontpage"], boxes: ["trix.boxes"], activity: ["trix.money"], points: ["trix.market", "trix.tiers"], art: ["trix.market"], money: ["trix.money", "trix.fee.config"] };
+const SOURCES = { coins: ["trix.meme.market", "trix.frontpage"], boxes: ["trix.boxes", "trix.boxboard"], activity: ["trix.money"], points: ["trix.market", "trix.tiers"], art: ["trix.market"], money: ["trix.money", "trix.fee.config"] };
 const state = { tab: "coins", view: "all", search: "", chain: "", limit: 20 };
 const htmlCache = new WeakMap();
 const brokenImages = new Set();
@@ -148,20 +148,51 @@ function renderCoins(catalog, frontpage) {
   }
 }
 
-function renderBoxes(src) {
-  const data = [src?.topCoins, src?.biggestPulls, src?.topCollectors];
-  const hasData = data.some((list) => rows(list).length);
-  status("boxes", src, hasData, !good(src) && hasData ? unavailable(src, "Last-known box results") : "Official box leaderboard");
-  if (!hasData && (!good(src) || !data.some(Array.isArray))) {
-    setHTML("boxRows", empty(unavailable(src, "Box leaderboard unavailable")));
+function renderBoxes(official, board) {
+  const fromBoard = good(board) && (board.collectors.length + board.boxes.length > 0);
+  const src = fromBoard ? board : official;
+  const hasData = fromBoard || [official?.topCoins, official?.biggestPulls, official?.topCollectors].some((list) => rows(list).length);
+  status("boxes", src, hasData, fromBoard
+    ? `Round ${fmt(board.round, 0)} ${esc(board.roundStatus || "warming")} · ${fmt(board.mintedTotal, 0)} minted · ${fmt(board.boxesLeft, 0)} left`
+    : !good(official) && hasData ? unavailable(official, "Last-known box results") : "Official box leaderboard");
+  if (fromBoard) {
+    const chainBit = board.chain?.walletsScanned != null
+      ? `On-chain scan · ${fmt(board.chain.walletsScanned, 0)} wallets · ${fmt(board.chain.boxEvents, 0)} box events · treasury ${short(board.chain.treasury)}`
+      : "";
+    const stamp = `Aggregator snapshot ${clock(board.dataUpdatedAt, "Aggregator snapshot")} · ${chainBit}${board.fallbackReason ? ` · TRIX source fallback: ${esc(board.fallbackReason)}` : ""}`;
+    const boxTiles = board.boxes.map((b) => `<section class="box-tile${b.inRound ? " in-round" : ""}" style="--box-hex:${esc(b.hex || "#444")}">
+      <b>${esc(b.type)}</b><span class="box-color">${esc(b.color)}</span>
+      <dl><dt>Minted</dt><dd>${fmt(b.minted, 0)}</dd><dt>Left</dt><dd>${fmt(b.left, 0)}</dd><dt>Price</dt><dd>${usd(b.priceUsd)} · ${sol(b.priceSol)}</dd></dl>
+      <span class="desk-badge">${b.inRound ? "In round" : "Not in round"}</span>
+    </section>`).join("");
+    const collectorBody = board.collectors.slice(0, 50).map((c) => `<tr>
+      <td class="desk-number">${fmt(c.rank, 0)}</td>
+      <td><b>${esc(c.username || short(c.wallet) || "--")}</b>${c.verified === true ? ' <span class="desk-badge">Verified</span>' : ""}</td>
+      <td class="desk-number">${fmt(c.boxes, 0)}</td>
+      <td>${c.kinds ? Object.entries(c.kinds).map(([kind, n]) => `${esc(kind)} ${fmt(n, 0)}`).join(" · ") : "--"}</td>
+      <td class="desk-secondary">${link("https://solscan.io/account/", c.wallet, short(c.wallet))}</td>
+    </tr>`).join("");
+    const rarityChips = board.rarities.map((r) => `<span class="rarity-chip" title="${esc(`${r.type} odds from snapshot`)}">${esc(r.type)} ${fmt(r.oddsPct)}%</span>`).join("");
+    const cardChips = board.cards.map((c) => `<span class="rarity-chip muted" title="${esc(`${c.type} shop card`)}">${esc(c.type)} ${fmt(c.multiplier)}x · ${sol(c.priceSol)}</span>`).join("");
+    setHTML("boxRows", `<p class="desk-context">${stamp}</p>
+      <div class="box-type-grid">${boxTiles}</div>
+      <h4 class="board-subhead">Most boxes · on-chain wallet scan</h4>
+      ${collectorBody ? table("Most boxes per public wallet", [["#", "desk-number"], ["User"], ["Boxes", "desk-number"], ["Kinds"], ["Wallet", "desk-secondary"]], collectorBody) : empty("No collector rows reported.")}
+      ${rarityChips ? `<div class="rarity-strip"><small>Rarity odds · snapshot</small>${rarityChips}</div>` : ""}
+      ${cardChips ? `<div class="rarity-strip"><small>Shop card types</small>${cardChips}</div>` : ""}`);
+    return;
+  }
+  const data = [official?.topCoins, official?.biggestPulls, official?.topCollectors];
+  if (!hasData && (!good(official) || !data.some(Array.isArray))) {
+    setHTML("boxRows", empty(unavailable(official, "Box leaderboard unavailable")));
     return;
   }
   const boards = [
-    ["Most-ripped coins", [["Coin"], ["Rips", "desk-number"]], src?.topCoins, (r) => `<td><div class="coin-identity">${image(r.logoUrl, r.symbol || r.name)}<div class="coin-copy"><b>${coinLink(r.mint, r.symbol || r.name || "--")}</b><small>${esc(r.name)}</small></div></div></td><td class="desk-number">${fmt(r.rips)}</td>`],
-    ["Biggest pulls by rarity", [["Ripper"], ["Rarity"], ["Coin"], ["USD", "desk-number"]], src?.biggestPulls, (r) => `<td>${esc(r.ripper)}</td><td>${esc(r.rarity)}</td><td>${esc(r.coinSymbol)}</td><td class="desk-number">${usd(r.rewardUsd)}</td>`],
-    ["Collectors", [["User"], ["Rips", "desk-number"], ["Mythics", "desk-number"], ["USD", "desk-number"]], src?.topCollectors, (r) => `<td>${esc(r.username)}</td><td class="desk-number">${fmt(r.rips)}</td><td class="desk-number">${fmt(r.mythics)}</td><td class="desk-number">${usd(r.earnedUsd)}</td>`],
+    ["Most-ripped coins", [["Coin"], ["Rips", "desk-number"]], official?.topCoins, (r) => `<td><div class="coin-identity">${image(r.logoUrl, r.symbol || r.name)}<div class="coin-copy"><b>${coinLink(r.mint, r.symbol || r.name || "--")}</b><small>${esc(r.name)}</small></div></div></td><td class="desk-number">${fmt(r.rips)}</td>`],
+    ["Biggest pulls by rarity", [["Ripper"], ["Rarity"], ["Coin"], ["USD", "desk-number"]], official?.biggestPulls, (r) => `<td>${esc(r.ripper)}</td><td>${esc(r.rarity)}</td><td>${esc(r.coinSymbol)}</td><td class="desk-number">${usd(r.rewardUsd)}</td>`],
+    ["Collectors", [["User"], ["Rips", "desk-number"], ["Mythics", "desk-number"], ["USD", "desk-number"]], official?.topCollectors, (r) => `<td>${esc(r.username)}</td><td class="desk-number">${fmt(r.rips)}</td><td class="desk-number">${fmt(r.mythics)}</td><td class="desk-number">${usd(r.earnedUsd)}</td>`],
   ];
-  setHTML("boxRows", `<div class="box-board-grid">${boards.map(([name, heads, raw, row]) => `<section><h3>${esc(name)}</h3>${rows(raw).length ? table(name, heads, rows(raw).slice(0, 20).map((r) => `<tr>${row(r)}</tr>`).join("")) : emptyRows(src, raw, "No entries reported.")}</section>`).join("")}</div>`);
+  setHTML("boxRows", `<div class="box-board-grid">${boards.map(([name, heads, raw, row]) => `<section><h3>${esc(name)}</h3>${rows(raw).length ? table(name, heads, rows(raw).slice(0, 20).map((r) => `<tr>${row(r)}</tr>`).join("")) : emptyRows(official, raw, "No entries reported.")}</section>`).join("")}</div>`);
 }
 
 function renderActivity(money, geoff) {
@@ -297,7 +328,7 @@ export function renderTrixDesk(value) {
   if (!root) return;
   const sources = latest?.sources || {};
   renderCoins(sources["trix.meme.market"], sources["trix.frontpage"]);
-  renderBoxes(sources["trix.boxes"]);
+  renderBoxes(sources["trix.boxes"], sources["trix.boxboard"]);
   const generations = renderActivity(sources["trix.money"], sources["trix.geoff"]);
   renderPoints(sources["trix.market"], sources["trix.tiers"]);
   renderArt(sources["trix.market"]);
