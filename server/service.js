@@ -2,7 +2,7 @@ import { config } from "./config.js";
 import { compileBriefing } from "./briefing.js";
 import { upsertDailyActivity } from "./daily-activity.js";
 import { upsertPond0x } from "./pond0x.js";
-import { mergeTrixGeoffHistory, runSniff } from "./sniffer.js";
+import { mergeTrixGeoffHistory, runSniff, summarizeTrix, summarizeCoverage } from "./sniffer.js";
 import {
   loadSharedBundle,
   pruneEvents,
@@ -109,14 +109,14 @@ export function preserveTrixHistory(previous, current) {
   const observed = current?.sources?.["trix.geoff"];
   if (!observed) return current;
   const trix = mergeTrixGeoffHistory(previous?.sources?.["trix.geoff"], observed);
+  const sources = { ...(current.sources || {}), "trix.geoff": trix };
   return {
     ...current,
-    sources: { ...(current.sources || {}), "trix.geoff": trix },
+    sources,
     summary: {
       ...(current.summary || {}),
-      trixGeoffCount: trix.count,
-      trixGeoffPaidSol: trix.paidSol,
-      trixGeoffFingerprint: trix.fingerprint,
+      ...summarizeTrix(sources),
+      ...summarizeCoverage(sources),
     },
   };
 }
@@ -233,7 +233,7 @@ export async function getSharedPayload({ sniffLive = true, forceMiningSurface = 
     pond0x,
     state: {
       ...(shared.state || {}),
-      lastPollAt: latest?.takenAt || shared.state?.lastPollAt || null,
+      lastPollAt: sniffLive ? latest?.takenAt ?? null : shared.state?.lastPollAt ?? null,
       temperature: temperature.value,
     },
     temperature,

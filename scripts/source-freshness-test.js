@@ -118,7 +118,7 @@ const previous = { sources: {
 } };
 const before = JSON.stringify(previous);
 const full = await api.runSniff({ previous });
-assert.equal(Object.keys(full.sources).length, 31);
+assert.equal(Object.keys(full.sources).length, 36);
 assert.equal(Object.keys(full.sources).some((key) => key.startsWith("source-")), false);
 for (const source of Object.values(full.sources)) assert.ok(source.checkedAt, source.source);
 assert.equal(full.sources["stacknet.health"].ok, true);
@@ -140,4 +140,12 @@ for (const source of Object.values(minute.sources)) {
 const merged = { ...previous.sources, ...minute.sources };
 assert.equal(merged.untouched, previous.sources.untouched);
 assert.equal(Object.hasOwn(merged.legacy, "checkedAt"), false);
+const oldSource = { source: "failed", ok: true, checkedAt: fastAt, value: 0 };
+const failedWithHistory = await api.observeSource("failed", Promise.reject(new Error("offline")), oldSource);
+assert.equal(failedWithHistory.ok, false);
+assert.equal(failedWithHistory.stale, true);
+assert.equal(failedWithHistory.checkedAt, fastAt);
+assert.equal(failedWithHistory.lastAttemptAt, iso());
+assert.equal(failedWithHistory.value, 0);
+assert.equal(oldSource.ok, true);
 console.log("source freshness: all assertions passed");

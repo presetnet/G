@@ -10,7 +10,7 @@ const MINI = {
   keysoldUsd: "Reported key price & sales",
   pileValue: "Reported unredeemed earnings",
   trixMarketCount: "Reported collectible counts",
-  trixMemeMarketCount: "TRIX meme market snapshot leaderboard",
+  trixMemeMarketCount: "TRIX current launch ranking",
   keys9gValue: "Sampled wallet inflows on Solana",
   x402Downloads: "Weekly SDK downloads, not users",
   subscriptionCount: "Billing routes, not subscribers",
@@ -27,7 +27,7 @@ const METRICS = [
   ["trixGeoffCount", "Mixed", "Accumulated paid-generation records labeled Geoff by TRIX, plus inferred recipient matches from chain data. Not proof of operator identity or NFT minting; history is incomplete.", ["trix.geoff"]],
   ["keysoldUsd", "Reported", "USD price per node key and sale counters from StackNet pricing; not verified purchases or total revenue.", ["stacknet.keysale"]],
   ["pileValue", "Reported", "Unredeemed earnings for node keys at least 10% utilized, per StackNet. No public time or per-key breakdown; not live earnings.", ["stacknet.pile"]],
-  ["trixMemeMarketCount", "Reported", "TRIX /api/meme-market snapshot leaderboard — top meme tokens by market cap, volume, liquidity, and holders. Data is a TRIX API snapshot, not live on-curve; snapshot age noted when available.", ["trix.meme.market"]],
+  ["trixMemeMarketCount", "Reported", "Current TRIX /api/launches sample ranked by reported market cap, not a full-market census or independent valuation. Each row has its own marketCapUpdatedAt; dataUpdatedAt is only the newest row, not the whole ranking. Historical /api/meme-market snapshots are not current launch data.", ["trix.meme.market"]],
   ["trixMarketCount", "Reported", "Collectible counts from TRIX APIs, within endpoint windows. Listings are not sales; artwork counts are not a full-chain census.", ["trix.market"]],
   ["keys9gValue", "On-chain", "Positive SOL balance changes in a small decoded window for the 9G wallet. Not lifetime sales or proof every inflow bought a key.", ["geoff.keys.9g"]],
   ["x402Downloads", "Reported", "npm downloads over its last-week reporting window and SDK version. Downloads are not users, payments or API usage.", ["stacknet.x402"]],
@@ -49,6 +49,7 @@ const NAMES = {
   "trix.geoff.packs": "TRIX Pack market",
   "trix.geoff.packs.purchaseAudit": "TRIX Pack receipts",
   "trix.market": "TRIX collectibles APIs",
+  "trix.meme.market": "TRIX launch ranking",
   "geoff.keys.9g": "Solana 9G wallet RPC",
   "geoff.subscription": "Geoff public route probes",
   "surface.mining": "Mining surface + payout RPC",
@@ -95,6 +96,20 @@ function fieldClocks(name, src) {
   return [];
 }
 
+function isLaunchRanking(src) {
+  try {
+    const url = new URL(src?.sourceUrl);
+    return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password &&
+      ["trix.market", "www.trix.market"].includes(url.hostname) && url.pathname === "/api/launches";
+  } catch {
+    return false;
+  }
+}
+
+function launchRows(src) {
+  return Array.isArray(src?.coins) ? src.coins : Array.isArray(src?.top10) ? src.top10 : [];
+}
+
 function sourceBrief(name, src, now) {
   const lines = [`${NAMES[name] || name}: ${sourceState(src)}; last checked ${age(src?.checkedAt, now)}.`];
   if (src?.stale) lines.push("Cached/last-known values retained.");
@@ -107,15 +122,18 @@ function sourceBrief(name, src, now) {
   if (src?.genesisStale) lines.push("Genesis: last-known fallback; value age unknown.");
   else if (src?.genesisOk === false) lines.push("Genesis check failed; NOT fresh.");
   if (src?.snapshotStale === true) lines.push("TRIX flags its own pack snapshot as stale.");
-  else if (Number.isFinite(src?.snapshotAgeMs)) {
-    lines.push(`TRIX snapshot ${src.snapshotAgeMs <= 60_000 ? "fresh" : "aging"} at our read.`);
-  }
+  else if (Number.isFinite(src?.snapshotAgeMs)) lines.push(`TRIX snapshot age reported at collection: ${src.snapshotAgeMs} ms; not a current clock.`);
   if (src?.vaultBacked != null) {
     lines.push(`Vault coverage (TRIX-reported): ${src.vaultBacked ? "covered" : "shortfall"}; not chain-reconciled.`);
   }
   if (src?.cardsCached) lines.push("Card catalog cached; exact value check time unknown.");
   if (typeof src?.reason === "string" && /^Partial:/i.test(src.reason)) lines.push("Partial check: some endpoints failed; NOT all fields fresh.");
   if (name === "trix.geoff") lines.push("Collection includes retained history; check time does not revalidate every record.");
+  if (name === "trix.meme.market" && src) {
+    lines.push(isLaunchRanking(src)
+      ? "Launch catalog endpoint; ranking covers only the collected sample. A successful check does not refresh market-cap row clocks."
+      : "Historical or unverified TRIX snapshot; NOT current launch ranking data.");
+  }
   if (name === "trix.geoff.packs.purchaseAudit") lines.push("Receipts include retained history; individual transaction ages differ.");
   if (name === "geoff.docs.pricing" && src?.scraped === false) lines.push("Bundled Token Plan fallback for incomplete sections; publication age unknown.");
   return lines.join(" ");
@@ -138,13 +156,24 @@ export function sourceDescription(name, src, now = Date.now()) {
     if (key in src) lines.push(`${key}: ${String(src[key])}`);
   }
   if (src.genesisStatus != null) lines.push(`Genesis HTTP/status: ${src.genesisStatus}`);
+  if (name === "trix.meme.market") {
+    lines.push(`dataUpdatedAt (newest reported row, NOT every row or check time): ${exact(src.dataUpdatedAt)}; ${age(src.dataUpdatedAt, now)}`);
+    const rows = launchRows(src);
+    const clocks = rows.map((row) => row?.marketCapUpdatedAt);
+    const valid = clocks.filter((value) => Number.isFinite(timestamp(value))).sort((a, b) => timestamp(a) - timestamp(b));
+    lines.push(`marketCapUpdatedAt row clocks: ${valid.length}/${rows.length} known; ${clocks.filter((value) => timestamp(value) > now).length} future (clock mismatch).`);
+    lines.push(`Oldest reported row: ${exact(valid[0])}; ${age(valid[0], now)}. Missing clocks stay unknown; dataUpdatedAt cannot replace them.`);
+    for (const [index, row] of rows.slice(0, 10).entries()) {
+      lines.push(`Row ${index + 1} (${row?.ticker || row?.tokenName || row?.mintAddress || "unnamed"}) marketCapUpdatedAt: ${exact(row?.marketCapUpdatedAt)}; ${age(row?.marketCapUpdatedAt, now)}`);
+    }
+  }
   if (name === "geoff.docs.pricing") {
     for (const [section, state] of Object.entries(src.sections || {})) {
       lines.push(`Token Plan ${section}: ${state?.live ? "live section reported" : "bundled/static fallback"}; HTTP/status ${state?.status ?? "unknown"}; publication age unknown; ${state?.sourceUrl || "source URL unknown"}`);
     }
   }
   if (src.cardsCatalogAgeMs != null) lines.push(`Card catalog age reported at collection: ${src.cardsCatalogAgeMs} ms (not a live clock; exact check time unknown)`);
-  for (const key of ["timestamp", "latestAt", "latestActivityAt", "newestAt", "silentSince", "archiveGeneratedAt"]) {
+  for (const key of ["timestamp", "snapshotAt", "latestAt", "latestActivityAt", "newestAt", "silentSince", "archiveGeneratedAt"]) {
     if (src[key] != null) lines.push(`${key} (source/event time, NOT check time): ${exact(src[key])}`);
   }
   if (src.latest?.createdAt) lines.push(`Latest record event: ${exact(src.latest.createdAt)}`);
@@ -159,6 +188,41 @@ function getSource(latest, name) {
   if (name === "trix.geoff.packs") return latest?.sources?.["trix.geoff"]?.packs;
   if (name === "trix.geoff.packs.purchaseAudit") return latest?.sources?.["trix.geoff"]?.packs?.purchaseAudit;
   return latest?.sources?.[name];
+}
+
+/** Conservative card status: never use the enclosing snapshot's takenAt. */
+export function metricStatus(id, latest, now = Date.now()) {
+  const names = METRICS.find((metric) => metric[0] === id)?.[3] || [];
+  const states = names.map((name) => {
+    const src = getSource(latest, name);
+    if (!src || typeof src !== "object") return "unavailable";
+    if (src.stale || src.skipped || src.snapshotStale ||
+      (name === "trix.meme.market" && !isLaunchRanking(src))) return "stale";
+    if (src.ok !== true || src.lastError || Number(src.status) >= 400) return "unavailable";
+    if (src.genesisOk === false || src.genesisStale || src.cardsCached || /^Partial:/i.test(src.reason || "")) return "partial";
+    return src.cached ? "cached" : "checked";
+  });
+  const clocks = names.flatMap((name) => {
+    const src = getSource(latest, name);
+    const values = [src?.checkedAt, ...fieldClocks(name, src).map((field) => field[1])];
+    if (name === "trix.meme.market") {
+      // The newest row alone cannot establish the age of the displayed ranking.
+      values.push(src?.dataUpdatedAt, ...launchRows(src).map((row) => row?.marketCapUpdatedAt));
+    }
+    return values.map(timestamp);
+  });
+  let state = ["unavailable", "stale", "partial"].find((value) => states.includes(value));
+  if (!state && clocks.some((time) => now - time > AGE_NOTICE_MS)) state = "stale";
+  if (!state && (!clocks.length || clocks.some((time) => !Number.isFinite(time) || time > now))) state = "unknown";
+  if (!state) state = states.includes("cached") ? "cached" : "checked";
+  const labels = { unavailable: "Unavailable", stale: "Stale", partial: "Partial", unknown: "No clock", cached: "Cached" };
+  const minutes = Math.floor((now - Math.min(...clocks)) / 60_000);
+  const label = labels[state] || (minutes < 1 ? "<1m" : `${minutes}m`);
+  return {
+    state,
+    label,
+    title: `${label}. Age uses the oldest required source/value clock, not page refresh or publication time.\n${names.map((name) => sourceBrief(name, getSource(latest, name), now)).join("\n")}`,
+  };
 }
 
 function element(tag, className, text) {
@@ -180,20 +244,27 @@ export function renderProvenance(latest) {
   const now = Date.now();
   for (const [id, evidence, meaning, sources] of METRICS) {
     const card = document.getElementById(id)?.closest(".metric");
-    if (!card) continue;
+    if (!card || !grid.contains(card)) continue;
     card.classList.add("has-provenance");
     let footer = card.querySelector(".metric-provenance");
     if (!footer) {
       footer = element("footer", "metric-provenance");
       const details = element("details", "metric-source-details");
-      const summary = element("summary", "", MINI[id]);
-      summary.title = "Show explanation, sources and data age";
+      const summary = element("summary", "", "Source");
+      summary.title = `${MINI[id]}. ${evidence}: ${meaning}`;
+      summary.setAttribute("aria-label", `Source: ${MINI[id]}`);
       details.append(summary, element("p", "provenance-meaning", `${evidence}: ${meaning}`), element("div", "provenance-ages"));
       // Do not also trigger the card's legacy proof-popup click handler.
       details.addEventListener("click", (event) => event.stopPropagation());
-      footer.append(details);
+      footer.append(details, element("span", "metric-source-status"));
       card.append(footer);
     }
+    const freshness = metricStatus(id, latest, now);
+    const status = footer.querySelector(".metric-source-status");
+    status.textContent = freshness.label;
+    status.dataset.state = freshness.state;
+    status.title = freshness.title;
+    status.setAttribute("aria-label", freshness.title);
     const ages = footer.querySelector(".provenance-ages");
     for (const name of sources) {
       let row = [...ages.children].find((child) => child.dataset.sourceId === name);

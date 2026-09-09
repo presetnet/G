@@ -33,11 +33,13 @@ async function limitedFetch(...args) {
   }
 }
 
-async function fetchJson(url, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+async function fetchJson(url, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS, waitFor = null } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const started = Date.now();
   try {
+    if (waitFor) await waitFor;
+    controller.signal.throwIfAborted();
     const res = await limitedFetch(url, {
       headers: {
         Accept: "application/json, text/html;q=0.8, */*;q=0.5",
@@ -184,8 +186,8 @@ async function sniffGeoffCatalog() {
   };
 }
 
-async function sniffStacknetHealth() {
-  const res = await fetchJson(`${config.stacknetBaseUrl}/health`);
+async function sniffStacknetHealth(options = {}) {
+  const res = await fetchJson(`${config.stacknetBaseUrl}/health`, options);
   // Application health string (e.g. "healthy") — never confuse with HTTP status codes.
   const rawStatus = res.json?.status;
   const statusText =
@@ -213,8 +215,8 @@ async function sniffStacknetHealth() {
   };
 }
 
-async function sniffStacknetRoot() {
-  const res = await fetchJson(`${config.stacknetBaseUrl}/`);
+async function sniffStacknetRoot(options = {}) {
+  const res = await fetchJson(`${config.stacknetBaseUrl}/`, options);
   return {
     source: "stacknet.root",
     ok: res.ok,
@@ -224,8 +226,8 @@ async function sniffStacknetRoot() {
   };
 }
 
-async function sniffStacknetNetwork() {
-  const res = await fetchJson(`${config.stacknetBaseUrl}/network/summary`);
+async function sniffStacknetNetwork(options = {}) {
+  const res = await fetchJson(`${config.stacknetBaseUrl}/network/summary`, options);
   const network = res.json?.network ?? {};
   return {
     source: "stacknet.network",
@@ -338,8 +340,8 @@ async function sniffStacknetX402() {
   };
 }
 
-async function sniffStacknetNode() {
-  const res = await fetchJson(`${config.stacknetBaseUrl}/node`);
+async function sniffStacknetNode(options = {}) {
+  const res = await fetchJson(`${config.stacknetBaseUrl}/node`, options);
   return {
     source: "stacknet.node",
     ok: res.ok,
@@ -352,8 +354,8 @@ async function sniffStacknetNode() {
   };
 }
 
-async function sniffStacknetModels() {
-  const res = await fetchJson(`${config.stacknetBaseUrl}/v1/models`);
+async function sniffStacknetModels(options = {}) {
+  const res = await fetchJson(`${config.stacknetBaseUrl}/v1/models`, options);
   const rows = Array.isArray(res.json?.data) ? res.json.data : [];
   const models = rows
     .map((m) => ({
@@ -953,9 +955,9 @@ const DEFAULT_TREASURY_ADDRESS = "2W5gxAio1Bz76P58EaDtGC71MuyH4ZAdXHu3qqmeGy7g";
 const SIG_CACHE_TTL_MS = 10 * 60 * 1000;
 let sigCache = { at: 0, value: null };
 
-async function solanaRpc(method, params = []) {
+async function solanaRpc(method, params = [], { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await limitedFetch(SOLANA_RPC_URL, {
       method: "POST",
@@ -963,6 +965,7 @@ async function solanaRpc(method, params = []) {
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
       signal: controller.signal,
     });
+    if (!res.ok) throw new Error(`Solana RPC HTTP ${res.status || 0}`);
     const json = await res.json().catch(() => null);
     if (json?.error) throw new Error(json.error.message || "solana rpc error");
     return json?.result ?? null;
@@ -2138,7 +2141,11 @@ const MAX_TRIX_MINTS = 3_000;
 const MAX_TRIX_SCANNED_MINTS = 3_000;
 const MAX_TRIX_INFERRED_SIGS = 3_000;
 const TRIX_LAUNCH_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
-const TRIX_CARD_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
+const TRIX_TIMEOUT_MS = 6_000;
+const TRIX_LAUNCH_PAGE_SIZE = 500;
+const TRIX_LAUNCH_SOURCE_URL = `${TRIX_BASE_URL}/api/launches?limit=500&offset=0&sort=marketCap`;
+const TRIX_BOXES_SOURCE_URL = "https://www.trix.market/api/mkt/leaderboard";
+const TRIX_BOXES_ROW_LIMIT = 25;
 const TRIX_ARTWORK_WINDOW = 100; // /api/artworks hard cap; pagination params are ignored; values above ~100 return HTTP 500
 const TRIX_RECENT_MEME_LIMIT = 18; // newest memes shown in the grid; recent-activity feed itself caps at 12, so catalog fold-in fills the rest
 const TRIX_LEADERBOARD_WINDOW = 100; // /api/leaderboard returns one ranked page from the API
@@ -2155,11 +2162,68 @@ function tailCapped(values, max) {
   return Array.isArray(values) ? values.slice(-Math.max(0, max)) : [];
 }
 
+function trixNumber(value) {
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  if (typeof value === "string" && !value.trim()) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function trixString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function trixDate(value) {
+  const time = typeof value === "string" && value.trim() ? Date.parse(value) : NaN;
+  return Number.isFinite(time) ? new Date(time).toISOString() : null;
+}
+
+// Share only in-flight reads, never cached market values with a new timestamp.
+// Two pages bound the sample to 1,000 launches even if the catalog grows.
+let trixLaunchCatalogInFlight = null;
+function fetchTrixLaunchCatalog() {
+  if (!trixLaunchCatalogInFlight) {
+    trixLaunchCatalogInFlight = (async () => {
+      const pages = await Promise.allSettled([0, TRIX_LAUNCH_PAGE_SIZE].map((offset) =>
+        fetchJson(`${TRIX_BASE_URL}/api/launches?limit=${TRIX_LAUNCH_PAGE_SIZE}&offset=${offset}&sort=marketCap`, {
+          timeoutMs: TRIX_TIMEOUT_MS,
+        }),
+      ));
+      const byMint = new Map();
+      const totals = [];
+      const failures = [];
+      for (const [index, page] of pages.entries()) {
+        const res = page.status === "fulfilled" ? page.value : null;
+        if (!res?.ok || !Array.isArray(res.json?.items)) {
+          failures.push(`launches offset ${index * TRIX_LAUNCH_PAGE_SIZE}: ${res ? `HTTP ${res.status}, invalid or unavailable catalog` : page.reason?.message || "fetch failed"}`);
+          continue;
+        }
+        const total = trixNumber(res.json.total);
+        if (total !== null && Number.isInteger(total) && total >= 0) totals.push(total);
+        for (const item of res.json.items.slice(0, TRIX_LAUNCH_PAGE_SIZE)) {
+          if (typeof item?.mintAddress === "string" && item.mintAddress && !byMint.has(item.mintAddress)) {
+            byMint.set(item.mintAddress, item);
+          }
+        }
+      }
+      return {
+        ok: failures.length === 0,
+        items: [...byMint.values()],
+        total: totals.length ? Math.max(...totals) : null,
+        checkedAt: new Date().toISOString(),
+        sourceUrl: TRIX_LAUNCH_SOURCE_URL,
+        reason: failures.length ? failures.join("; ") : null,
+      };
+    })().finally(() => { trixLaunchCatalogInFlight = null; });
+  }
+  return trixLaunchCatalogInFlight;
+}
+
 export function normalizeTrixGeoffRecord(record, post = null) {
-  const feeLamports = Number(record?.feeLamports);
+  const feeLamports = trixNumber(record?.feeLamports);
   return {
     id: record?.id,
-    createdAt: record?.createdAt || post?.createdAt || null,
+    createdAt: trixDate(record?.createdAt || post?.createdAt),
     postId: record?.postId || post?.id || null,
     authorWallet: record?.authorWallet || post?.payerWallet || null,
     tokenMint: record?.tokenMint || post?.memeTokenMint || null,
@@ -2407,30 +2471,38 @@ const GEOF_INFER_VERIFY_LIMIT = 3;
  */
 async function inferGeoffPayments(unlabeledRecords, previous = null) {
   const inferredSigs = new Set(previous?.inferredSigs || []);
-  const candidates = (unlabeledRecords || [])
+  let checkedAt = previous?.verifiedAt ?? null;
+  const candidates = [...new Map((unlabeledRecords || [])
     .filter((record) => record?.txSignature)
+    .map((record) => [record.txSignature, record])).values()]
     .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0))
     .slice(0, GEOF_INFER_VERIFY_LIMIT);
   const inferred = [];
-  for (const record of candidates) {
+  await Promise.all(candidates.map(async (record) => {
     if (!inferredSigs.has(record.txSignature)) {
-      const tx = await getTransactionWithRetry(record.txSignature);
+      const tx = await solanaRpc("getTransaction", [
+        record.txSignature,
+        { encoding: "jsonParsed", maxSupportedTransactionVersion: 0, commitment: "confirmed" },
+      ], { timeoutMs: TRIX_TIMEOUT_MS }).catch(() => null);
       if (tx?.meta && !tx.meta.err) {
         const destinations = trixTransferDestinations(tx);
         const matches =
           TRIX_PROVIDER_PAY_RECIPIENTS.size === destinations.size &&
           [...TRIX_PROVIDER_PAY_RECIPIENTS].every((address) => destinations.has(address));
-        if (matches) inferredSigs.add(record.txSignature);
+        if (matches) {
+          inferredSigs.add(record.txSignature);
+          checkedAt = new Date().toISOString();
+        }
       }
     }
     if (inferredSigs.has(record.txSignature)) inferred.push(record);
-  }
+  }));
   return {
     records: inferred,
     count: inferred.length,
     ok: candidates.length > 0 ? inferred.length > 0 : null,
     inferredSigs: [...inferredSigs],
-    checkedAt: new Date().toISOString(),
+    checkedAt,
   };
 }
 
@@ -2549,42 +2621,38 @@ async function sniffTrixPackPurchases(levels = [], previous = null) {
 
 export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
   const started = Date.now();
-  const recentRes = await fetchJson(`${TRIX_BASE_URL}/api/meme-image/recent?limit=48`);
-  const recentRecords = Array.isArray(recentRes.json) ? recentRes.json : [];
-  const catalogAge = Date.now() - Date.parse(previous?.launchCatalogCheckedAt || 0);
+  const catalogAge = Date.now() - Date.parse(previous?.launchCatalogCheckedAt || "");
   const refreshCatalog =
     !Array.isArray(previous?.tokenMints) ||
     previous.tokenMints.length < 100 ||
     !Number.isFinite(catalogAge) ||
+    catalogAge < 0 ||
     catalogAge >= TRIX_LAUNCH_CATALOG_TTL_MS;
   let tokenMints = Array.isArray(previous?.tokenMints) ? previous.tokenMints : [];
   let launchCatalogCheckedAt = previous?.launchCatalogCheckedAt || null;
-  let launchTotal = previous?.launchTotal || tokenMints.length;
+  let launchTotal = previous?.launchTotal ?? tokenMints.length;
+  const catalogRequest = refreshCatalog ? fetchTrixLaunchCatalog() : null;
+  const recentRes = await fetchJson(`${TRIX_BASE_URL}/api/meme-image/recent?limit=48`, {
+    timeoutMs: TRIX_TIMEOUT_MS,
+  });
+  if (!recentRes.ok || !Array.isArray(recentRes.json)) {
+    throw new Error(`TRIX recent generations unavailable (HTTP ${recentRes.status}).`);
+  }
+  const recentRecords = recentRes.json;
+  const failures = [];
   if (refreshCatalog) {
-    const catalog = await Promise.allSettled([
-      fetchJson(`${TRIX_BASE_URL}/api/launches?limit=500&offset=0&sort=marketCap`),
-      fetchJson(`${TRIX_BASE_URL}/api/launches?limit=500&offset=500&sort=marketCap`),
-    ]);
-    const items = catalog.flatMap((result) =>
-      result.status === "fulfilled" && Array.isArray(result.value.json?.items)
-        ? result.value.json.items
-        : [],
-    );
-    const discoveredMints = items.map((item) => item?.mintAddress).filter(Boolean);
+    const catalog = await catalogRequest;
+    const discoveredMints = catalog.items.map((item) => item.mintAddress);
+    if (!catalog.ok) failures.push(catalog.reason);
     if (discoveredMints.length) {
       tokenMints = [...new Set([...tokenMints, ...discoveredMints])];
-      launchTotal = Math.max(
-        tokenMints.length,
-        ...catalog.map((result) =>
-          result.status === "fulfilled" ? Number(result.value.json?.total) || 0 : 0,
-        ),
-      );
-      launchCatalogCheckedAt = new Date().toISOString();
+      launchTotal = catalog.total ?? tokenMints.length;
     }
+    if (catalog.ok) launchCatalogCheckedAt = catalog.checkedAt;
   }
   const previouslyScanned = new Set(previous?.scannedTokenMints || []);
   const unscanned = tokenMints.filter((mint) => !previouslyScanned.has(mint));
-  const requestBudget = Math.max(1, Math.floor(maxMints));
+  const requestBudget = Math.max(0, Math.min(5, Math.floor(trixNumber(maxMints) ?? 5)));
   const activeTokenMints = [...new Set(recentRecords.map((record) => record?.tokenMint).filter(Boolean))];
   const liveReserve = activeTokenMints.length ? Math.min(2, requestBudget) : 0;
   const backfillBudget = unscanned.length ? Math.max(0, requestBudget - liveReserve) : 0;
@@ -2600,17 +2668,19 @@ export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
   );
   const selectedMints = [...backfillMints, ...activeRefreshMints];
   const settled = await Promise.allSettled(
-    selectedMints.map((mint) => fetchJson(`${TRIX_BASE_URL}/api/meme-image/token/${mint}`)),
+    selectedMints.map((mint) => fetchJson(`${TRIX_BASE_URL}/api/meme-image/token/${mint}`, {
+      timeoutMs: TRIX_TIMEOUT_MS,
+    })),
   );
   const records = [
     ...recentRecords,
     ...settled.flatMap((result) =>
-      result.status === "fulfilled" && Array.isArray(result.value.json) ? result.value.json : [],
+      result.status === "fulfilled" && result.value.ok && Array.isArray(result.value.json) ? result.value.json : [],
     ),
   ];
   const resolvedRequests = selectedMints.filter((_, index) => {
     const result = settled[index];
-    return result?.status === "fulfilled" && result.value.ok;
+    return result?.status === "fulfilled" && result.value.ok && Array.isArray(result.value.json);
   });
   const resolvedTokenMints = backfillMints.filter((mint) => resolvedRequests.includes(mint));
   const labeledGeoff = parseTrixGeoffRecords([], records);
@@ -2632,10 +2702,8 @@ export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
     .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
   const latest = geoffRecords.find((record) => record.imageUrl) || geoffRecords[0] || null;
   const paidLamports = geoffRecords.reduce((sum, record) => sum + (record.feeLamports || 0), 0);
-  const ok = recentRes.ok && (
-    selectedMints.length === 0 ||
-    resolvedRequests.length > 0
-  );
+  if (resolvedRequests.length < selectedMints.length) failures.push("Some token generation histories unavailable");
+  const ok = failures.length === 0;
   const scannedTokenMints = tailCapped(
     [...new Set([...(previous?.scannedTokenMints || []), ...resolvedTokenMints])],
     MAX_TRIX_SCANNED_MINTS,
@@ -2643,6 +2711,8 @@ export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
   return {
     source: "trix.geoff",
     ok,
+    stale: !ok,
+    checkedAt: new Date().toISOString(),
     status: ok ? 200 : recentRes.status || 0,
     ms: Date.now() - started,
     count: geoffRecords.length,
@@ -2674,20 +2744,22 @@ export async function sniffTrixGeoff({ previous = null, maxMints = 5 } = {}) {
     ),
     url: `${TRIX_BASE_URL}/`,
     note: "TRIX public records label the provider as Geoff and report mainnet payment signatures. Active token histories are rotated because the global recent feed can crowd Geoff records out before filtering. This does not independently establish geoff.ai operator identity or an NFT mint.",
-    reason: ok ? null : "TRIX recent generations or historical token records could not be resolved.",
+    reason: ok ? null : failures.join("; "),
   };
 }
 
 export function mergeTrixGeoffHistory(previous = null, observed = null) {
   if (!observed) return previous;
+  // Packs are a retired subsource, not generation history. Never carry them forward.
+  const { packs, ...observation } = observed;
   const previousRecordIds = new Set(
     previous?.recordIds?.length
       ? previous.recordIds
       : (previous?.records || []).map((record) => record?.id).filter(Boolean),
   );
-  const newRecords = (observed.records || []).filter(
-    (record) => record?.id && !previousRecordIds.has(record.id),
-  );
+  const newRecords = [...new Map((observed.records || [])
+    .filter((record) => record?.id && !previousRecordIds.has(record.id))
+    .map((record) => [record.id, record])).values()];
   const recordIds = [
     ...new Set([...previousRecordIds, ...newRecords.map((record) => record.id)]),
   ].slice(-MAX_TRIX_HISTORY_IDS);
@@ -2697,15 +2769,12 @@ export function mergeTrixGeoffHistory(previous = null, observed = null) {
     if (key) byId.set(key, record);
   }
   const records = [...byId.values()]
-    .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0))
+    .sort((a, b) => (Date.parse(trixDate(b.createdAt)) || 0) - (Date.parse(trixDate(a.createdAt)) || 0))
     .slice(0, MAX_TRIX_HISTORY_RECORDS);
-  const previousCount = Number.isFinite(Number(previous?.count))
-    ? Math.max(Number(previous.count), previousRecordIds.size)
-    : previousRecordIds.size;
+  const previousCount = Math.max(trixNumber(previous?.count) ?? 0, previousRecordIds.size);
   const count = previousCount + newRecords.length;
-  const previousPaidLamports = Number.isFinite(Number(previous?.paidLamports))
-    ? Number(previous.paidLamports)
-    : (previous?.records || []).reduce(
+  const previousPaidLamports = trixNumber(previous?.paidLamports)
+    ?? (previous?.records || []).reduce(
         (sum, record) => sum + (Number(record.feeLamports) || 0),
         0,
       );
@@ -2723,36 +2792,42 @@ export function mergeTrixGeoffHistory(previous = null, observed = null) {
     MAX_TRIX_SCANNED_MINTS,
   );
   return {
-    ...(previous || {}),
-    ...observed,
-    ok: observed.ok || Boolean(previous?.ok && records.length),
+    ...observation,
+    ok: observed.ok === true,
+    stale: observed.ok !== true || observed.stale === true,
     count,
     paidLamports,
     paidSol: paidLamports / 1e9,
     tokenMints,
     scannedTokenMints,
+    launchTotal: observed.launchTotal ?? previous?.launchTotal ?? null,
+    launchCatalogCheckedAt: observed.launchCatalogCheckedAt ?? previous?.launchCatalogCheckedAt ?? null,
+    inferredSigs: tailCapped([...new Set([
+      ...(previous?.inferredSigs || []), ...(observed.inferredSigs || []),
+    ])], MAX_TRIX_INFERRED_SIGS),
+    infer: observed.infer ?? previous?.infer ?? null,
     recordIds,
     records,
     latest,
     observedCount: observed.records?.length || 0,
-    checkedAt: new Date().toISOString(),
+    checkedAt: observed.ok === true
+      ? observed.checkedAt ?? null
+      : previous ? previous.checkedAt ?? null : observed.checkedAt ?? null,
+    lastAttemptAt: observed.lastAttemptAt ?? observed.checkedAt ?? null,
     historyStartedAt: [previous?.historyStartedAt, records.at(-1)?.createdAt]
+      .map(trixDate)
       .filter(Boolean)
       .sort((a, b) => Date.parse(a) - Date.parse(b))[0] || null,
     fingerprint: bodyHash(
       `${count}:${paidLamports}:${records[0]?.id || "none"}`,
     ),
-    reason: observed.ok || records.length ? null : observed.reason,
+    reason: observed.ok === true ? observed.reason ?? null : observed.reason || observed.error || "TRIX generation read failed; retaining history.",
   };
 }
 
-let trixCardCatalogCache = {
-  at: 0,
-  cards: [],
-};
-
 export async function sniffTrixMarket({ previous = null } = {}) {
   const started = Date.now();
+  const catalogRequest = fetchTrixLaunchCatalog();
   const endpoints = {
     artworks: `${TRIX_BASE_URL}/api/artworks?limit=${TRIX_ARTWORK_WINDOW}`,
     auctions: `${TRIX_BASE_URL}/api/auctions`,
@@ -2761,17 +2836,24 @@ export async function sniffTrixMarket({ previous = null } = {}) {
     leaderboard: `${TRIX_BASE_URL}/api/leaderboard`,
     recentMints: `${TRIX_BASE_URL}/api/artworks/recent-activity?limit=12`,
   };
-  let cards = trixCardCatalogCache.cards;
-  const cardsAge = Date.now() - trixCardCatalogCache.at;
-  const cardsStale = !Array.isArray(cards) || cards.length === 0 || cardsAge >= TRIX_CARD_CATALOG_TTL_MS;
-  if (cardsStale) endpoints.cards = `${TRIX_BASE_URL}/api/cards`;
   const endpointKeys = Object.keys(endpoints);
-  const settled = await Promise.allSettled(endpointKeys.map((key) => fetchJson(endpoints[key])));
+  const settled = await Promise.allSettled(endpointKeys.map((key) => fetchJson(endpoints[key], {
+    timeoutMs: TRIX_TIMEOUT_MS,
+  })));
   const results = {};
-  let failures = [];
+  const failures = [];
+  const endpointStatus = {};
   settled.forEach((result, index) => {
     const key = endpointKeys[index];
-    if (result.status === "fulfilled" && result.value?.ok) {
+    const json = result.status === "fulfilled" ? result.value.json : null;
+    const valid = ["artworks", "auctions", "recentMints"].includes(key)
+      ? Array.isArray(json)
+      : key === "activity" ? Array.isArray(json?.items)
+      : key === "leaderboard" ? Array.isArray(json?.leaderboard)
+      : trixNumber(json?.balance) !== null || trixNumber(json?.totalPoints) !== null;
+    const ok = result.status === "fulfilled" && result.value.ok && valid;
+    endpointStatus[key] = { ok, sourceUrl: endpoints[key], checkedAt: new Date().toISOString() };
+    if (ok) {
       results[key] = result.value.json;
     } else {
       const meta = result.status === "fulfilled" ? result.value : result.reason;
@@ -2780,53 +2862,6 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       );
     }
   });
-  // Artwork buy-link enrichment depends on /api/artworks. That endpoint can flake
-  // (it returns HTTP 500 for limit values the API now rejects, e.g. > ~120), so
-  // re-fetch with a fallback ladder of smaller limits to keep the meme grid's buy
-  // links alive even when the configured window fails.
-  if (!Array.isArray(results.artworks) || results.artworks.length === 0) {
-    for (const retryLimit of [100, 80, 60, 40]) {
-      const retry = await fetchJson(`${TRIX_BASE_URL}/api/artworks?limit=${retryLimit}`).catch(() => null);
-      if (retry?.ok && Array.isArray(retry.json) && retry.json.length) {
-        if (!results.artworks) failures = failures.filter((f) => !f.startsWith("artworks:"));
-        results.artworks = retry.json;
-        break;
-      }
-    }
-  }
-  let cardsSummary = { count: null, cards: [], maxMultiplier: null };
-  if (results.cards && Array.isArray(results.cards)) {
-    cardsSummary.cards = results.cards
-      .map((card) => ({
-        id: card?.id ?? null,
-        name: card?.name ?? null,
-        slot: Number.isFinite(Number(card?.slot)) ? Number(card.slot) : null,
-        multiplier: Number.isFinite(Number(card?.multiplier)) ? Number(card.multiplier) : null,
-        priceSol: Number.isFinite(Number(card?.priceSol)) ? Number(card.priceSol) : null,
-        imageUrl: typeof card?.imageUrl === "string" && card.imageUrl.startsWith("/")
-          ? `${TRIX_BASE_URL}${card.imageUrl}`
-          : (typeof card?.imageUrl === "string" ? card.imageUrl : null),
-        active: Boolean(card?.active),
-        discountActive: Boolean(card?.discountActive),
-        discountPercent: Number.isFinite(Number(card?.discountPercent))
-          ? Number(card.discountPercent)
-          : null,
-      }))
-      .filter((card) => card.id);
-    cardsSummary.count = cardsSummary.cards.length;
-    cardsSummary.maxMultiplier = cardsSummary.cards.reduce(
-      (max, card) => Math.max(max, Number(card.multiplier) || 0),
-      0,
-    ) || null;
-    trixCardCatalogCache = { at: Date.now(), cards: cardsSummary.cards };
-  } else {
-    cardsSummary.cards = cards;
-    cardsSummary.count = cards.length || null;
-    cardsSummary.maxMultiplier = cards.reduce(
-      (max, card) => Math.max(max, Number(card.multiplier) || 0),
-      0,
-    ) || null;
-  }
   const artworks = Array.isArray(results.artworks) ? results.artworks : [];
   let artworkTotal = null;
   let artworkPrinted = null;
@@ -2844,8 +2879,8 @@ export async function sniffTrixMarket({ previous = null } = {}) {
     (auction?.status !== "closed" &&
       auction?.status !== "sold" &&
       auction?.status !== "cancelled") &&
-    Number.isFinite(Number(auction?.startingPriceLamports)) &&
-    Number(auction.startingPriceLamports) >= 0;
+    trixNumber(auction?.startingPriceLamports) !== null &&
+    trixNumber(auction.startingPriceLamports) >= 0;
   const activeAuctions = auctions.filter(isLive);
   const activeStartLamports = activeAuctions
     .map((auction) => Number(auction?.startingPriceLamports))
@@ -2857,26 +2892,15 @@ export async function sniffTrixMarket({ previous = null } = {}) {
     ? Math.max(...auctionBids.map((auction) => Number(auction.currentBidLamports)))
     : null;
   const treasury = {
-    balanceSol: Number.isFinite(Number(results.treasury?.balance))
-      ? Number(results.treasury.balance)
-      : null,
-    totalPoints: Number.isFinite(Number(results.treasury?.totalPoints))
-      ? Number(results.treasury.totalPoints)
-      : null,
+    balanceSol: trixNumber(results.treasury?.balance),
+    totalPoints: trixNumber(results.treasury?.totalPoints),
   };
   const activityItems = Array.isArray(results.activity?.items) ? results.activity.items : [];
-  const launches = [];
-  const launchPages = await Promise.allSettled([
-    fetchJson(`${TRIX_BASE_URL}/api/launches?limit=500&offset=0&sort=marketCap`),
-    fetchJson(`${TRIX_BASE_URL}/api/launches?limit=500&offset=500&sort=marketCap`),
-  ]);
-  for (const page of launchPages) {
-    if (page.status === "fulfilled" && Array.isArray(page.value.json?.items)) {
-      launches.push(...page.value.json.items);
-    }
-  }
+  const catalog = await catalogRequest;
+  if (!catalog.ok) failures.push(catalog.reason);
+  endpointStatus.launches = { ok: catalog.ok, sourceUrl: catalog.sourceUrl, checkedAt: catalog.checkedAt };
   const launchByMint = new Map();
-  for (const launch of launches) {
+  for (const launch of catalog.items) {
     if (launch?.mintAddress) launchByMint.set(launch.mintAddress, launch);
   }
   const leaderboard = Array.isArray(results.leaderboard?.leaderboard)
@@ -2894,7 +2918,7 @@ export async function sniffTrixMarket({ previous = null } = {}) {
     }
   }
   // Build an even grid of up to TRIX_RECENT_MEME_LIMIT memes. Buyable memes (a linked
-  // tradable coin is present) come first so every Buy link + live price stays
+  // tradable coin is present) come first so every Buy link stays
   // reachable; minted artworks WITHOUT a linked coin are included afterwards so
   // their easy View links are never cut off either. The recent-activity feed caps
   // at 12 regardless of its limit param, so fold in the newest catalog artworks to
@@ -2928,7 +2952,7 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       if (candidates.length >= TRIX_RECENT_MEME_LIMIT) break;
     }
   };
-  // buyables first so Buy links + prices always visible
+  // Buyables first so Buy links stay visible.
   pushIfNew(buyableRecent);
   pushIfNew(catalogBuyables);
   // then minted-only artworks so their View links survive
@@ -2940,10 +2964,8 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       const full = artworksById.get(item.id) || item;
       const linkedMint = full?.linkedCoinMint ?? null;
       const launch = linkedMint ? launchByMint.get(linkedMint) : null;
-      const marketCap = Number.isFinite(Number(launch?.marketCap)) ? Number(launch.marketCap) : null;
-      const supply = Number.isFinite(Number(launch?.totalSupply)) ? Number(launch.totalSupply) : null;
-      const price = marketCap != null && supply && supply > 0 ? marketCap / supply : null;
-      const marketCapUpdatedAt = launch?.marketCapUpdatedAt ?? null;
+      const marketCap = trixNumber(launch?.marketCap);
+      const marketCapUpdatedAt = trixDate(launch?.marketCapUpdatedAt);
       return {
         id: item.id,
         name: item?.name ?? full?.name ?? null,
@@ -2958,13 +2980,11 @@ export async function sniffTrixMarket({ previous = null } = {}) {
         linkedCoinMint: linkedMint,
         linkedCoinSymbol: full?.linkedCoinSymbol ?? launch?.symbol ?? null,
         linkedCoinName: full?.linkedCoinName ?? launch?.name ?? null,
-        buyPriceSol: price,
-        buyPriceMarketCap: marketCap,
-        buyPriceAt: marketCapUpdatedAt,
+        currentMarketCap: marketCap,
+        marketCapUpdatedAt,
       };
     });
   const aggregations = {
-    cards: cardsSummary,
     artworks: {
       total: artworkTotal,
       printed: artworkPrinted,
@@ -2973,53 +2993,52 @@ export async function sniffTrixMarket({ previous = null } = {}) {
       capped: artworkTotal >= TRIX_ARTWORK_WINDOW,
     },
     auctions: {
-      active: activeStartLamports.length || null,
+      active: results.auctions ? activeStartLamports.length : null,
       minStartSol: activeStartLamports.length
         ? Math.min(...activeStartLamports) / 1e9
         : null,
       maxStartSol: activeStartLamports.length
         ? Math.max(...activeStartLamports) / 1e9
         : null,
-      withBid: auctionBids.length || null,
+      withBid: results.auctions ? auctionBids.length : null,
       topBidSol: topBidLamports != null ? topBidLamports / 1e9 : null,
     },
     treasury,
     activity: {
-      items: activityItems.length,
+      items: results.activity ? activityItems.length : null,
       hasMore: Boolean(results.activity?.hasMore),
     },
     leaderboard: {
-      entries: leaderboard.length || null,
-      totalPoints: leaderboardPoints || null,
+      entries: results.leaderboard ? leaderboard.length : null,
+      totalPoints: results.leaderboard ? leaderboardPoints : null,
       window: leaderboard.length >= TRIX_LEADERBOARD_WINDOW ? TRIX_LEADERBOARD_WINDOW : null,
       capped: leaderboard.length >= TRIX_LEADERBOARD_WINDOW,
       rows: leaderboard.slice(0, TRIX_LEADERBOARD_WINDOW).map((entry) => ({
         rank: Number(entry?.rank) || null,
         username: typeof entry?.username === "string" ? entry.username : null,
         wallet: typeof entry?.walletAddress === "string" ? entry.walletAddress : null,
-        points: Number.isFinite(Number(entry?.points)) ? Number(entry.points) : null,
+        points: trixNumber(entry?.points),
         verified: Boolean(entry?.isVerified),
       })),
     },
     recentMints: recentMintsSummary,
   };
-  const ok = Boolean(results.cards || results.artworks || results.auctions || results.treasury);
+  const ok = Object.keys(results).length > 0;
   return {
     source: "trix.market",
     ok,
+    stale: !ok,
+    partial: ok && failures.length > 0,
     status: ok ? 200 : 0,
     ms: Date.now() - started,
     checkedAt: new Date().toISOString(),
-    cardsCached: !results.cards && cardsStale ? false : !results.cards,
-    cardsCatalogAgeMs: Number.isFinite(trixCardCatalogCache.at)
-      ? Date.now() - trixCardCatalogCache.at
-      : null,
+    endpoints: endpointStatus,
     ...aggregations,
     fingerprint: bodyHash(
       JSON.stringify(aggregations),
     ),
     url: `${TRIX_BASE_URL}/`,
-    note: "Counts and market data from TRIX public APIs (/api/cards, /api/artworks, /api/auctions, /api/treasury, /api/activity, /api/leaderboard, /api/launches). The recent-mint artwork feed shows public artwork titles, images, creator userId, on-chain mint address, and each work's linked coin (via /api/launches) with a live buy-price estimate (marketCap ÷ totalSupply) and a Buy link to the TRIX coin page. The leaderboard rows carry TRIX's own public username, wallet, and points. No holder, auction bidder, or artwork-owner identity beyond TRIX's own published fields is kept or displayed. Boost Card artwork is shown from TRIX's own image URLs; the card catalog is cached for six hours. Limits the API itself enforces: /api/artworks caps at 100 items (pagination params are ignored; larger limit values return HTTP 500, so the collector retries at 100 then 80/60/40), /api/leaderboard returns one page of 100, and auction rows are listings: only a share carry a live bid and most have no end time yet. Buy price is an estimate from live marketCap; it is not an official order-book bid or ask.",
+    note: "TRIX public artwork, auction, activity, treasury and points APIs; one bounded attempt per endpoint. Partial reads leave unavailable sections unknown; endpoint outcomes are listed separately. Linked coins use the current launch catalog marketCap and its own marketCapUpdatedAt. No token price is estimated because supply/market-cap units have not been verified. Artwork and leaderboard counts are sampled, not global holder counts. The retired card endpoint is not polled.",
     reason: failures.length ? `Partial: ${failures.join("; ")}.` : null,
   };
 }
@@ -3032,21 +3051,37 @@ export async function sniffTrixMarket({ previous = null } = {}) {
  */
 export async function sniffTrixMoney({ previous = null } = {}) {
   const started = Date.now();
-  const now = new Date().toISOString();
   const endpoints = {
     launchpad: `${TRIX_BASE_URL}/api/launchpad-settings/public`,
     treasury: `${TRIX_BASE_URL}/api/treasury`,
     trades: `${TRIX_BASE_URL}/api/feed/trades?limit=50`,
-    market: `${TRIX_BASE_URL}/api/meme-market`,
   };
+  const balanceRequests = Promise.all([TRIX_TREASURY_ADDRESS, TRIX_GEOFF_LEG1].map(async (address) => {
+    try {
+      const res = await solanaRpc("getBalance", [address, { commitment: "confirmed" }], {
+        timeoutMs: TRIX_TIMEOUT_MS,
+      });
+      const lamports = trixNumber(res?.value);
+      if (lamports === null) throw new Error("getBalance returned no value");
+      return { value: lamports / 1e9, checkedAt: new Date().toISOString() };
+    } catch (error) {
+      return { value: null, checkedAt: null, reason: error?.message || String(error) };
+    }
+  }));
+  const endpointStatus = {};
   const fetched = await Promise.all(
     Object.entries(endpoints).map(async ([key, url]) => {
       try {
-        const res = await fetchJson(url);
+        const res = await fetchJson(url, { timeoutMs: TRIX_TIMEOUT_MS });
+        const valid = key === "trades" ? Array.isArray(res.json?.items)
+          : key === "treasury" ? trixNumber(res.json?.balance) !== null || trixNumber(res.json?.totalPoints) !== null
+          : [res.json?.platformFeeBps, res.json?.creatorFeeBps, res.json?.platformLaunchFeeSol].some((value) => trixNumber(value) !== null);
+        endpointStatus[key] = { ok: res.ok && valid, sourceUrl: url, checkedAt: new Date().toISOString() };
         if (!res?.ok) return [key, null, `${key}:${res?.status ?? 0}:${res?.reason || "error"}`];
-        if (res.json?.message && typeof res.json.message === "string") return [key, null, `${key}:${res.status}:${res.json.message}`];
+        if (!valid) return [key, null, `${key}:invalid payload`];
         return [key, res.json, null];
       } catch (e) {
+        endpointStatus[key] = { ok: false, sourceUrl: url, checkedAt: new Date().toISOString() };
         return [key, null, `${key}:${e?.message || "error"}`];
       }
     }),
@@ -3060,28 +3095,37 @@ export async function sniffTrixMoney({ previous = null } = {}) {
 
   const feeSplit = (() => {
     const p = results.launchpad || {};
-    const platformBps = Number.isFinite(Number(p?.platformFeeBps)) ? Number(p.platformFeeBps) : null;
-    const creatorBps = Number.isFinite(Number(p?.creatorFeeBps)) ? Number(p.creatorFeeBps) : null;
+    const platformBps = trixNumber(p?.platformFeeBps);
+    const creatorBps = trixNumber(p?.creatorFeeBps);
     return {
       platformFeeBps: platformBps,
       creatorFeeBps: creatorBps,
       platformFeePct: platformBps != null ? platformBps / 100 : null,
       creatorFeePct: creatorBps != null ? creatorBps / 100 : null,
-      platformLaunchFeeSol: Number.isFinite(Number(p?.platformLaunchFeeSol)) ? Number(p.platformLaunchFeeSol) : null,
+      platformLaunchFeeSol: trixNumber(p?.platformLaunchFeeSol),
     };
   })();
 
   const treasuryApi = results.treasury || {};
-  const [balanceTreasury, balanceGeoLeg1] = await Promise.all([
-    solanaRpc("getBalance", [TRIX_TREASURY_ADDRESS, { commitment: "confirmed" }])
-      .then((res) => (typeof res?.value === "number" ? res.value / 1e9 : null))
-      .catch(() => null),
-    solanaRpc("getBalance", [TRIX_GEOFF_LEG1, { commitment: "confirmed" }])
-      .then((res) => (typeof res?.value === "number" ? res.value / 1e9 : null))
-      .catch(() => null),
-  ]);
+  const [balanceTreasury, balanceGeoLeg1] = await balanceRequests;
+  for (const [key, balance] of [["treasuryOnChain", balanceTreasury], ["geoffLeg1", balanceGeoLeg1]]) {
+    endpointStatus[key] = { ok: balance.value !== null, checkedAt: balance.checkedAt, sourceUrl: SOLANA_RPC_URL };
+    if (balance.reason) failures.push(`${key}:${balance.reason}`);
+  }
 
-  const trades = Array.isArray(results.trades?.items) ? results.trades.items : [];
+  const trades = Array.isArray(results.trades?.items) ? results.trades.items.slice(0, 50) : [];
+  const recentTrades = results.trades ? trades
+    .filter((trade) => trixString(trade?.id) || trixString(trade?.txSignature))
+    .slice(0, 12)
+    .map((trade) => ({
+      signature: trixString(trade.txSignature),
+      id: trixString(trade.id),
+      side: trixString(trade.side),
+      symbol: trixString(trade.symbol),
+      mint: trixString(trade.mint),
+      solAmount: trixNumber(trade.solAmount),
+      createdAt: trixDate(trade.createdAt),
+    })) : null;
   let buySol = 0;
   let sellSol = 0;
   let buyCount = 0;
@@ -3090,7 +3134,8 @@ export async function sniffTrixMoney({ previous = null } = {}) {
   const byCoin = new Map();
   for (const t of trades) {
     const side = t?.side;
-    const sol = Number.isFinite(Number(t?.solAmount)) ? Number(t.solAmount) : 0;
+    const sol = trixNumber(t?.solAmount);
+    if (sol === null) continue;
     const mint = t?.mint;
     if (side === "buy") { buySol += sol; buyCount += 1; }
     if (side === "sell") { sellSol += sol; sellCount += 1; }
@@ -3108,31 +3153,21 @@ export async function sniffTrixMoney({ previous = null } = {}) {
     .slice(0, 8)
     .map((c) => ({ ...c, buySol: roundSol(c.buySol), sellSol: roundSol(c.sellSol) }));
 
-  const market = Array.isArray(results.market) ? results.market : [];
-  let marketVolume24h = 0;
-  let marketLiquidity = 0;
-  let marketCoins = 0;
-  let marketSnapshot = null;
-  if (market.length) {
-    marketCoins = market.length;
-    marketVolume24h = market.reduce((s, c) => s + (Number.isFinite(Number(c?.volume24h)) ? Number(c.volume24h) : 0), 0);
-    marketLiquidity = market.reduce((s, c) => s + (Number.isFinite(Number(c?.liquidity)) ? Number(c.liquidity) : 0), 0);
-    marketSnapshot = market[0]?.snapshotTimestamp ?? null;
-  }
-
+  const tradesKnown = Boolean(results.trades) && trades.every((trade) => trixNumber(trade?.solAmount) !== null);
   const aggregations = {
+    recentTrades,
     feeSplit,
     treasury: {
       address: TRIX_TREASURY_ADDRESS,
-      balanceSol: Number.isFinite(Number(treasuryApi?.balance)) ? Number(treasuryApi.balance) : null,
-      totalPoints: Number.isFinite(Number(treasuryApi?.totalPoints)) ? Number(treasuryApi.totalPoints) : null,
-      balanceSolOnChain: balanceTreasury,
-      balanceSolOnChainAt: now,
+      balanceSol: trixNumber(treasuryApi?.balance),
+      totalPoints: trixNumber(treasuryApi?.totalPoints),
+      balanceSolOnChain: balanceTreasury.value,
+      balanceSolOnChainAt: balanceTreasury.checkedAt,
     },
     geoffLeg1: {
       address: TRIX_GEOFF_LEG1,
-      balanceSol: balanceGeoLeg1,
-      balanceSolOnChainAt: now,
+      balanceSol: balanceGeoLeg1.value,
+      balanceSolOnChainAt: balanceGeoLeg1.checkedAt,
       isTreasury: false,
     },
     // 'Non-geoff' money = the creator + platform fee shares from coin trading that do
@@ -3140,193 +3175,160 @@ export async function sniffTrixMoney({ previous = null } = {}) {
     // the distinct non-geoff pools are the creator fee (per-launch) and the platform
     // fee kept outside those two system-transfer legs.
     fees: {
-      recentBuysSol: roundSol(buySol),
-      recentSellsSol: roundSol(sellSol),
-      recentNetSol: roundSol(buySol - sellSol),
-      buyCount,
-      sellCount,
-      uniqueWallets: wallets.size,
-      topCoins,
+      recentBuysSol: tradesKnown ? roundSol(buySol) : null,
+      recentSellsSol: tradesKnown ? roundSol(sellSol) : null,
+      recentNetSol: tradesKnown ? roundSol(buySol - sellSol) : null,
+      buyCount: tradesKnown ? buyCount : null,
+      sellCount: tradesKnown ? sellCount : null,
+      uniqueWallets: tradesKnown ? wallets.size : null,
+      topCoins: tradesKnown ? topCoins : [],
     },
-    market24h: {
-      coins: marketCoins,
-      volume24h: roundSol(marketVolume24h),
-      liquidity: roundSol(marketLiquidity),
-      snapshotAt: marketSnapshot,
-    },
-    checkedAt: now,
   };
 
-  const ok = Boolean(results.launchpad || results.treasury || trades.length);
+  const ok = Object.keys(results).length > 0 || balanceTreasury.value !== null || balanceGeoLeg1.value !== null;
   return {
     source: "trix.money",
     ok,
+    stale: !ok,
+    partial: ok && failures.length > 0,
+    checkedAt: new Date().toISOString(),
+    endpoints: endpointStatus,
     status: ok ? 200 : 0,
     ms: Date.now() - started,
     ...aggregations,
     url: `${TRIX_BASE_URL}/`,
-    note: "Money-flow read from TRIX public APIs (/api/treasury, /api/launchpad-settings/public, /api/feed/trades, /api/meme-market) plus live on-chain SOL balances (getBalance) for the treasury and the distinct geoff leg. The TRIX treasury wallet H1HU4….Rtvoid is itself one of the two geoff provider rails; the other rail QR7US….TtY is a separate wallet. 'Non-geoff' money here means the creator-fee and platform-fee shares a coin trade splits off before any of it reaches the geoff rails. Buy/sell SOL totals are summed from the public trade feed window (limit 50 newest events). 24h volume/liquidity are TRIX's own /api/meme-market snapshot (stale; not live on-curve). All estimates are not an official order-book bid or ask.",
+    note: "TRIX public treasury, launchpad fee settings and trade feed (50 newest events), plus one bounded getBalance per provider rail. recentTrades exposes at most 12 identifiable feed rows in API order; signature is the published txSignature and createdAt is only the published event time, never collection time. Sides may include void activity; rows are API-reported, not independently chain-verified. Partial reads expose endpoint outcomes and unknown values, not zero balances or trading totals. The treasury is one of the two provider rails; the other is a distinct wallet. Trade totals describe the sampled feed, not a 24-hour window. Historical meme-market metrics are not collected.",
     reason: failures.length ? `Partial: ${failures.join("; ")}.` : null,
     fingerprint: bodyHash(JSON.stringify(aggregations)),
   };
 }
 
-/**
- * Derive a real, sourced class for a meme coin. Lane overrides (agent / boosted /
- * non-solana chain) win first; otherwise classify from the coin's own 24h momentum
- * and buy/sell pressure so the leaderboard has honest visual variety instead of a
- * uniform "meme" tag. Returns {label, kind} where kind drives the CSS color.
- */
-function trixCoinType(launch, coin) {
-  if (launch?.isCoinAgent) return { label: "AGENT", kind: "agent" };
-  if (launch?.boosted) return { label: "BOOSTED", kind: "boosted" };
-  const chain = typeof launch?.chain === "string" ? launch.chain.toLowerCase() : "";
-  if (chain && chain !== "solana") return { label: chain.toUpperCase(), kind: "chain" };
-
-  const change = Number(coin?.priceChange24hPercent);
-  const buys = Number(coin?.buyCount24h);
-  const sells = Number(coin?.sellCount24h);
-  const vol = Number(coin?.volume24h);
-  const hasChange = Number.isFinite(change);
-  const hasFlow = Number.isFinite(buys) && Number.isFinite(sells) && (buys + sells) > 0;
-
-  if (!hasChange && !hasFlow && !(Number.isFinite(vol) && vol > 0)) {
-    return { label: "QUIET", kind: "quiet" };
+/** Optional official box leaderboard. A missing endpoint is not an empty ranking. */
+export async function sniffTrixBoxes({ previous = null } = {}) {
+  const started = Date.now();
+  const value = {
+    source: "trix.boxes",
+    optional: true,
+    ok: false,
+    stale: true,
+    status: 0,
+    sourceUrl: TRIX_BOXES_SOURCE_URL,
+    shopUrl: "https://www.trix.market/shop",
+    topCoins: null,
+    biggestPulls: null,
+    topCollectors: null,
+    fingerprint: null,
+    reason: null,
+  };
+  try {
+    const res = await fetchJson(TRIX_BOXES_SOURCE_URL, { timeoutMs: TRIX_TIMEOUT_MS });
+    value.status = res.status;
+    if (!res.ok) {
+      value.reason = `Box leaderboard unavailable (HTTP ${res.status}): ${trixString(res.json?.message) || "request failed"}`;
+    } else {
+      const count = (input) => {
+        const number = trixNumber(input);
+        return number !== null && Number.isSafeInteger(number) && number >= 0 ? number : null;
+      };
+      const usd = (input) => {
+        const number = trixNumber(input);
+        return number !== null && number >= 0 ? number : null;
+      };
+      const logoUrl = (input) => {
+        const text = trixString(input);
+        if (!text) return null;
+        try {
+          const url = new URL(text, "https://www.trix.market/");
+          return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password ? url.href : null;
+        } catch {
+          return null;
+        }
+      };
+      const fields = {
+        topCoins: { mint: trixString, symbol: trixString, name: trixString, logoUrl, rips: count },
+        biggestPulls: { ripper: trixString, rarity: trixString, coinSymbol: trixString, rewardUsd: usd },
+        topCollectors: { username: trixString, rips: count, mythics: count, earnedUsd: usd },
+      };
+      const lists = {};
+      for (const [key, normalizers] of Object.entries(fields)) {
+        if (!Array.isArray(res.json?.[key])) throw new Error(`Invalid box leaderboard payload: ${key} must be an array`);
+        lists[key] = res.json[key].slice(0, TRIX_BOXES_ROW_LIMIT).map((row) => {
+          if (!row || typeof row !== "object" || Array.isArray(row)) {
+            throw new Error(`Invalid box leaderboard row in ${key}`);
+          }
+          const normalized = Object.fromEntries(Object.entries(normalizers).map(([field, normalize]) => [field, normalize(row[field])]));
+          if (Object.values(normalized).every((field) => field === null)) {
+            throw new Error(`Unrecognized box leaderboard row in ${key}`);
+          }
+          return normalized;
+        });
+      }
+      Object.assign(value, lists, {
+        ok: true,
+        stale: false,
+        fingerprint: bodyHash(JSON.stringify(lists)),
+      });
+    }
+  } catch (error) {
+    value.reason = error?.message || String(error);
   }
-  const buyPressure = hasFlow ? buys - sells : 0;
-  if (hasChange && change >= 50 && (!hasFlow || buyPressure >= 0)) {
-    return { label: "PUMP", kind: "pump" };
-  }
-  if (hasChange && change <= -20) {
-    return { label: "DUMP", kind: "dump" };
-  }
-  if ((hasChange && change > 0) || buyPressure > 0) {
-    return { label: "RISING", kind: "rising" };
-  }
-  if ((hasChange && change < 0) || buyPressure < 0) {
-    return { label: "DIPPING", kind: "dipping" };
-  }
-  return { label: "STEADY", kind: "steady" };
+  value.checkedAt = new Date().toISOString();
+  value.ms = Date.now() - started;
+  return retainFailedSource("trix.boxes", value, previous);
 }
 
+/** Persisted source name; live rows now come only from the current launch catalog. */
 export async function sniffTrixMemeMarket({ previous = null } = {}) {
   const started = Date.now();
-  try {
-    const [res, launchPages] = await Promise.all([
-      fetchJson(`${TRIX_BASE_URL}/api/meme-market`),
-      Promise.allSettled([
-        fetchJson(`${TRIX_BASE_URL}/api/launches?limit=500&offset=0&sort=marketCap`),
-        fetchJson(`${TRIX_BASE_URL}/api/launches?limit=500&offset=500&sort=marketCap`),
-      ]),
-    ]);
-    const market = Array.isArray(res.json) ? res.json : [];
-    const ok = res.ok && market.length > 0;
-    const launchByMint = new Map();
-    for (const page of launchPages) {
-      if (page.status !== "fulfilled" || !Array.isArray(page.value.json?.items)) continue;
-      for (const item of page.value.json.items) {
-        if (item?.mintAddress) launchByMint.set(item.mintAddress, item);
-      }
-    }
-    const coins = market
-      .filter((c) => c && typeof c === "object")
-      .map((c) => {
-        const launch = c.mintAddress ? launchByMint.get(c.mintAddress) : null;
-        const coin = {
-          id: c.id ?? null,
-          tokenName: typeof c.tokenName === "string" ? c.tokenName : (launch?.name ?? null),
-          ticker: typeof c.ticker === "string" ? c.ticker : (launch?.symbol ?? null),
-          description: typeof c.description === "string" ? c.description : null,
-          mintAddress: typeof c.mintAddress === "string" ? c.mintAddress : null,
-          launchId: c.launchId ?? launch?.id ?? null,
-          snapshotTimestamp: typeof c.snapshotTimestamp === "string" ? c.snapshotTimestamp : null,
-          currentMarketCap: Number.isFinite(Number(c.currentMarketCap)) ? Number(c.currentMarketCap) : null,
-          priceChange24hPercent: Number.isFinite(Number(c.priceChange24hPercent)) ? Number(c.priceChange24hPercent) : null,
-          holderCount: Number.isFinite(Number(c.holderCount)) ? Number(c.holderCount) : null,
-          volume24h: Number.isFinite(Number(c.volume24h)) ? Number(c.volume24h) : null,
-          price: Number.isFinite(Number(c.price)) ? Number(c.price) : null,
-          liquidity: Number.isFinite(Number(c.liquidity)) ? Number(c.liquidity) : null,
-          fdv: Number.isFinite(Number(c.fdv)) ? Number(c.fdv) : null,
-          buyCount24h: Number.isFinite(Number(c.buyCount24h)) ? Number(c.buyCount24h) : null,
-          sellCount24h: Number.isFinite(Number(c.sellCount24h)) ? Number(c.sellCount24h) : null,
-          uniqueWallets24h: Number.isFinite(Number(c.uniqueWallets24h)) ? Number(c.uniqueWallets24h) : null,
-          circulatingSupply: Number.isFinite(Number(c.circulatingSupply)) ? Number(c.circulatingSupply) : null,
-          totalSupply: Number.isFinite(Number(c.totalSupply)) ? Number(c.totalSupply) : null,
-          lastTradeTime: typeof c.lastTradeTime === "string" ? c.lastTradeTime : null,
-          createdAt: typeof c.createdAt === "string" ? c.createdAt : null,
-          // Joined from /api/launches (full launch object per mint):
-          chain: typeof launch?.chain === "string" ? launch.chain : null,
-          status: typeof launch?.status === "string" ? launch.status : null,
-          isCoinAgent: Boolean(launch?.isCoinAgent),
-          boosted: Boolean(launch?.boosted),
-          logoUrl: typeof launch?.logoUrl === "string" ? launch.logoUrl : null,
-        };
-        const typed = trixCoinType(launch, coin);
-        coin.type = typed.label;
-        coin.typeKind = typed.kind;
-        return coin;
-      })
-      .sort((a, b) => (b.currentMarketCap || 0) - (a.currentMarketCap || 0));
-    const top10 = coins.slice(0, 10);
-    const totalMarketCap = coins.reduce((s, c) => s + (c.currentMarketCap || 0), 0);
-    const totalVolume24h = coins.reduce((s, c) => s + (c.volume24h || 0), 0);
-    const totalLiquidity = coins.reduce((s, c) => s + (c.liquidity || 0), 0);
-    const totalHolders = coins.reduce((s, c) => s + (c.holderCount || 0), 0);
-    const typeCounts = coins.reduce((acc, c) => {
-      acc[c.type] = (acc[c.type] || 0) + 1;
-      return acc;
-    }, {});
-    return {
-      source: "trix.meme.market",
-      ok,
-      status: ok ? 200 : res.status || 0,
-      ms: Date.now() - started,
-      checkedAt: new Date().toISOString(),
-      coins,
-      top10,
-      totalCoins: coins.length,
-      totalMarketCap,
-      totalVolume24h,
-      totalLiquidity,
-      totalHolders,
-      typeCounts,
-      launchJoinCount: launchByMint.size,
-      snapshotAt: market[0]?.snapshotTimestamp ?? null,
-      fingerprint: bodyHash(JSON.stringify({ coins: coins.map((c) => `${c.mintAddress}:${c.type}`).slice(0, 10) })),
-      url: `${TRIX_BASE_URL}/`,
-      note: "TRIX /api/meme-market snapshot of all meme tokens (market cap, 24h volume, liquidity, holders, price change, buy/sell counts), sorted by market cap. Each coin is joined against /api/launches by mint address for logo/status/chain. Type is sourced (AGENT / BOOSTED / non-solana CHAIN) or derived from the coin's own 24h momentum and buy/sell pressure (PUMP / RISING / DIPPING / DUMP / STEADY / QUIET) — a derived activity class, not a box rarity. This is a leaderboard for boxes/meme tokens, not live on-curve data.",
-      reason: ok ? null : `HTTP ${res.status || 0} from /api/meme-market`,
-    };
-  } catch (error) {
-    return {
-      source: "trix.meme.market",
-      ok: false,
-      status: 0,
-      ms: Date.now() - started,
-      checkedAt: new Date().toISOString(),
-      coins: [],
-      top10: [],
-      totalCoins: 0,
-      totalMarketCap: 0,
-      totalVolume24h: 0,
-      totalLiquidity: 0,
-      totalHolders: 0,
-      typeCounts: {},
-      launchJoinCount: 0,
-      snapshotAt: null,
-      fingerprint: null,
-      url: `${TRIX_BASE_URL}/`,
-      reason: error?.message || String(error),
-    };
-  }
+  const catalog = await fetchTrixLaunchCatalog();
+  const coins = catalog.items.map((launch) => ({
+    mintAddress: launch.mintAddress,
+    tokenName: typeof launch.name === "string" ? launch.name : null,
+    ticker: typeof launch.symbol === "string" ? launch.symbol : null,
+    logoUrl: typeof launch.logoUrl === "string"
+      ? launch.logoUrl.startsWith("/") ? `${TRIX_BASE_URL}${launch.logoUrl}` : launch.logoUrl
+      : null,
+    chain: typeof launch.chain === "string" ? launch.chain : null,
+    status: typeof launch.status === "string" ? launch.status : null,
+    type: launch.isCoinAgent === true ? "Agent" : "Token",
+    currentMarketCap: trixNumber(launch.marketCap),
+    marketCapUpdatedAt: trixDate(launch.marketCapUpdatedAt),
+  })).sort((a, b) => {
+    if (a.currentMarketCap === null && b.currentMarketCap !== null) return 1;
+    if (b.currentMarketCap === null && a.currentMarketCap !== null) return -1;
+    return (b.currentMarketCap ?? 0) - (a.currentMarketCap ?? 0) || a.mintAddress.localeCompare(b.mintAddress);
+  });
+  const dates = coins.map((coin) => coin.marketCapUpdatedAt).filter(Boolean).sort();
+  const knownCaps = coins.map((coin) => coin.currentMarketCap).filter((value) => value !== null);
+  const totalMarketCap = knownCaps.length ? trixNumber(knownCaps.reduce((sum, value) => sum + value, 0))
+    : catalog.ok && catalog.total === 0 ? 0 : null;
+  const value = {
+    source: "trix.meme.market",
+    ok: catalog.ok,
+    stale: !catalog.ok,
+    status: catalog.ok ? 200 : 0,
+    ms: Date.now() - started,
+    checkedAt: catalog.checkedAt,
+    dataUpdatedAt: dates.at(-1) ?? null,
+    sourceUrl: catalog.sourceUrl,
+    coins,
+    top10: coins.slice(0, 10),
+    totalCoins: coins.length,
+    catalogTotal: catalog.total,
+    totalMarketCap,
+    reason: catalog.reason,
+    fingerprint: catalog.ok || coins.length ? bodyHash(JSON.stringify({ coins, catalogTotal: catalog.total })) : null,
+    note: "Current public launch catalog, at most two pages of 500; totals and ranking cover only this sample. Market cap is TRIX-reported, not independently valued. Unknown numbers stay null. dataUpdatedAt is the newest valid marketCapUpdatedAt in the sample, not a claim that every row was updated then. Type is Agent only when isCoinAgent is true, otherwise Token. No historical 24h metrics, holder counts, token price estimates or box rarities.",
+  };
+  return retainFailedSource("trix.meme.market", value, previous);
 }
 
 export async function sniffTrixFrontpage({ previous = null } = {}) {
   const started = Date.now();
   try {
-    const res = await fetchJson(`${TRIX_BASE_URL}/api/frontpage`);
+    const res = await fetchJson(`${TRIX_BASE_URL}/api/frontpage`, { timeoutMs: TRIX_TIMEOUT_MS });
     const data = res.json || {};
-    const ok = Boolean(res.ok && data && typeof data === "object");
+    const ok = res.ok && ["featured", "boosted", "recent"].every((key) => Array.isArray(data[key]));
     const featured = Array.isArray(data.featured) ? data.featured : [];
     const boosted = Array.isArray(data.boosted) ? data.boosted : [];
     const recent = Array.isArray(data.recent) ? data.recent : [];
@@ -3339,7 +3341,7 @@ export async function sniffTrixFrontpage({ previous = null } = {}) {
       featured,
       boosted,
       recent,
-      builtAt: data.builtAt != null ? data.builtAt : null,
+      builtAt: trixDate(data.builtAt),
       featuredCount: featured.length,
       boostedCount: boosted.length,
       recentCount: recent.length,
@@ -3372,9 +3374,9 @@ export async function sniffTrixFrontpage({ previous = null } = {}) {
 export async function sniffTrixTiers({ previous = null } = {}) {
   const started = Date.now();
   try {
-    const res = await fetchJson(`${TRIX_BASE_URL}/api/tiers`);
+    const res = await fetchJson(`${TRIX_BASE_URL}/api/tiers`, { timeoutMs: TRIX_TIMEOUT_MS });
     const tiers = Array.isArray(res.json) ? res.json : [];
-    const ok = res.ok && tiers.length > 0;
+    const ok = res.ok && Array.isArray(res.json);
     return {
       source: "trix.tiers",
       ok,
@@ -3385,13 +3387,13 @@ export async function sniffTrixTiers({ previous = null } = {}) {
         .filter((t) => t && typeof t === "object")
         .map((t) => ({
           name: typeof t.name === "string" ? t.name : null,
-          minPoints: Number.isFinite(Number(t.minPoints)) ? Number(t.minPoints) : null,
+          minPoints: trixNumber(t.minPoints),
           color: typeof t.color === "string" ? t.color : null,
           color2: typeof t.color2 === "string" ? t.color2 : null,
         }))
         .sort((a, b) => (a.minPoints || 0) - (b.minPoints || 0)),
       count: tiers.length,
-      fingerprint: bodyHash(JSON.stringify(tiers.map((t) => `${t.name}:${t.minPoints}`).slice(0, 10))),
+      fingerprint: bodyHash(JSON.stringify(tiers.map((t) => `${t?.name}:${trixNumber(t?.minPoints)}`).slice(0, 10))),
       url: `${TRIX_BASE_URL}/`,
       note: "TRIX /api/tiers returns 100 loyalty tiers with name, minPoints, and gradient colors. Useful for leaderboard/points framing.",
       reason: ok ? null : `HTTP ${res.status || 0} from /api/tiers`,
@@ -3415,9 +3417,9 @@ export async function sniffTrixTiers({ previous = null } = {}) {
 export async function sniffTrixFeeConfig({ previous = null } = {}) {
   const started = Date.now();
   try {
-    const res = await fetchJson(`${TRIX_BASE_URL}/api/fee-config`);
+    const res = await fetchJson(`${TRIX_BASE_URL}/api/fee-config`, { timeoutMs: TRIX_TIMEOUT_MS });
     const data = res.json || {};
-    const ok = Boolean(res.ok && data && typeof data === "object");
+    const ok = res.ok && (typeof data.feeWallet === "string" || typeof data.treasuryWallet === "string" || trixNumber(data.feeBps) !== null);
     return {
       source: "trix.fee.config",
       ok,
@@ -3426,9 +3428,9 @@ export async function sniffTrixFeeConfig({ previous = null } = {}) {
       checkedAt: new Date().toISOString(),
       feeWallet: typeof data.feeWallet === "string" ? data.feeWallet : null,
       treasuryWallet: typeof data.treasuryWallet === "string" ? data.treasuryWallet : null,
-      feeBps: Number.isFinite(Number(data.feeBps)) ? Number(data.feeBps) : null,
-      feePercent: Number.isFinite(Number(data.feeBps)) ? Number(data.feeBps) / 100 : null,
-      fingerprint: bodyHash(`${data.feeWallet || ""}|${data.treasuryWallet || ""}|${data.feeBps || ""}`),
+      feeBps: trixNumber(data.feeBps),
+      feePercent: trixNumber(data.feeBps) !== null ? trixNumber(data.feeBps) / 100 : null,
+      fingerprint: bodyHash(`${data.feeWallet || ""}|${data.treasuryWallet || ""}|${trixNumber(data.feeBps) ?? "unknown"}`),
       url: `${TRIX_BASE_URL}/`,
       note: "TRIX /api/fee-config authoritatively names the payment-recipient wallets (feeWallet, treasuryWallet) and the fee basis points. Cross-check for the geoff rails labels.",
       reason: ok ? null : `HTTP ${res.status || 0} from /api/fee-config`,
@@ -3452,18 +3454,59 @@ export async function sniffTrixFeeConfig({ previous = null } = {}) {
 }
 
 function roundSol(value) {
-  return Number.isFinite(Number(value)) ? Math.round(Number(value) * 1e6) / 1e6 : null;
+  const number = trixNumber(value);
+  return number === null ? null : Math.round(number * 1e6) / 1e6;
+}
+
+function retainFailedSource(source, observed, previous = null) {
+  if (observed.ok !== false || observed.skipped) return observed;
+  // Historical meme snapshots do not satisfy the current launch-row contract.
+  if (source === "trix.meme.market" && previous?.sourceUrl !== TRIX_LAUNCH_SOURCE_URL) previous = null;
+  if (source === "trix.boxes" && (
+    previous?.sourceUrl !== TRIX_BOXES_SOURCE_URL ||
+    typeof previous?.fingerprint !== "string" ||
+    !["topCoins", "biggestPulls", "topCollectors"].every((key) => Array.isArray(previous?.[key]))
+  )) previous = null;
+  const retained = previous ? { ...previous } : { ...observed };
+  if (source === "trix.geoff") {
+    // Keep successful subreads and scan progress; service merges history once later.
+    Object.assign(retained, observed);
+    delete retained.packs;
+  }
+  if (source === "trix.money") delete retained.market24h;
+  if (source === "trix.market") {
+    delete retained.cards;
+    delete retained.cardsCached;
+    delete retained.cardsCatalogAgeMs;
+    if (Array.isArray(retained.recentMints)) retained.recentMints = retained.recentMints.map((row) => {
+      const { buyPriceSol, buyPriceMarketCap, buyPriceAt, ...artwork } = row;
+      return artwork;
+    });
+  }
+  return {
+    ...retained,
+    source,
+    ok: false,
+    stale: true,
+    status: observed.status ?? 0,
+    ms: observed.ms ?? null,
+    checkedAt: previous ? previous.checkedAt ?? null : observed.checkedAt ?? null,
+    lastAttemptAt: observed.lastAttemptAt ?? observed.checkedAt ?? null,
+    reason: observed.reason || observed.error || "Source read failed; retaining last observed values.",
+    error: observed.error ?? null,
+  };
 }
 
 // Stamp each observation as it settles, not when the whole batch finishes.
 // A cache hit without provenance is legacy data: its age must stay unknown.
-async function observeSource(source, attempt) {
+async function observeSource(source, attempt, previous = null) {
+  let observed;
   try {
     const value = await attempt;
-    if (Object.hasOwn(value, "checkedAt") || value.cached || value.skipped) return value;
-    return { ...value, checkedAt: new Date().toISOString() };
+    observed = Object.hasOwn(value, "checkedAt") || value.cached || value.skipped
+      ? value : { ...value, checkedAt: new Date().toISOString() };
   } catch (error) {
-    return {
+    observed = {
       source,
       ok: false,
       status: 0,
@@ -3471,6 +3514,20 @@ async function observeSource(source, attempt) {
       error: error?.message || String(error),
     };
   }
+  return retainFailedSource(source, observed, previous);
+}
+
+function trixAttempts(previous) {
+  return [
+    ["trix.geoff", sniffTrixGeoff({ previous: previous?.sources?.["trix.geoff"] || null })],
+    ["trix.market", sniffTrixMarket()],
+    ["trix.money", sniffTrixMoney()],
+    ["trix.boxes", sniffTrixBoxes()],
+    ["trix.meme.market", sniffTrixMemeMarket()],
+    ["trix.frontpage", sniffTrixFrontpage()],
+    ["trix.tiers", sniffTrixTiers()],
+    ["trix.fee.config", sniffTrixFeeConfig()],
+  ];
 }
 
 export async function runSniff({ forceMiningSurface = false, previous = null } = {}) {
@@ -3486,13 +3543,7 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
     ["geoff.product.lanes", sniffGeoffProductLanes()],
     ["geoff.public.surfaces", sniffGeoffPublicSurfaces()],
     ["geoff.subscription", sniffGeoffSubscription()],
-    ["trix.geoff", sniffTrixGeoff({ previous: previous?.sources?.["trix.geoff"] || null })],
-    ["trix.market", sniffTrixMarket()],
-    ["trix.money", sniffTrixMoney()],
-    ["trix.meme.market", sniffTrixMemeMarket()],
-    ["trix.frontpage", sniffTrixFrontpage()],
-    ["trix.tiers", sniffTrixTiers()],
-    ["trix.fee.config", sniffTrixFeeConfig()],
+    ...trixAttempts(previous),
     ["stacknet.health", sniffStacknetHealth()],
     ["stacknet.root", sniffStacknetRoot()],
     ["stacknet.network", sniffStacknetNetwork()],
@@ -3509,7 +3560,7 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
     ["surface.mining", sniffMiningSurface(forceMiningSurface)],
     ["geoff.keys.9g", sniffNodeKeys9g()],
     ["opencode.zenerr", sniffZenErrorShape()],
-  ].map(([source, attempt]) => observeSource(source, attempt)));
+  ].map(([source, attempt]) => observeSource(source, attempt, previous?.sources?.[source])));
 
   const treasuryAddress =
     sources.find((s) => s.source === "stacknet.network")?.treasury?.treasuryAddress ||
@@ -3645,59 +3696,7 @@ miningArchiveGeneratedAt: bySource["surface.mining"]?.archiveGeneratedAt ?? null
       publicSurfacesLive: bySource["geoff.public.surfaces"]?.liveCount ?? null,
       publicSurfacesTotal: bySource["geoff.public.surfaces"]?.total ?? null,
       publicSurfacesFingerprint: bySource["geoff.public.surfaces"]?.fingerprint ?? null,
-trixGeoffCount: bySource["trix.geoff"]?.count ?? null,
-      trixGeoffPaidSol: bySource["trix.geoff"]?.paidSol ?? null,
-      trixGeoffFingerprint: bySource["trix.geoff"]?.fingerprint ?? null,
-      trixCardCount: bySource["trix.market"]?.cards?.count ?? null,
-      trixCardMaxMultiplier: bySource["trix.market"]?.cards?.maxMultiplier ?? null,
-      trixArtworkCount: bySource["trix.market"]?.artworks?.total ?? null,
-      trixArtworkPrinted: bySource["trix.market"]?.artworks?.printed ?? null,
-      trixArtworkSupply: bySource["trix.market"]?.artworks?.printedSupply ?? null,
-      trixArtworkCapped: Boolean(bySource["trix.market"]?.artworks?.capped),
-      trixAuctionCount: bySource["trix.market"]?.auctions?.active ?? null,
-      trixAuctionBidCount: bySource["trix.market"]?.auctions?.withBid ?? null,
-      trixTreasurySol: bySource["trix.market"]?.treasury?.balanceSol ?? null,
-      trixTreasuryPoints: bySource["trix.market"]?.treasury?.totalPoints ?? null,
-      trixActivityCount: bySource["trix.market"]?.activity?.items ?? null,
-      trixLeaderboardEntries: bySource["trix.market"]?.leaderboard?.entries ?? null,
-      trixRecentMints: bySource["trix.market"]?.recentMints ?? [],
-      trixLeaderboard: bySource["trix.market"]?.leaderboard?.rows ?? [],
-      trixLeaderboardCap: bySource["trix.market"]?.leaderboard?.capped ?? false,
-      trixMarketFingerprint: bySource["trix.market"]?.fingerprint ?? null,
-      trixMemeMarketCoins: bySource["trix.meme.market"]?.totalCoins ?? null,
-      trixMemeMarketTotalMc: bySource["trix.meme.market"]?.totalMarketCap ?? null,
-      trixMemeMarketTotalVol: bySource["trix.meme.market"]?.totalVolume24h ?? null,
-      trixMemeMarketTotalLiq: bySource["trix.meme.market"]?.totalLiquidity ?? null,
-      trixMemeMarketTotalHolders: bySource["trix.meme.market"]?.totalHolders ?? null,
-      trixMemeMarketSnapshotAt: bySource["trix.meme.market"]?.snapshotAt ?? null,
-      trixMemeMarketTypeCounts: bySource["trix.meme.market"]?.typeCounts ?? null,
-      trixMemeMarketFingerprint: bySource["trix.meme.market"]?.fingerprint ?? null,
-      trixFrontpageFeatured: bySource["trix.frontpage"]?.featuredCount ?? null,
-      trixFrontpageBoosted: bySource["trix.frontpage"]?.boostedCount ?? null,
-      trixFrontpageRecent: bySource["trix.frontpage"]?.recentCount ?? null,
-      trixFrontpageBuiltAt: bySource["trix.frontpage"]?.builtAt ?? null,
-      trixFrontpageFingerprint: bySource["trix.frontpage"]?.fingerprint ?? null,
-      trixTiersCount: bySource["trix.tiers"]?.count ?? null,
-      trixTiersFingerprint: bySource["trix.tiers"]?.fingerprint ?? null,
-      trixFeeWallet: bySource["trix.fee.config"]?.feeWallet ?? null,
-      trixFeeTreasuryWallet: bySource["trix.fee.config"]?.treasuryWallet ?? null,
-      trixFeeBps: bySource["trix.fee.config"]?.feeBps ?? null,
-      trixFeeConfigFingerprint: bySource["trix.fee.config"]?.fingerprint ?? null,
-      trixMoneyOk: Boolean(bySource["trix.money"]?.ok),
-      trixMoneyTreasurySol: bySource["trix.money"]?.treasury?.balanceSol ?? null,
-      trixMoneyTreasuryOnChain: bySource["trix.money"]?.treasury?.balanceSolOnChain ?? null,
-      trixMoneyGeoLeg1Sol: bySource["trix.money"]?.geoffLeg1?.balanceSol ?? null,
-      trixMoneyTreasuryPoints: bySource["trix.money"]?.treasury?.totalPoints ?? null,
-      trixMoneyPlatformFeeBps: bySource["trix.money"]?.feeSplit?.platformFeeBps ?? null,
-      trixMoneyCreatorFeeBps: bySource["trix.money"]?.feeSplit?.creatorFeeBps ?? null,
-      trixMoneyLaunchFeeSol: bySource["trix.money"]?.feeSplit?.platformLaunchFeeSol ?? null,
-      trixMoneyRecentBuysSol: bySource["trix.money"]?.fees?.recentBuysSol ?? null,
-      trixMoneyRecentSellsSol: bySource["trix.money"]?.fees?.recentSellsSol ?? null,
-      trixMoneyRecentNetSol: bySource["trix.money"]?.fees?.recentNetSol ?? null,
-      trixMoneyTopCoins: bySource["trix.money"]?.fees?.topCoins ?? [],
-      trixMoneyMarketVolume24h: bySource["trix.money"]?.market24h?.volume24h ?? null,
-      trixMoneyMarketLiquidity: bySource["trix.money"]?.market24h?.liquidity ?? null,
-      trixMoneyFingerprint: bySource["trix.money"]?.fingerprint ?? null,
+      ...summarizeTrix(bySource),
       subscriptionLiveCount: bySource["geoff.subscription"]?.liveCount ?? null,
       subscriptionTotal: bySource["geoff.subscription"]?.total ?? null,
       subscriptionFingerprint: bySource["geoff.subscription"]?.fingerprint ?? null,
@@ -3706,31 +3705,164 @@ trixGeoffCount: bySource["trix.geoff"]?.count ?? null,
       subscriptionBilling: Boolean(bySource["geoff.subscription"]?.billingLive),
       subscriptionPlans: Boolean(bySource["geoff.subscription"]?.plansLive),
       subscriptionRoute: Boolean(bySource["geoff.subscription"]?.subscriptionLive),
-      healthySources: sources.filter((s) => s.ok).length,
-      skippedSources: sources.filter((s) => s.skipped).length,
-      failedSources: sources.filter((s) => !s.ok && !s.skipped).length,
-      totalSources: sources.length,
-      coverage: sources.map((s) => ({
-        source: s.source,
-        ok: Boolean(s.ok),
-        skipped: Boolean(s.skipped),
-        reason: s.reason || s.error || null,
-        ms: s.ms ?? null,
-      })),
+      ...summarizeCoverage(bySource),
     },
   };
 }
 
-export async function sniffStacknetMinute() {
+export function summarizeTrix(bySource) {
+  const geoff = bySource["trix.geoff"];
+  const market = bySource["trix.market"];
+  const meme = bySource["trix.meme.market"];
+  const frontpage = bySource["trix.frontpage"];
+  const tiers = bySource["trix.tiers"];
+  const fee = bySource["trix.fee.config"];
+  const money = bySource["trix.money"];
+  const boxes = bySource["trix.boxes"];
+  return {
+    trixGeoffOk: Boolean(geoff?.ok),
+    trixGeoffCount: geoff?.count ?? null,
+    trixGeoffPaidSol: geoff?.paidSol ?? null,
+    trixGeoffFingerprint: geoff?.fingerprint ?? null,
+    // Explicit nulls clear retired fields in persisted partial-snapshot summaries.
+    trixCardCount: null,
+    trixCardMaxMultiplier: null,
+    trixArtworkCount: market?.artworks?.total ?? null,
+    trixArtworkPrinted: market?.artworks?.printed ?? null,
+    trixArtworkSupply: market?.artworks?.printedSupply ?? null,
+    trixArtworkCapped: Boolean(market?.artworks?.capped),
+    trixAuctionCount: market?.auctions?.active ?? null,
+    trixAuctionBidCount: market?.auctions?.withBid ?? null,
+    trixTreasurySol: market?.treasury?.balanceSol ?? null,
+    trixTreasuryPoints: market?.treasury?.totalPoints ?? null,
+    trixActivityCount: market?.activity?.items ?? null,
+    trixLeaderboardEntries: market?.leaderboard?.entries ?? null,
+    trixRecentMints: market?.recentMints ?? [],
+    trixLeaderboard: market?.leaderboard?.rows ?? [],
+    trixLeaderboardCap: market?.leaderboard?.capped ?? false,
+    trixMarketFingerprint: market?.fingerprint ?? null,
+    trixMemeMarketOk: Boolean(meme?.ok),
+    trixMemeMarketStale: Boolean(meme?.stale),
+    trixMemeMarketCoins: meme?.totalCoins ?? null,
+    trixMemeMarketCatalogTotal: meme?.catalogTotal ?? null,
+    trixMemeMarketTotalMc: meme?.totalMarketCap ?? null,
+    trixMemeMarketTotalVol: null,
+    trixMemeMarketTotalLiq: null,
+    trixMemeMarketTotalHolders: null,
+    trixMemeMarketSnapshotAt: null,
+    trixMemeMarketDataUpdatedAt: meme?.dataUpdatedAt ?? null,
+    trixMemeMarketTypeCounts: (meme?.coins || []).reduce((counts, coin) => {
+      if (coin.type === "Agent" || coin.type === "Token") counts[coin.type] = (counts[coin.type] || 0) + 1;
+      return counts;
+    }, {}),
+    trixMemeMarketFingerprint: meme?.fingerprint ?? null,
+    trixFrontpageFeatured: frontpage?.featuredCount ?? null,
+    trixFrontpageBoosted: frontpage?.boostedCount ?? null,
+    trixFrontpageRecent: frontpage?.recentCount ?? null,
+    trixFrontpageBuiltAt: frontpage?.builtAt ?? null,
+    trixFrontpageFingerprint: frontpage?.fingerprint ?? null,
+    trixTiersCount: tiers?.count ?? null,
+    trixTiersFingerprint: tiers?.fingerprint ?? null,
+    trixFeeWallet: fee?.feeWallet ?? null,
+    trixFeeTreasuryWallet: fee?.treasuryWallet ?? null,
+    trixFeeBps: fee?.feeBps ?? null,
+    trixFeeConfigFingerprint: fee?.fingerprint ?? null,
+    trixBoxesOk: Boolean(boxes?.ok),
+    trixBoxesStale: Boolean(boxes?.stale),
+    trixBoxesStatus: boxes?.status ?? null,
+    trixBoxesCheckedAt: boxes?.checkedAt ?? null,
+    trixBoxesLastAttemptAt: boxes?.lastAttemptAt ?? null,
+    trixBoxesSourceUrl: boxes?.sourceUrl ?? null,
+    trixBoxesShopUrl: boxes?.shopUrl ?? null,
+    trixBoxesTopCoins: boxes?.topCoins ?? null,
+    trixBoxesBiggestPulls: boxes?.biggestPulls ?? null,
+    trixBoxesTopCollectors: boxes?.topCollectors ?? null,
+    trixBoxesReason: boxes?.reason ?? null,
+    trixBoxesFingerprint: boxes?.fingerprint ?? null,
+    trixMoneyOk: Boolean(money?.ok),
+    trixMoneyRecentTrades: money?.recentTrades ?? null,
+    trixMoneyTreasurySol: money?.treasury?.balanceSol ?? null,
+    trixMoneyTreasuryOnChain: money?.treasury?.balanceSolOnChain ?? null,
+    trixMoneyGeoLeg1Sol: money?.geoffLeg1?.balanceSol ?? null,
+    trixMoneyTreasuryPoints: money?.treasury?.totalPoints ?? null,
+    trixMoneyPlatformFeeBps: money?.feeSplit?.platformFeeBps ?? null,
+    trixMoneyCreatorFeeBps: money?.feeSplit?.creatorFeeBps ?? null,
+    trixMoneyLaunchFeeSol: money?.feeSplit?.platformLaunchFeeSol ?? null,
+    trixMoneyRecentBuysSol: money?.fees?.recentBuysSol ?? null,
+    trixMoneyRecentSellsSol: money?.fees?.recentSellsSol ?? null,
+    trixMoneyRecentNetSol: money?.fees?.recentNetSol ?? null,
+    trixMoneyTopCoins: money?.fees?.topCoins ?? [],
+    trixMoneyMarketVolume24h: null,
+    trixMoneyMarketLiquidity: null,
+    trixMoneyFingerprint: money?.fingerprint ?? null,
+  };
+}
+
+export function summarizeCoverage(bySource) {
+  const sources = Object.values(bySource);
+  return {
+    healthySources: sources.filter((s) => s.ok && !s.skipped).length,
+    skippedSources: sources.filter((s) => s.skipped).length,
+    failedSources: sources.filter((s) => !s.ok && !s.skipped).length,
+    partialSources: sources.filter((s) => s.partial).length,
+    totalSources: sources.length,
+    coverage: sources.map((s) => ({
+      source: s.source,
+      optional: Boolean(s.optional),
+      ok: Boolean(s.ok),
+      stale: Boolean(s.stale),
+      partial: Boolean(s.partial),
+      skipped: Boolean(s.skipped),
+      checkedAt: s.checkedAt ?? null,
+      lastAttemptAt: s.lastAttemptAt ?? null,
+      reason: s.reason || s.error || null,
+      ms: s.ms ?? null,
+    })),
+  };
+}
+
+export async function runMinuteSniff({ previous = null } = {}) {
+  const takenAt = new Date().toISOString();
+  const started = Date.now();
+  // Reserve the shared slots for all TRIX stages, including follow-up histories.
+  // Stacknet's 18s clocks start now and include this wait, not an extra 18s later.
+  const trixRead = Promise.all(trixAttempts(previous).map(([source, attempt]) =>
+    observeSource(source, attempt, previous?.sources?.[source]),
+  ));
+  const [trix, stacknet] = await Promise.all([
+    trixRead,
+    sniffStacknetMinute({ previous, waitFor: trixRead }),
+  ]);
+  const sources = {
+    ...(previous?.sources || {}),
+    ...stacknet.sources,
+    ...Object.fromEntries(trix.map((source) => [source.source, source])),
+  };
+  return {
+    ...(previous || {}),
+    id: `snap_${Date.now().toString(36)}`,
+    takenAt,
+    durationMs: Date.now() - started,
+    sources,
+    summary: {
+      ...(previous?.summary || {}),
+      ...stacknet.summary,
+      ...summarizeTrix(sources),
+      ...summarizeCoverage(sources),
+    },
+  };
+}
+
+export async function sniffStacknetMinute({ previous = null, waitFor = null } = {}) {
   const takenAt = new Date().toISOString();
   const started = Date.now();
   const sources = await Promise.all([
-    ["stacknet.health", sniffStacknetHealth()],
-    ["stacknet.root", sniffStacknetRoot()],
-    ["stacknet.network", sniffStacknetNetwork()],
-    ["stacknet.node", sniffStacknetNode()],
-    ["stacknet.models", sniffStacknetModels()],
-  ].map(([source, attempt]) => observeSource(source, attempt)));
+    ["stacknet.health", sniffStacknetHealth({ waitFor })],
+    ["stacknet.root", sniffStacknetRoot({ waitFor })],
+    ["stacknet.network", sniffStacknetNetwork({ waitFor })],
+    ["stacknet.node", sniffStacknetNode({ waitFor })],
+    ["stacknet.models", sniffStacknetModels({ waitFor })],
+  ].map(([source, attempt]) => observeSource(source, attempt, previous?.sources?.[source])));
   const bySource = Object.fromEntries(sources.map((source) => [source.source, source]));
   return {
     takenAt,

@@ -11,13 +11,7 @@ import {
 } from "../server/shared-store.js";
 import {
   runSniff,
-  sniffStacknetMinute,
-  sniffTrixFeeConfig,
-  sniffTrixFrontpage,
-  sniffTrixGeoff,
-  sniffTrixMarket,
-  sniffTrixMemeMarket,
-  sniffTrixTiers,
+  runMinuteSniff,
 } from "../server/sniffer.js";
 import { computeTemperature, translate } from "../server/translator.js";
 import {
@@ -84,43 +78,10 @@ export default async function handler(req, res) {
         ),
       );
     } else {
-      const [observed, stacknet, trixMarket, memeMarket, frontpage, tiers, feeConfig] = await Promise.all([
-        sniffTrixGeoff({
-          previous: previous.latest?.sources?.["trix.geoff"] || null,
-        }),
-        sniffStacknetMinute(),
-        sniffTrixMarket(),
-        sniffTrixMemeMarket(),
-        sniffTrixFrontpage(),
-        sniffTrixTiers(),
-        sniffTrixFeeConfig(),
-      ]);
-      const base = previous.latest || {
-        takenAt: stacknet.takenAt,
-        durationMs: Math.max(observed.ms || 0, stacknet.durationMs || 0),
-        sources: {},
-        summary: {},
-      };
-      snapshot = preserveTrixHistory(previous.latest, {
-        ...base,
-        id: `snap_${Date.now().toString(36)}`,
-        takenAt: stacknet.takenAt,
-        durationMs: Math.max(observed.ms || 0, stacknet.durationMs || 0),
-        sources: {
-          ...(base.sources || {}),
-          ...stacknet.sources,
-          "trix.geoff": observed,
-          "trix.market": trixMarket,
-          "trix.meme.market": memeMarket,
-          "trix.frontpage": frontpage,
-          "trix.tiers": tiers,
-          "trix.fee.config": feeConfig,
-        },
-        summary: {
-          ...(base.summary || {}),
-          ...stacknet.summary,
-        },
-      });
+      snapshot = preserveTrixHistory(
+        previous.latest,
+        await runMinuteSniff({ previous: previous.latest }),
+      );
     }
     const newEvents = translate(previous.latest, snapshot);
     const events = pruneEvents([...newEvents, ...(previous.events || [])]);
@@ -136,7 +97,7 @@ export default async function handler(req, res) {
         state: {
           startedAt: previous.state?.startedAt || new Date().toISOString(),
           lastPollAt: profile === "full" ? snapshot.takenAt : previous.state?.lastPollAt || null,
-          lastTrixPollAt: snapshot.sources?.["trix.geoff"]?.checkedAt || new Date().toISOString(),
+          lastTrixPollAt: snapshot.sources?.["trix.geoff"]?.checkedAt || previous.state?.lastTrixPollAt || null,
           lastStacknetPollAt: snapshot.summary?.stacknetCheckedAt || null,
           lastError: null,
           pollCount: (previous.state?.pollCount || 0) + 1,

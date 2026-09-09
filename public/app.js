@@ -7,6 +7,7 @@ import { icon } from "./icons.js";
 import { CLIENT_TOKEN_PLAN } from "./token-plan-fallback.js";
 import { initCompactView } from "./compact-view.js";
 import { renderProvenance, sourceDescription } from "./provenance.js";
+import { initTrixDesk, renderTrixDesk } from "./trix-desk.js";
 import {
   DEFAULT_HEATMAP_DAYS,
   buildHeatmapGrid,
@@ -229,34 +230,6 @@ const els = {
   trixGeoffCount: document.getElementById("trixGeoffCount"),
   trixGeoffMeta: document.getElementById("trixGeoffMeta"),
   trixGeoffReceipt: document.getElementById("trixGeoffReceipt"),
-  trixMarketCount: document.getElementById("trixMarketCount"),
-  trixMarketMeta: document.getElementById("trixMarketMeta"),
-  trixMarketStats: document.getElementById("trixMarketStats"),
-  trixMemeMarketCount: document.getElementById("trixMemeMarketCount"),
-  trixMemeMarketMeta: document.getElementById("trixMemeMarketMeta"),
-  trixMemeMarketStats: document.getElementById("trixMemeMarketStats"),
-  trixArtworkReportMeta: document.getElementById("trixArtworkReportMeta"),
-  trixArtworkGrid: document.getElementById("trixArtworkGrid"),
-  trixLeaderboardMeta: document.getElementById("trixLeaderboardMeta"),
-  trixLeaderboardBody: document.getElementById("trixLeaderboardBody"),
-  trixMoneyMeta: document.getElementById("trixMoneyMeta"),
-  moneyTreasurySol: document.getElementById("moneyTreasurySol"),
-  moneyTreasuryOnChain: document.getElementById("moneyTreasuryOnChain"),
-  moneyTreasuryPoints: document.getElementById("moneyTreasuryPoints"),
-  moneyTreasuryAddr: document.getElementById("moneyTreasuryAddr"),
-  moneyGeoLeg1Sol: document.getElementById("moneyGeoLeg1Sol"),
-  moneyGeoLeg1Addr: document.getElementById("moneyGeoLeg1Addr"),
-  moneyPlatformFee: document.getElementById("moneyPlatformFee"),
-  moneyCreatorFee: document.getElementById("moneyCreatorFee"),
-  moneyLaunchFee: document.getElementById("moneyLaunchFee"),
-  moneyBuysSol: document.getElementById("moneyBuysSol"),
-  moneySellsSol: document.getElementById("moneySellsSol"),
-  moneyNetSol: document.getElementById("moneyNetSol"),
-  moneyWallets: document.getElementById("moneyWallets"),
-  moneyVolume24h: document.getElementById("moneyVolume24h"),
-  moneyLiquidity: document.getElementById("moneyLiquidity"),
-  moneySnapshotAt: document.getElementById("moneySnapshotAt"),
-  moneyTopCoinsBody: document.getElementById("moneyTopCoinsBody"),
   keysoldUsd: document.getElementById("keysoldUsd"),
   keysoldMeta: document.getElementById("keysoldMeta"),
   keys9gValue: document.getElementById("keys9gValue"),
@@ -543,7 +516,11 @@ function pruneWindow(list, getAt = (x) => x.at) {
 }
 
 function saveMemory() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(memory));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(memory));
+  } catch {
+    // Rendering and refresh must still work with blocked or full browser storage.
+  }
 }
 
 function hydrateIcons(root = document) {
@@ -623,7 +600,7 @@ function setTrust(payload) {
   );
   const backend = payload?.config?.sharedStoreBackend || "";
   el.className = `pill trust ${shared ? "shared" : "local"}`;
-  el.textContent = shared ? "universal live" : "local desk";
+  el.textContent = shared ? "shared" : "local";
   el.title = shared
     ? `One live desk for every browser · ${backend || "shared"} · ${payload?.config?.sharedStoreUrl || ""}`
     : "Local file desk — this machine only";
@@ -650,7 +627,30 @@ function fmtCompactNumber(n) {
 /* ---- Proof popups · receipts behind every metric ---- */
 const SN_BASE = "https://stacknet.magma-rpc.com";
 let lastLatest = null;
+let lastPayload = null;
+let refreshPending = false;
+let lastReadAt = 0;
 const SOLANA_DEFAULT = "D2KL4HWbc5URqBti9XLf2DwtiDYJs9wbX6z7tyWLoiH2";
+
+function renderSync(payload = lastPayload) {
+  const time = Date.parse(payload?.latest?.takenAt || "");
+  const seconds = Number.isFinite(time) ? Math.max(0, Math.floor((Date.now() - time) / 1000)) : null;
+  const recent = seconds !== null && seconds < 180;
+  const failed = Boolean(payload?.error || payload?.state?.lastError);
+  const label = failed ? "Sync error" : seconds === null ? "Waiting for collector" : recent ? "Collector current" : "Collector delayed";
+  setConnection(recent && !failed ? "live" : "error", recent && !failed ? "synced" : "delayed");
+  const status = document.getElementById("syncStatus");
+  const meta = document.getElementById("syncMeta");
+  if (status) {
+    status.textContent = label;
+    status.dataset.state = recent && !failed ? "current" : "delayed";
+  }
+  if (meta) {
+    const age = seconds === null ? "No saved data" : seconds < 60 ? `${seconds}s ago` : `${Math.floor(seconds / 60)}m ago`;
+    meta.textContent = `Last collection ${age} · auto refresh 15s`;
+    meta.title = `Collection: ${payload?.latest?.takenAt || "unknown"}. Last browser read: ${lastReadAt ? new Date(lastReadAt).toISOString() : "none"}. Each source and record has its own clock.`;
+  }
+}
 
 const PROOFS = {
   stackVersion: {
@@ -809,36 +809,6 @@ const PROOFS = {
       "curl -s 'https://api.mainnet-beta.solana.com' -X POST -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getSignaturesForAddress\",\"params\":[\"2Ag1QgyyJj2nS6nD6SLbpAUFaWPhaDrmHwrGwWpMqV9K\",{\"limit\":100}]}'",
     ],
   },
-  trixMarket: {
-    title: "TRIX collectibles",
-    explain:
-      "Counts read from TRIX public APIs: boost Card roster, minted artworks (within TRIX's 200-item /api/artworks window — pagination params are ignored by that endpoint), active listings, treasury, pre-order flag and status, and the public activity feed. The bottom community reports show TRIX's own published identity only: newest artwork titles/images/mint addresses plus the leaderboard's top-100 username + wallet rows — no holder, auction bidder, or artwork-owner data beyond what TRIX itself publishes is kept or displayed. The TCG flag is API-reported (false) and no endpoint represents physical packaging.",
-    sources: ["trix.market"],
-    fields: [
-      "trixCardCount",
-      "trixCardMaxMultiplier",
-      "trixArtworkCount",
-      "trixArtworkPrinted",
-      "trixArtworkSupply",
-      "trixArtworkCapped",
-      "trixAuctionCount",
-      "trixAuctionBidCount",
-      "trixTreasurySol",
-      "trixTreasuryPoints",
-      "trixActivityCount",
-      "trixLeaderboardEntries",
-      "trixTcgActive",
-      "trixPreorderOpened",
-      "trixMarketFingerprint",
-    ],
-    curls: [
-      "curl -s https://trix.market/api/cards",
-      "curl -s https://trix.market/api/artworks",
-      "curl -s https://trix.market/api/auctions",
-      "curl -s https://trix.market/api/treasury",
-      "curl -s https://trix.market/api/activity",
-    ],
-  },
 };
 
 const CARD_PROOF_ORDER = [
@@ -854,7 +824,6 @@ const CARD_PROOF_ORDER = [
 "ghostCount",
   "fleetCount",
   "x402Downloads",
-  "trixMarket",
   "mining",
 ];
 
@@ -1054,8 +1023,8 @@ function renderMetrics(latest) {
       : [];
   const tokenOwner =
     s.tokenPressOwner || s.tokenPressAuthority || tokenSource?.owner || tokenSource?.authority || "unknown";
-  if (els.stackVersion) els.stackVersion.innerHTML = (s.stacknetVersion ? '<span class="live-dot"></span>' : '') + (s.stacknetVersion || "—");
-  if (els.stackHealth) els.stackHealth.textContent = s.stacknetStatus || "—";
+  if (els.stackVersion) els.stackVersion.textContent = s.stacknetVersion || s.stacknetStatus || "—";
+  if (els.stackHealth) els.stackHealth.textContent = s.stacknetVersion ? s.stacknetStatus || "Status unknown" : "Public health";
   if (els.stackNodes) els.stackNodes.textContent =
     s.nodes != null && s.gpus != null ? `${s.nodes} / ${s.gpus}` : "—";
   const loadBits = [];
@@ -1085,7 +1054,7 @@ function renderMetrics(latest) {
   }
   if (els.pileValue) {
     const src = latest?.sources?.["stacknet.pile"];
-    const pile = Number(s.pile ?? src?.pile);
+    const pile = s.pile ?? src?.pile;
     els.pileValue.textContent = Number.isFinite(pile) ? fmtCompactNumber(pile) : "—";
     els.pileValue.title =
       `Network PILE raw value: ${src?.raw ?? s.pile ?? "—"}\n` +
@@ -1094,19 +1063,7 @@ function renderMetrics(latest) {
   }
   if (els.pileMeta) {
     const src = latest?.sources?.["stacknet.pile"];
-    const tech = [];
-    const pileEvt = (latest?.events || []).find((e) => e?.kind === "pile");
-    if (pileEvt && Number.isFinite(pileEvt?.details?.delta) && pileEvt.details.delta !== 0) {
-      const d = pileEvt.details.delta;
-      tech.push(`${d > 0 ? "▲" : "▼"}${fmtCompactNumber(Math.abs(d))} /poll`);
-    }
-    if (src?.ok != null) tech.push(src.ok ? "live" : "failed");
-    if (src?.status) tech.push(`HTTP ${src.status}`);
-    if (src?.ms != null) tech.push(`${src.ms}ms`);
-    if (src?.checkedAt) tech.push(`checked ${fmtTime(src.checkedAt)}`);
-    els.pileMeta.textContent =
-      "black-box total · self-reported · may span months of mining / swap rewards / bubbles" +
-      (tech.length ? ` · ${tech.join(" · ")}` : "");
+    els.pileMeta.textContent = "Reported unredeemed total";
     els.pileMeta.title =
       "StackNet's Node-Key 'pile' — unredeemed earnings across Node Keys that are at least 10% utilized. " +
       "It is a single self-reported aggregate field from /api/v2/node-keys/pile. This total is a speculative " +
@@ -1131,7 +1088,7 @@ function renderMetrics(latest) {
     if (s.treasuryRpcOk) {
       bits.push(`chain ${Number(s.treasuryRpcSol ?? 0).toFixed(3)} SOL`);
       if (s.treasuryRpcSigCount != null)
-        bits.push(`${s.treasuryRpcSigCount} lifetime tx`);
+        bits.push(`${s.treasuryRpcSigCount} sampled tx`);
     }
     if (!bits.length && s.solPriceUsd != null)
       bits.push(`SOL $${Number(s.solPriceUsd).toFixed(2)}`);
@@ -1140,7 +1097,8 @@ function renderMetrics(latest) {
     const d24 = paperworkVelocity(pwHistoryCache.series, 24 * 3600e3);
     if (d24 != null && Math.abs(d24) > 0.5)
       bits.push(`<span class="${d24 >= 0 ? "vel-up" : "vel-down"}">${d24 >= 0 ? "▲" : "▼"} ${fmtCompactUsd(Math.abs(d24))}</span>/24h`);
-    if (els.paperworkMeta) els.paperworkMeta.innerHTML = bits.length ? bits.join(" · ") : "—";
+    els.paperworkMeta.textContent = s.metaproofsPaidUsd != null
+      ? `Paid ${fmtCompactUsd(Number(s.metaproofsPaidUsd))} · reported` : "Reported ledger";
     els.paperworkMeta.title = [
       `Booked vs paid metaproof ledger · chain balance via public Solana RPC${
         s.treasuryAddress ? ` · ${s.treasuryAddress}` : ""
@@ -1161,7 +1119,7 @@ function renderMetrics(latest) {
   }
   const paper = tokenRows.find((token) => token.symbol === "PAPER") || null;
   if (els.paperSupply) {
-    els.paperSupply.textContent = Number.isFinite(Number(paper?.supplyUi))
+    els.paperSupply.textContent = paper?.supplyUi != null && Number.isFinite(Number(paper.supplyUi))
       ? Number(paper.supplyUi).toLocaleString(undefined, {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
@@ -1180,28 +1138,15 @@ function renderMetrics(latest) {
   }
   if (els.trixGeoffMeta) {
     const paidSol = Number(trixGeoff?.paidSol);
-    const latestFee = Number(trixGeoff?.latest?.feeSol);
-    const latestPaidAt = trixGeoff?.latest?.createdAt;
-    const checkedAt = trixGeoff?.checkedAt;
-    const scannedMints = trixGeoff?.scannedTokenMints?.length || 0;
-    const launchTotal = Number(trixGeoff?.launchTotal);
-    const backfill = Number.isFinite(launchTotal) && scannedMints < launchTotal
-      ? ` · backfill ${scannedMints}/${launchTotal} mints`
-      : "";
     const inferred = Number(trixGeoff?.inferredCount) || 0;
     const unlabeled = Number(trixGeoff?.unlabeledCount) || 0;
-    const stainBit = inferred > 0
-      ? ` · ${inferred} unlabeled matched by recipient`
-      : unlabeled > 0
-        ? ` · ${unlabeled} unlabeled off-rails`
-        : "";
     els.trixGeoffMeta.textContent = Number.isFinite(paidSol) && paidSol > 0
-      ? `${paidSol.toFixed(3)} SOL observed${Number.isFinite(latestFee) ? ` · latest ${latestFee.toFixed(3)} SOL` : ""}${latestPaidAt ? ` · last paid ${fmtTime(latestPaidAt)}` : ""}${checkedAt ? ` · checked ${fmtTime(checkedAt)}` : ""}${backfill}${stainBit}`
-      : trixGeoff?.reason || "waiting for paid generations";
+      ? `${paidSol.toFixed(3)} SOL observed`
+      : "No paid records yet";
     els.trixGeoffMeta.title =
       `TRIX supplies the Geoff provider label, fee amount, network, and transaction signature. The global recent feed can be saturated by other generators, so the collector also rotates through active token histories (${trixGeoff?.activeRefreshCount || 0}/${trixGeoff?.activeTokenCount || 0} this pass). Last paid is activity time; checked is collector time. ${inferred > 0 ? `TRIX stopped labeling provider=geoff; ${inferred} blank-labeled payment${inferred === 1 ? "" : "s"} whose transfer recipients match the known TRIX provider rails are folded in as inferred (never claimed as verified).` : unlabeled > 0 ? `${unlabeled} blank-labeled paid generation${unlabeled === 1 ? " was" : "s were"} seen this pass but their recipients do not match the known provider rails.` : ""}This does not independently prove geoff.ai operator identity or that the generated image was minted as an NFT.`;
   }
-if (els.trixGeoffReceipt) {
+  if (els.trixGeoffReceipt) {
     const signature = trixGeoff?.latest?.txSignature;
     els.trixGeoffReceipt.hidden = !signature;
     if (signature) els.trixGeoffReceipt.href = `https://solscan.io/tx/${encodeURIComponent(signature)}`;
@@ -1211,32 +1156,28 @@ if (els.trixGeoffReceipt) {
     const miners = mining?.miners60m;
     const payouts = mining?.payouts60m;
     const valid =
-      mining?.ok && Number.isFinite(Number(miners)) && miners > 0;
+      mining?.ok && miners != null && Number.isFinite(Number(miners));
     els.miningMiners.textContent = valid
-      ? `${Number(miners).toLocaleString()} wallets paid / 60m`
+      ? `${Number(miners).toLocaleString()} wallets`
       : "—";
     if (els.miningReceipt) els.miningReceipt.hidden = !valid;
     if (els.miningMeta) {
-      const bits = [];
-      if (mining?.claimsOn === false) bits.push("claim facet OFF — payout silent");
-      if (mining?.payoutDate) bits.push(mining.payoutDate);
-      if (Number.isFinite(Number(payouts))) bits.push(`${payouts} payouts / 60m`);
-      if (mining?.miners60mAt) bits.push(`estimated ${fmtTime(mining.miners60mAt)}`);
-      if (!mining?.ok && mining?.reason) bits.push("market read failed");
-      els.miningMeta.textContent = bits.length ? bits.join(" · ") : "waiting on payout ledger";
+      els.miningMeta.textContent = mining?.claimsOn === false ? "Claims off · estimate"
+        : payouts != null ? `${payouts} payouts · estimate` : "Payout sample";
     }
     if (els.miningMiners && valid) {
       els.miningMiners.title =
         `Distinct wallets that received a mining reward in the last 60 minutes (TRIX surface + on-chain payout ledger). Not all miners are paid every hour and unpaid claims are invisible on-chain, so this is a floor, not an official census. ${mining?.miners60mAt ? `Estimated at ${mining.miners60mAt}.` : ""}${mining?.silentSince ? ` Last payout ${mining.silentSince}.` : ""}`;
     }
   }
-  renderTrixMarket(s);
-  renderTrixMemeMarket(s);
-  renderTrixReports();
-  renderTrixMoney(s);
+  renderTrixDesk(latest);
   renderSettlementStatus(s);
   renderKeySale(s);
   renderKey9g(s);
+  document.querySelectorAll(".metrics > .metric").forEach((card) => {
+    const value = card.querySelector(":scope > strong");
+    card.classList.toggle("metric-empty", !value?.textContent.trim() || value.textContent.trim() === "—");
+  });
   if (els.ghostCount) {
     const ghosts = Array.isArray(s.zenGhostIds) ? s.zenGhostIds : [];
     els.ghostCount.textContent = ghosts.length ? String(ghosts.length) : "0";
@@ -1286,446 +1227,10 @@ if (els.trixGeoffReceipt) {
   }
   if (els.subscriptionMeta) {
     const labels = Array.isArray(s.subscriptionLiveLabels) ? s.subscriptionLiveLabels : [];
-    const bits = labels.map((l) => l.toLowerCase());
-    els.subscriptionMeta.textContent = bits.length
-      ? bits.join(" · ")
-      : "no billing routes up yet";
+    els.subscriptionMeta.textContent = labels.length ? "Public routes · not users" : "No public routes";
     els.subscriptionMeta.title =
       "Public billing/plans/subscription route probe (API is auth-gated)";
   }
-}
-
-function renderTrixMarket(s) {
-  if (!els.trixMarketCount) return;
-  const fmt = (value, digits = 0) =>
-    Number.isFinite(Number(value)) && Number(value) !== 0
-      ? Number(value).toLocaleString(undefined, { maximumFractionDigits: digits })
-      : "—";
-  const marketData = lastLatest?.sources?.["trix.market"];
-  const cards = Array.isArray(marketData?.cards?.cards) ? marketData.cards.cards : [];
-  const artworks = marketData?.artworks || {};
-  if (cards.length) {
-    const top = cards
-      .filter((card) => card.active)
-      .sort((a, b) => (Number(b.multiplier) || 0) - (Number(a.multiplier) || 0))[0];
-    let text = `${cards.length} boost cards`;
-    if (top?.name && Number.isFinite(Number(top.multiplier))) {
-      text += ` · ${top.name} ${Number(top.multiplier).toLocaleString(undefined, { maximumFractionDigits: 2 })}x`;
-    }
-    els.trixMarketCount.textContent = text;
-    els.trixMarketCount.title =
-      "Boost Card roster reported by TRIX /api/cards with their stated multiplier and SOL ask. Artwork shown from TRIX's own image URLs. Artwork counts below are the /api/artworks window (API caps at 200 and ignores pagination).";
-  } else if (els.trixMarketMeta) {
-    els.trixMarketCount.textContent = finitePositive(artworks.total)
-      ? `${fmt(artworks.total)} artworks`
-      : "—";
-  }
-  if (els.trixMarketMeta) {
-    const bits = [];
-    if (marketData?.cardsCached) bits.push("card catalog cached");
-    if (marketData?.checkedAt) bits.push(`checked ${fmtTime(marketData.checkedAt)}`);
-    if (!marketData?.ok && marketData?.reason) bits.push("partial read");
-    els.trixMarketMeta.textContent = bits.length ? bits.join(" · ") : "waiting on TRIX public endpoints";
-  }
-  if (els.trixMarketStats) {
-    const stats = [];
-    const capNote = artworks.capped ? ` · API cap ${artworks.window}` : "";
-    if (finitePositive(artworks.total)) {
-      stats.push({
-        b: "Minted artworks",
-        i: `${fmt(artworks.total)}${capNote}`,
-      });
-    }
-    if (finitePositive(artworks.printedSupply)) {
-      stats.push({
-        b: "Printed copies",
-        i: `${fmt(artworks.printedSupply)} · ${fmt(artworks.printed)} works`,
-      });
-    }
-    const auctions = marketData?.auctions || {};
-    if (finitePositive(auctions.active)) {
-      const range = (auctions.minStartSol != null && auctions.maxStartSol != null && Number.isFinite(Number(auctions.minStartSol)) && Number.isFinite(Number(auctions.maxStartSol)))
-        ? ` · asks ${Number(auctions.minStartSol).toFixed(3)}–${Number(auctions.maxStartSol).toFixed(3)} SOL`
-        : "";
-      const bid = finitePositive(auctions.withBid) ? ` · ${fmt(auctions.withBid)} bid` : " · no bids yet";
-      stats.push({ b: "Active listings", i: `${fmt(auctions.active)}${bid}${range}` });
-    }
-    const treasury = marketData?.treasury || {};
-    if (treasury.balanceSol != null && Number.isFinite(Number(treasury.balanceSol))) {
-      stats.push({
-        b: "Treasury",
-        i: `${fmt(treasury.balanceSol, 2)} SOL${treasury.totalPoints != null ? ` · ${fmt(treasury.totalPoints)} pts` : ""}`,
-      });
-    }
-    const lb = marketData?.leaderboard || {};
-    if (lb.entries != null) {
-      stats.push({
-        b: "Leaderboard",
-        i: `${lb.capped ? "top" : ""} ${fmt(lb.entries)}${lb.totalPoints != null ? ` · ${fmt(lb.totalPoints)} pts` : ""}`,
-      });
-    }
-    const activity = marketData?.activity || {};
-    if (finitePositive(activity.items)) {
-      stats.push({ b: "Activity records", i: fmt(activity.items) });
-    }
-    let html = stats
-      .map(({ b, i }) => `<span><b>${escapeHtml(b)}</b><i>${escapeHtml(i)}</i></span>`)
-      .join("");
-    if (html) html = `<div class="trix-stats-bar">${html}</div>`;
-    const boostCards = cards
-      .filter((card) => card.imageUrl && card.active !== false)
-      .sort((a, b) => (Number(b.multiplier) || 0) - (Number(a.multiplier) || 0) || (Number(a.slot) || 0) - (Number(b.slot) || 0));
-    const cardChart = (card, i) => {
-      const price = card.priceSol != null && Number.isFinite(Number(card.priceSol))
-        ? `${Number(card.priceSol).toLocaleString(undefined, { maximumFractionDigits: 3 })} SOL`
-        : "—";
-      const mult = Number.isFinite(Number(card.multiplier))
-        ? `${Number(card.multiplier).toLocaleString(undefined, { maximumFractionDigits: 2 })}x`
-        : "—";
-      const src = trixImageUrl(card.imageUrl);
-      const discount = card.discountActive && Number.isFinite(Number(card.discountPercent)) && Number(card.discountPercent) > 0
-        ? `<span class="trix-discount">${Number(card.discountPercent).toLocaleString()}% off</span>`
-        : "";
-      return `<figure class="trix-card${i === 0 ? ' featured' : ''}" title="${escapeHtml(card.name || "")} · ${mult} · ${price}">
-        <img src="${escapeHtml(src)}" alt="${escapeHtml(card.name || "TRIX boost card")}" decoding="async">
-        <figcaption><b>${escapeHtml(card.name || "—")}</b><i>${mult} <span>${price}</span></i>${discount}</figcaption>
-      </figure>`;
-    };
-    if (boostCards.length) {
-      html += `<div class="trix-card-grid">${boostCards.map(cardChart).join("")}</div>`;
-      stats.push({ b: "Boost cards", i: "" });
-    }
-    if (!html) {
-      html = `<div class="trix-mkt-grid"><span class="unverified-price"><b>Market</b><i>waiting for a valid TRIX read</i></span></div>`;
-    }
-    els.trixMarketStats.innerHTML = html;
-    els.trixMarketStats.title =
-      marketData?.note ||
-      "Aggregate counts from TRIX public endpoints. /api/artworks caps at the 200 newest items (pagination is ignored by the API), so 'minted artworks' is the API window, not a full ledger. Auctions are active listings, most with no bid and no end time yet. Boost cards shown; identity details (leaderboard usernames/wallets, artwork creators) appear in the bottom TRIX reports section."
-  }
-}
-function renderTrixMemeMarket(s) {
-  if (!els.trixMemeMarketCount) return;
-  const memeMarket = lastLatest?.sources?.["trix.meme.market"];
-  const summary = lastLatest?.summary ?? {};
-  const coins = Array.isArray(memeMarket?.coins) ? memeMarket.coins : [];
-  const top10 = Array.isArray(memeMarket?.top10) ? memeMarket.top10 : coins.slice(0, 10);
-  const totalCoins = Number.isFinite(Number(memeMarket?.totalCoins))
-    ? Number(memeMarket.totalCoins)
-    : Number(summary.trixMemeMarketCoins) || 0;
-  const frontpage = lastLatest?.sources?.["trix.frontpage"];
-  const totalMc = memeMarket?.totalMarketCap || summary.trixMemeMarketTotalMc || 0;
-  const totalVol = memeMarket?.totalVolume24h || summary.trixMemeMarketTotalVol || 0;
-  const totalLiq = memeMarket?.totalLiquidity || summary.trixMemeMarketTotalLiq || 0;
-  const totalHolders = memeMarket?.totalHolders || summary.trixMemeMarketTotalHolders || 0;
-  const snapshotAt = memeMarket?.snapshotAt || summary.trixMemeMarketSnapshotAt || null;
-  const typeCounts = memeMarket?.typeCounts || null;
-  const fmt = (value, digits = 0) =>
-    Number.isFinite(Number(value)) && Number(value) !== 0
-      ? Number(value).toLocaleString(undefined, { maximumFractionDigits: digits })
-      : "—";
-  const fmtPct = (value) =>
-    Number.isFinite(Number(value)) ? `${value >= 0 ? "+" : ""}${Number(value).toFixed(2)}%` : "—";
-  if (els.trixMemeMarketCount) {
-    const featuredN = frontpage?.featuredCount ?? summary.trixFrontpageFeatured ?? 0;
-    const boostedN = frontpage?.boostedCount ?? summary.trixFrontpageBoosted ?? 0;
-    const recentN = frontpage?.recentCount ?? summary.trixFrontpageRecent ?? 0;
-    const builtAt = frontpage?.builtAt ?? summary.trixFrontpageBuiltAt ?? null;
-    if (top10.length) {
-      const top = top10[0];
-      const topName = top?.tokenName || top?.ticker || "—";
-      const topMc = fmt(top?.currentMarketCap, 0);
-      const fp = featuredN || boostedN ? ` · ${featuredN} featured · ${boostedN} boosted · ${recentN} recent` : "";
-      const age = builtAt ? ` · built ${fmtTime(builtAt)}` : "";
-      els.trixMemeMarketCount.textContent = `${totalCoins} tokens · ${topName} #1 (${topMc})${fp}${age}`;
-    } else {
-      els.trixMemeMarketCount.textContent = "—";
-    }
-  }
-  if (els.trixMemeMarketMeta) {
-    const bits = [];
-    if (typeCounts && Object.keys(typeCounts).length) {
-      bits.push(Object.entries(typeCounts).map(([k, n]) => `${n} ${k}`).join(" · "));
-    }
-    if (memeMarket?.checkedAt) bits.push(`checked ${fmtTime(memeMarket.checkedAt)}`);
-    if (!memeMarket?.ok && memeMarket?.reason) bits.push("partial read");
-    els.trixMemeMarketMeta.textContent = bits.length ? bits.join(" · ") : "waiting on TRIX /api/meme-market";
-  }
-  if (els.trixMemeMarketStats) {
-    const stats = [];
-    if (totalCoins > 0) {
-      stats.push({ b: "Total tokens", i: fmt(totalCoins) });
-      stats.push({ b: "Total market cap", i: fmt(totalMc, 0) });
-      stats.push({ b: "24h volume", i: fmt(totalVol, 0) });
-      stats.push({ b: "Total liquidity", i: fmt(totalLiq, 0) });
-      stats.push({ b: "Total holders", i: fmt(totalHolders, 0) });
-      if (snapshotAt) stats.push({ b: "Snapshot", i: new Date(snapshotAt).toLocaleString() });
-    }
-    let html = stats
-      .map(({ b, i }) => `<span><b>${escapeHtml(b)}</b><i>${escapeHtml(i)}</i></span>`)
-      .join("");
-    if (html) html = `<div class="trix-stats-bar">${html}</div>`;
-    // Top 10 table
-    if (top10.length) {
-      html += `
-        <div class="trix-meme-table-wrap">
-        <table class="trix-meme-table">
-          <thead>
-            <tr><th>#</th><th>Token</th><th>Type</th><th>Market Cap</th><th>Change 24h</th><th>Vol 24h</th><th>Liq</th><th>Holders</th><th>Buys/Sells</th><th>Wallets</th><th>Price</th></tr>
-          </thead>
-          <tbody>
-            ${top10
-              .map((c, i) => {
-                const name = c.tokenName || c.ticker || "—";
-                const ticker = c.ticker || "";
-                const typeLabel = c.type || "meme";
-                const typeKind = c.typeKind || "meme";
-                const logo = c.logoUrl
-                  ? `<img class="trix-coin-logo" src="${escapeHtml(trixImageUrl(c.logoUrl))}" alt="" loading="lazy" decoding="async">`
-                  : `<span class="trix-coin-logo placeholder">${escapeHtml((ticker || name).slice(0, 1).toUpperCase())}</span>`;
-                const mc = fmt(c.currentMarketCap, 0);
-                const change = fmtPct(c.priceChange24hPercent);
-                const vol = fmt(c.volume24h, 0);
-                const liq = fmt(c.liquidity, 0);
-                const holders = fmt(c.holderCount, 0);
-                const buys = fmt(c.buyCount24h, 0);
-                const sells = fmt(c.sellCount24h, 0);
-                const wallets = fmt(c.uniqueWallets24h, 0);
-                const price = c.price != null && Number.isFinite(Number(c.price))
-                  ? `$${Number(c.price).toFixed(6)}`
-                  : "—";
-                return `<tr>
-                  <td class="tx-rank">${i + 1}</td>
-                  <td class="tx-name">${logo}<b>${escapeHtml(name)}</b>${ticker ? ` <span class="tx-ticker">${escapeHtml(ticker)}</span>` : ""} <code title="${escapeHtml(c.mintAddress || "")}">${escapeHtml(shortAddr(c.mintAddress || ""))}</code></td>
-                  <td><span class="trix-type kind-${escapeHtml(typeKind)}">${escapeHtml(typeLabel)}</span></td>
-                  <td>${mc}</td>
-                  <td class="${change.startsWith("+") ? "tx-up" : change.startsWith("-") ? "tx-down" : ""}">${change}</td>
-                  <td>${vol}</td>
-                  <td>${liq}</td>
-                  <td>${holders}</td>
-                  <td>${buys}/${sells}</td>
-                  <td>${wallets}</td>
-                  <td>${price}</td>
-                </tr>`;
-              })
-              .join("")}
-          </tbody>
-        </table>
-        </div>
-      `;
-    }
-    if (!html) {
-      html = `<div class="trix-mkt-grid"><span class="unverified-price"><b>Meme Market</b><i>waiting for TRIX /api/meme-market snapshot</i></span></div>`;
-    }
-    els.trixMemeMarketStats.innerHTML = html;
-    els.trixMemeMarketStats.title =
-      memeMarket?.note ||
-      "TRIX /api/meme-market leaderboard — top 10 meme tokens by market cap. Data is a TRIX API snapshot (not live on-curve). Type is sourced (AGENT/BOOSTED/chain) or derived from the coin's own 24h momentum and buy/sell pressure (PUMP/RISING/DIPPING/DUMP/STEADY/QUIET) — a derived activity class, not a box rarity. All values are TRIX-reported from their internal indexer; snapshot age noted when available. No on-chain verification is performed; treat as informational only.";
-  }
-}
-function renderTrixReports() {
-  if (!els.trixArtworkGrid && !els.trixLeaderboardBody) return;
-  const marketData = lastLatest?.sources?.["trix.market"];
-  const summary = lastLatest?.summary ?? {};
-  const recentMints = Array.isArray(marketData?.recentMints)
-    ? marketData.recentMints
-    : Array.isArray(summary.trixRecentMints)
-      ? summary.trixRecentMints
-      : [];
-  const lbRows = Array.isArray(marketData?.leaderboard?.rows)
-    ? marketData.leaderboard.rows
-    : Array.isArray(summary.trixLeaderboard)
-      ? summary.trixLeaderboard
-      : [];
-  const fmt = (value) => Number.isFinite(Number(value))
-    ? Number(value).toLocaleString()
-    : "—";
-
-  if (els.trixArtworkGrid) {
-    const shown = recentMints.slice(0, RECENT_MEME_LIMIT);
-    if (shown.length) {
-      els.trixArtworkGrid.innerHTML = shown
-        .map((art) => {
-          const src = trixImageUrl(art.imageUrl);
-          const mint = art.mintAddress
-            ? `<span class="tx-mint" title="${escapeHtml(art.mintAddress)}">${escapeHtml(shortAddr(art.mintAddress))}</span>`
-            : "";
-          const buyMint = art.linkedCoinMint;
-          const buyUrl = buyMint
-            ? `https://trix.market/coin/${encodeURIComponent(buyMint)}`
-            : art.id ? `https://trix.market/artwork/${encodeURIComponent(art.id)}` : null;
-          const priceTag = Number.isFinite(Number(art.buyPriceSol))
-            ? `<span class="tx-price" title="Live buy-price estimate (marketCap ÷ totalSupply)${art.buyPriceAt ? " as of " + art.buyPriceAt : ""}">${fmtSol(art.buyPriceSol)}</span>`
-            : "";
-          const coinTag = art.linkedCoinSymbol
-            ? `<span class="tx-coin">${escapeHtml(art.linkedCoinSymbol)}</span>`
-            : "";
-          const buyBtn = buyMint
-            ? `<a class="tx-buy" href="${escapeHtml(buyUrl)}" target="_blank" rel="noopener noreferrer">Buy ${art.linkedCoinSymbol ? escapeHtml(art.linkedCoinSymbol) : ""}</a>`
-            : art.id
-              ? `<a class="tx-buy dim" href="${escapeHtml(buyUrl)}" target="_blank" rel="noopener noreferrer">View</a>`
-              : "";
-          return `<figure class="trix-report-art" title="${escapeHtml(art.name || "")}">
-            <img src="${escapeHtml(src)}" alt="${escapeHtml(art.name || "TRIX artwork")}" loading="lazy" decoding="async">
-            <figcaption class="tx-caption"><b>${escapeHtml(art.name || "—")}</b>${coinTag}${mint}${priceTag}</figcaption>
-            ${buyBtn ? `<div class="tx-buy-wrap">${buyBtn}</div>` : ""}
-          </figure>`;
-        })
-        .join("");
-      els.trixArtworkGrid.title =
-        "Memes for sale on TRIX (up to the newest 18). Artworks with a linked tradable coin show a Buy button and live price (marketCap ÷ totalSupply); other minted artworks link to their TRIX artwork page.";
-    } else {
-      els.trixArtworkGrid.innerHTML = '<p class="trix-report-empty">No recent memes from the public TRIX feed.</p>';
-    }
-  }
-  if (els.trixArtworkReportMeta) {
-    const bits = [];
-    const buyable = recentMints.filter((art) => art?.linkedCoinMint).slice(0, RECENT_MEME_LIMIT).length;
-    const minted = recentMints.slice(0, RECENT_MEME_LIMIT).filter((art) => !art?.linkedCoinMint).length;
-    const shown = recentMints.slice(0, RECENT_MEME_LIMIT).length;
-    if (shown) bits.push(`${shown} memes`);
-    if (buyable) bits.push(`${buyable} buyable`);
-    if (minted) bits.push(`${minted} minted`);
-    if (marketData?.checkedAt) bits.push(`checked ${fmtTime(marketData.checkedAt)}`);
-    if (!marketData?.ok && marketData?.reason) bits.push("partial read");
-    els.trixArtworkReportMeta.textContent = bits.length ? bits.join(" · ") : "waiting on TRIX public feed…";
-  }
-
-  if (els.trixLeaderboardBody) {
-    if (lbRows.length) {
-      const rows = lbRows
-        .map((row) => {
-          const verified = row.verified
-            ? '<span class="tx-verified" title="Verified">✓</span>'
-            : "";
-          const wallet = row.wallet
-            ? `<code title="${escapeHtml(row.wallet)}">${escapeHtml(shortAddr(row.wallet))}</code>`
-            : "—";
-          return `<tr>
-            <td class="tx-rank">${Number.isFinite(Number(row.rank)) ? Number(row.rank) : "—"}</td>
-            <td class="tx-user"><b>${escapeHtml(row.username || "—")}</b>${verified}</td>
-            <td class="tx-wallet">${wallet}</td>
-            <td class="tx-points">${fmt(row.points)}</td>
-          </tr>`;
-        })
-        .join("");
-      els.trixLeaderboardBody.innerHTML = rows;
-    } else {
-      els.trixLeaderboardBody.innerHTML = '<tr><td colspan="4">No leaderboard rows from the public TRIX feed.</td></tr>';
-    }
-  }
-  if (els.trixLeaderboardMeta) {
-    const bits = [];
-    const tiers = lastLatest?.sources?.["trix.tiers"];
-    const tierCount = tiers?.count ?? summary.trixTiersCount ?? 0;
-    if (lbRows.length) bits.push(`top ${lbRows.length}`);
-    if (tierCount) bits.push(`${tierCount} tiers`);
-    if (marketData?.checkedAt) bits.push(`checked ${fmtTime(marketData.checkedAt)}`);
-    if (!marketData?.ok && marketData?.reason) bits.push("partial read");
-    els.trixLeaderboardMeta.textContent = bits.length ? bits.join(" · ") : "waiting on TRIX public feed…";
-  }
-}
-function renderTrixMoney() {
-  if (!els.trixMoneyMeta) return;
-  const money = lastLatest?.sources?.["trix.money"];
-  const feeConfig = lastLatest?.sources?.["trix.fee.config"];
-  const summary = lastLatest?.summary ?? {};
-  const setText = (el, value) => {
-    if (el) el.textContent = value ?? "—";
-  };
-  const setTitle = (el, value) => {
-    if (el && value) el.title = value;
-  };
-  const fmtSol = (value) => (Number.isFinite(Number(value)) ? `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 4 })} SOL` : "—");
-  const fmtPct = (bps) => (Number.isFinite(Number(bps)) ? `${bps} bps · ${(bps / 100).toFixed(1)}%` : "—");
-
-  const treasury = money?.treasury || {};
-  const geoffLeg1 = money?.geoffLeg1 || {};
-  const feeSplit = money?.feeSplit || {};
-  const fees = money?.fees || {};
-  const market24h = money?.market24h || {};
-
-  setText(els.moneyTreasurySol, fmtSol(treasury.balanceSol));
-  setText(els.moneyTreasuryOnChain, fmtSol(treasury.balanceSolOnChain));
-  setText(els.moneyTreasuryPoints, Number.isFinite(Number(treasury.totalPoints)) ? Number(treasury.totalPoints).toLocaleString() : "—");
-  setText(els.moneyTreasuryAddr, treasury.address ? shortAddr(treasury.address) : "—");
-  setTitle(els.moneyTreasuryAddr, treasury.address || "");
-  setTitle(els.moneyTreasurySol, `TRIX /api/treasury balance${treasury.address ? ` · ${treasury.address}` : ""}`);
-  setTitle(els.moneyTreasuryOnChain, `Live on-chain SOL balance${money?.checkedAt ? ` as of ${money.checkedAt}` : ""}`);
-
-  setText(els.moneyGeoLeg1Sol, fmtSol(geoffLeg1.balanceSol));
-  setText(els.moneyGeoLeg1Addr, geoffLeg1.address ? shortAddr(geoffLeg1.address) : "—");
-  setTitle(els.moneyGeoLeg1Addr, geoffLeg1.address || "");
-  setTitle(els.moneyGeoLeg1Sol, `Separate GEOFF provider wallet (not the treasury)${money?.checkedAt ? ` as of ${money.checkedAt}` : ""}`);
-
-  setText(els.moneyPlatformFee, fmtPct(feeSplit.platformFeeBps, feeSplit.platformFeeBps));
-  setText(els.moneyCreatorFee, fmtPct(feeSplit.creatorFeeBps, feeSplit.creatorFeeBps));
-  setText(els.moneyLaunchFee, fmtSol(feeSplit.platformLaunchFeeSol));
-  setTitle(els.moneyPlatformFee, "Share of each coin trade taken by TRIX as platform fee");
-  setTitle(els.moneyCreatorFee, "Share of each coin trade routed to the creator (per launch)");
-  setTitle(els.moneyLaunchFee, "Fixed SOL platform fee charged at launch (per launch)");
-
-  setText(els.moneyBuysSol, fmtSol(fees.recentBuysSol));
-  setText(els.moneySellsSol, fmtSol(fees.recentSellsSol));
-  setText(els.moneyNetSol, fmtSol(fees.recentNetSol));
-  setText(els.moneyWallets, Number.isFinite(Number(fees.uniqueWallets)) ? String(fees.uniqueWallets) : "—");
-  setTitle(els.moneyBuysSol, "Total buy SOL in the newest public trade feed window (limit 50 events)");
-  setTitle(els.moneySellsSol, "Total sell SOL in the newest public trade feed window");
-  setTitle(els.moneyNetSol, "Buy SOL minus sell SOL in the window; positive means net buying");
-
-  setText(els.moneyVolume24h, fmtSol(market24h.volume24h));
-  setText(els.moneyLiquidity, fmtSol(market24h.liquidity));
-  setText(els.moneySnapshotAt, market24h.snapshotAt ? `${String(market24h.snapshotAt).slice(0, 10)}` : "—");
-  setTitle(els.moneyVolume24h, `24h volume from TRIX /api/meme-market snapshot${market24h.snapshotAt ? ` as of ${market24h.snapshotAt}` : ""} (stale; not live)`);
-
-  const topCoins = Array.isArray(fees.topCoins) ? fees.topCoins : (Array.isArray(summary.trixMoneyTopCoins) ? summary.trixMoneyTopCoins : []);
-  if (els.moneyTopCoinsBody) {
-    if (topCoins.length) {
-      els.moneyTopCoinsBody.innerHTML = topCoins
-        .map((c) => {
-          const label = c.symbol || (c.mint ? shortAddr(c.mint) : "—");
-          const buy = Number.isFinite(Number(c.buySol)) ? Number(c.buySol).toLocaleString(undefined, { maximumFractionDigits: 4 }) : "—";
-          const sell = Number.isFinite(Number(c.sellSol)) ? Number(c.sellSol).toLocaleString(undefined, { maximumFractionDigits: 4 }) : "—";
-          return `<tr><td><b>${escapeHtml(label)}</b></td><td>${buy}</td><td>${sell}</td></tr>`;
-        })
-        .join("");
-    } else {
-      els.moneyTopCoinsBody.innerHTML = '<tr><td colspan="3">No recent trades in the feed window.</td></tr>';
-    }
-  }
-
-  const bits = [];
-  if (money?.ok) bits.push("live");
-  if (Number.isFinite(Number(treasury.balanceSol))) bits.push(`treasury ${Number(treasury.balanceSol).toFixed(1)} SOL`);
-  if (feeConfig?.ok && feeConfig.feeBps != null) bits.push(`fee ${feeConfig.feeBps} bps`);
-  if (feeConfig?.ok) {
-    const feeWalletMatch = feeConfig.feeWallet && treasury.address && feeConfig.feeWallet === treasury.address;
-    const geoLegMatch = feeConfig.feeWallet && geoffLeg1.address && feeConfig.feeWallet === geoffLeg1.address;
-    if (feeWalletMatch || geoLegMatch) bits.push(`fee-config → ${feeWalletMatch ? "treasury" : "geoff leg 1"} match`);
-  }
-  if (money?.checkedAt) bits.push(`checked ${fmtTime(money.checkedAt)}`);
-  if (!money?.ok && money?.reason) bits.push("partial read");
-  els.trixMoneyMeta.textContent = bits.length ? bits.join(" · ") : "waiting on TRIX money feed…";
-}
-function shortAddr(addr) {
-  if (typeof addr !== "string" || addr.length < 12) return addr;
-  return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
-}
-function finitePositive(value) {
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0;
-}
-function trixImageUrl(url) {
-  if (typeof url !== "string" || !url) return "";
-  return /^https?:\/\//i.test(url) ? url : `https://trix.market${url.startsWith("/") ? "" : "/"}${url}`;
-}
-function fmtSol(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "—";
-  if (n === 0) return "0 SOL";
-  if (n >= 0.01) return `${n.toLocaleString(undefined, { maximumFractionDigits: 4 })} SOL`;
-  if (n >= 0.000001) return `${n.toFixed(6)} SOL`;
-  return `${n.toExponential(4)} SOL`;
 }
 
 function renderSettlementStatus(s) {
@@ -1760,21 +1265,16 @@ function renderSettlementStatus(s) {
 function renderKeySale(s) {
   if (!els.keysoldUsd) return;
   const active = s.keySaleActive;
-  const price = Number(s.keySalePriceUsd);
-  const keys = Number(s.keySaleKeysSold);
-  const halving = Number(s.keySaleDaysUntilHalving);
+  const price = s.keySalePriceUsd;
+  const keys = s.keySaleKeysSold;
   if (!active || !Number.isFinite(keys)) {
-    els.keysoldUsd.textContent = "sale off";
-    els.keysoldMeta.textContent = "no active node-key sale";
+    els.keysoldUsd.textContent = active === false ? "Sale off" : "—";
+    els.keysoldMeta.textContent = active === false ? "Not active" : "Sale data unavailable";
     els.keysoldUsd.title = "No active key sale detected from StackNet pricing probe.";
     return;
   }
   els.keysoldUsd.textContent = Number.isFinite(price) ? `$${price.toFixed(2)}/key` : "—";
-  const bits = [];
-  bits.push(`${keys} sold`);
-  if (s.keySaleEpoch != null) bits.push(`epoch ${s.keySaleEpoch}`);
-  if (Number.isFinite(halving)) bits.push(`halving in ${halving}d`);
-  els.keysoldMeta.innerHTML = bits.join(" · ");
+  els.keysoldMeta.textContent = `${keys} sold · reported`;
   els.keysoldMeta.title =
     "Node-key sale ticker as reported by StackNet (/api/v2/node-keys/pricing). Self-reported; purchases unverified on-chain. Prices rise per key. Each key carries +1B inference tokens per docs.";
   els.keysoldUsd.title = els.keysoldMeta.title;
@@ -1785,7 +1285,8 @@ function renderKey9g(s) {
   const src = lastLatest?.sources?.["geoff.keys.9g"];
   if (!src?.ok || src?.solIn == null) {
     els.keys9gValue.textContent = "—";
-    els.keys9gMeta.textContent = src?.reason || "waiting on RPC window";
+    els.keys9gMeta.textContent = "RPC sample unavailable";
+    els.keys9gMeta.title = src?.reason || "No sample received";
     return;
   }
   const sol = Number(src.solIn);
@@ -1796,7 +1297,7 @@ function renderKey9g(s) {
   if (src.avgSolPerTx != null) bits.push(`${src.avgSolPerTx.toFixed(2)} avg/tx`);
   if (src.sol24h != null) bits.push(`${src.sol24h.toFixed(2)} / 24h`);
   if (hits.length) bits.push(`<span class="${hits.length ? "fund-flag" : ""}">⚠ ${hits.join(" + ")} bought</span>`);
-  els.keys9gMeta.innerHTML = bits.length ? bits.join(" · ") : "verified SOL in";
+  els.keys9gMeta.textContent = `${src.decoded ?? "?"} sampled transfers`;
   const windowSpan = src.newestAt
     ? `decoded ${src.decoded}/${src.windowTx} txs · ${src.newestAt.slice(0, 10)} → ${(src.oldestAt || "").slice(0, 10)}`
     : `decoded ${src.decoded}/${src.windowTx} txs`;
@@ -2814,6 +2315,7 @@ function agentSamplesFromEvents(events = []) {
 function applyPayload(payload) {
   if (!payload?.latest && !payload?.briefing && !payload?.events) return;
 
+  lastPayload = payload;
   mode = payload.config?.mode || mode;
 
   const incomingEvents = pruneWindow(payload.events || []);
@@ -2868,52 +2370,34 @@ function applyPayload(payload) {
   );
 
   setTrust(payload);
-  if (payload.state?.lastError || payload.error) setConnection("error", "degraded");
+  renderSync(payload);
 }
 
 async function pollNow() {
+  if (refreshPending) return;
+  refreshPending = true;
   els.pollBtn.disabled = true;
   try {
-    const res = mode === "vercel"
-      ? await fetch("/api/status", { cache: "no-store" })
-      : await fetch("/api/poll", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        });
+    // Browsers read the shared collector; they never launch competing collectors.
+    const res = await fetch("/api/status", { cache: "no-store", signal: AbortSignal.timeout(15_000) });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Poll failed");
+    if (!res.ok || data.error) throw new Error(data.error || `Status HTTP ${res.status}`);
+    lastReadAt = Date.now();
     applyPayload(data);
-    setConnection("live", "connected");
   } catch (error) {
-    setConnection("error", "refresh failed");
-    console.error(error);
+    renderTrixDesk(lastLatest);
+    setConnection("error", "reconnecting");
+    const status = document.getElementById("syncStatus");
+    if (status) {
+      status.textContent = "Connection lost · retrying";
+      status.dataset.state = "delayed";
+    }
+    const meta = document.getElementById("syncMeta");
+    if (meta) meta.textContent = "Showing last received data · retry in 15s";
   } finally {
+    refreshPending = false;
     els.pollBtn.disabled = false;
   }
-}
-
-let lastStreamEventAt = 0;
-
-const streamWatchdogIntervalMs = 30_000;
-const streamStaleMs = 75_000;
-
-function connectStream() {
-  if (mode === "vercel") return null;
-  const source = new EventSource("/api/stream");
-  source.addEventListener("status", (event) => {
-    lastStreamEventAt = Date.now();
-    try {
-      const payload = JSON.parse(event.data);
-      mode = payload.config?.mode || mode;
-      applyPayload(payload);
-      setConnection("live", "connected");
-    } catch (error) {
-      console.error(error);
-    }
-  });
-  source.onerror = () => setConnection("error", "reconnecting");
-  return source;
 }
 
 function startMatrix() {
@@ -2968,6 +2452,7 @@ function startMatrix() {
 
 els.pollBtn.addEventListener("click", pollNow);
 initCompactView();
+initTrixDesk();
 renderProvenance(memory.latest);
 hydrateIcons();
 startMatrix();
@@ -2976,66 +2461,20 @@ renderTokenPlan(CLIENT_TOKEN_PLAN);
 renderHeatmap(memory.dailyActivity || []);
 
 async function boot() {
-  try {
-    const health = await fetch("/api/health").then((r) => r.json());
-    mode = health.mode || "local";
-    if (health.sharedStore) {
-      setTrust({
-        config: {
-          sharedStore: true,
-          sharedStoreUrl: health.sharedStoreUrl,
-          trustMode: "shared",
-        },
-      });
+  if (memory.latest) renderMetrics(memory.latest);
+  await pollNow();
+  // Install retries even when the first request fails.
+  setInterval(() => {
+    if (document.visibilityState === "visible") {
+      renderTrixDesk(lastLatest);
+      pollNow();
     }
-  } catch {
-    mode = "vercel";
-  }
-
-  try {
-    if (mode === "vercel") {
-      // Production browsers only read the shared desk. They never trigger upstream sniffing.
-      try {
-        const status = await fetch("/api/status", { cache: "no-store" }).then((r) => r.json());
-        if (!status.error) {
-          applyPayload(status);
-          setConnection("live", "connected");
-        }
-        setInterval(() => {
-          if (document.visibilityState === "visible") pollNow();
-        }, 60_000);
-      } catch {
-        setConnection("error", "shared desk unavailable");
-      }
-    } else {
-      const status = await fetch("/api/status").then((r) => r.json());
-      mode = status.config?.mode || mode;
-      applyPayload(status);
-      setConnection("live", "connected");
-      connectStream();
-      setInterval(() => {
-        const stale = Date.now() - lastStreamEventAt > streamStaleMs;
-        if (document.visibilityState === "visible" && stale) {
-          setConnection("error", "reconnecting");
-          pollNow();
-        }
-      }, streamWatchdogIntervalMs);
-      document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible") {
-          const stale = Date.now() - lastStreamEventAt > streamStaleMs;
-          if (stale) {
-            setConnection("error", "reconnecting");
-            pollNow();
-          }
-        }
-      });
-    }
-    refreshTraffic().catch(() => {});
-  } catch (error) {
-    console.error(error);
-    mode = "vercel";
-    setConnection("error", "shared desk unavailable");
-  }
+  }, 15_000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") pollNow();
+  });
+  window.addEventListener("online", pollNow);
+  refreshTraffic().catch(() => {});
 }
 
 boot();

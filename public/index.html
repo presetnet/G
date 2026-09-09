@@ -28,8 +28,9 @@
         document.head.appendChild(s);
       }
     </script>
-    <link rel="stylesheet" href="/styles.css?v=rarity1" />
-    <link rel="stylesheet" href="/provenance.css?v=2" />
+    <link rel="stylesheet" href="/styles.css?v=desk2" />
+    <link rel="stylesheet" href="/provenance.css?v=desk2" />
+    <link rel="stylesheet" href="/dashboard.css?v=desk2" />
   </head>
   <body>
     <canvas id="matrix" class="matrix" aria-hidden="true"></canvas>
@@ -45,8 +46,7 @@
         </div>
         <div>
           <h1 class="brand">Geoff <span class="brand-full">Thermometer</span><span class="brand-short">Meter</span></h1>
-          <p class="tag">the peoples ai · go turbo</p>
-          <span class="pill community" title="Unofficial community dashboard">community dashboard</span>
+          <p class="tag">independent signal desk</p>
         </div>
       </div>
 
@@ -73,7 +73,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M4 19V5M4 19h16M8 15l3-4 3 2 4-6"/>
           </svg>
-          <span class="btn-label-full">Market deep dive</span>
+           <span class="btn-label-full">Market</span>
           <span class="btn-label-short">Market</span>
         </a>
         <button id="pollBtn" type="button" class="btn" title="Refresh">
@@ -86,37 +86,14 @@
     </header>
 
     <main class="shell">
-      <section class="brand-banner" aria-label="Geoff brand line">
-        <div class="brand-banner-copy">
-          <p class="brand-banner-kicker">Public Geoff voice</p>
-          <p class="brand-banner-line">
-            The peoples Ai. Go Turbo. Create, learn, build and play with the future of AI.
-          </p>
-          <p class="brand-banner-note">
-            From geoff.ai meta · /manifesto isn’t published yet · this desk stays public-only
-          </p>
-        </div>
-        <div id="stacknetChangeNotice" class="brand-banner-alert" role="status" aria-live="polite" hidden>
-          <span class="brand-banner-alert-badge">Major change · live</span>
-          <span class="brand-banner-alert-state">Dashboard working</span>
-          <strong>Stacknet’s shell is online; its publicly reported horsepower is currently offline or disconnected.</strong>
-        </div>
+      <section class="desk-intro" aria-label="Dashboard overview">
+        <div><p class="eyebrow">GEOFF / STACKNET / TRIX</p><h2>Signals. Not noise.</h2></div>
+        <div class="sync-readout" role="status" aria-live="polite"><span id="syncStatus">Connecting</span><small id="syncMeta">Checking the shared desk</small></div>
       </section>
+      <details class="data-disclosure"><summary>Public data. Independently observed, not guaranteed.</summary><p>Source-reported values may include development or test activity. Collection time is not event time. Open a source to inspect its age and limitations; verify material conclusions against the source and current network.</p></details>
+      <p id="stacknetChangeNotice" class="desk-notice" role="status" hidden>Stacknet is responding, but reports no available GPU capacity.</p>
 
-      <section class="public-data-notice" role="note" aria-labelledby="publicDataNoticeTitle">
-        <div class="public-data-notice-label" aria-hidden="true">
-          <span>Disclosure</span>
-          <strong>Public data</strong>
-        </div>
-        <div class="public-data-notice-copy">
-          <h2 id="publicDataNoticeTitle">Reported observations. Subject to change.</h2>
-          <p>
-            This independent community dashboard organizes publicly observable and queryable information into a consistent view for research and transparency. Figures are source-reported observations, not guarantees or independently verified representations. Sources may include mainnet, testnet, development, simulated, or other testing activity. Data, labels, APIs, program behavior, and availability can change without notice. Verify material conclusions against the cited source and current network state.
-          </p>
-        </div>
-      </section>
-
-      <p class="deck-label"><span>01</span> Network observations · source and age on every card</p>
+      <div class="section-heading"><p class="deck-label"><span>01</span> Vitals</p><div id="vitalsTools"></div></div>
       <section class="metrics" aria-label="Live network vitals">
         <article class="metric" style="--i:0">
           <div class="metric-top">
@@ -149,7 +126,6 @@
           </div>
           <strong id="paperworkUsd">—</strong>
           <em id="paperworkMeta">—</em>
-          <span id="paperworkStatus" class="metric-pill armed" hidden>armed</span>
         </article>
         <article class="metric" style="--i:3.1">
           <div class="metric-top">
@@ -161,7 +137,7 @@
         <article class="metric" style="--i:3.2">
           <div class="metric-top">
             <span class="ico-wrap" data-icon="image"></span>
-            <span class="k">TRIX · GEOFF provider <span class="pill as-reported">TRIX record</span></span>
+            <span class="k">GEOFF generations</span>
           </div>
           <strong id="trixGeoffCount">—</strong>
           <em id="trixGeoffMeta">waiting for paid generations</em>
@@ -183,30 +159,10 @@
           <strong id="pileValue">—</strong>
           <em id="pileMeta">unredeemed key earnings</em>
         </article>
-<article id="trixMarket" data-proof="trixMarket" class="metric trix-pack-metric" style="--i:3.3">
-          <div class="metric-top">
-            <span class="ico-wrap" data-icon="activity"></span>
-            <span class="k">TRIX collectibles <span class="pill as-reported">API aggregates</span></span>
-          </div>
-          <strong id="trixMarketCount">—</strong>
-          <em id="trixMarketMeta">waiting on TRIX public endpoints</em>
-          <div id="trixMarketStats" class="trix-market-inner" aria-label="Aggregate counts from public TRIX endpoints"></div>
-          <p class="trix-pack-market-note">Boost Cards shown from TRIX's own artwork URLs · no NFT mint strip · counts only, no identities</p>
-        </article>
-        <article id="trixMemeMarket" class="metric" style="--i:3.35">
-          <div class="metric-top">
-            <span class="ico-wrap" data-icon="trophy"></span>
-            <span class="k">TRIX meme market · leaderboard <span class="pill as-reported">API snapshot</span></span>
-          </div>
-          <strong id="trixMemeMarketCount">—</strong>
-          <em id="trixMemeMarketMeta">waiting on TRIX /api/meme-market</em>
-          <div id="trixMemeMarketStats" class="trix-meme-market-inner" aria-label="TRIX meme token leaderboard by market cap"></div>
-          <p class="trix-pack-market-note">Top 10 by market cap · volume 24h · liquidity · holders · price change · snapshot age noted</p>
-        </article>
         <article id="key9g" data-proof="key9g" class="metric" style="--i:12">
           <div class="metric-top">
             <span class="ico-wrap" data-icon="network"></span>
-            <span class="k">Node keys on-chain <span class="pill as-reported">9G wallet</span></span>
+            <span class="k">9G inflows</span>
           </div>
           <strong id="keys9gValue">—</strong>
           <em id="keys9gMeta">verified SOL in · no identity kept</em>
@@ -230,7 +186,7 @@
         <article id="miningTile" data-proof="mining" class="metric" style="--i:15">
           <div class="metric-top">
             <span class="ico-wrap" data-icon="layers"></span>
-            <span class="k">Mining · 60m miners <span class="pill as-reported">est · not official</span></span>
+            <span class="k">Paid miners / 60m</span>
           </div>
           <strong id="miningMiners">—</strong>
           <em id="miningMeta">waiting on payout ledger</em>
@@ -238,7 +194,35 @@
         </article>
       </section>
 
-      <p class="deck-label"><span>02</span> Plain English · what it means</p>
+      <section id="trixDesk" class="panel trix-desk" aria-labelledby="trixDeskTitle">
+        <header class="desk-header"><div><p class="eyebrow">02 / COMMUNITY MARKET</p><h2 id="trixDeskTitle">TRIX desk</h2></div><span id="trixDeskStatus" class="desk-status">Waiting for data</span></header>
+        <div class="desk-tabs" role="tablist" aria-label="TRIX views">
+          <button type="button" id="tab-coins" role="tab" data-desk-tab="coins" aria-controls="desk-coins" aria-selected="true"><span data-icon="coins"></span>Coins</button>
+          <button type="button" id="tab-boxes" role="tab" data-desk-tab="boxes" aria-controls="desk-boxes" aria-selected="false" tabindex="-1"><span data-icon="layers"></span>Boxes</button>
+          <button type="button" id="tab-activity" role="tab" data-desk-tab="activity" aria-controls="desk-activity" aria-selected="false" tabindex="-1"><span data-icon="activity"></span>Activity</button>
+          <button type="button" id="tab-points" role="tab" data-desk-tab="points" aria-controls="desk-points" aria-selected="false" tabindex="-1"><span data-icon="trophy"></span>Points</button>
+          <button type="button" id="tab-art" role="tab" data-desk-tab="art" aria-controls="desk-art" aria-selected="false" tabindex="-1"><span data-icon="image"></span>Art</button>
+          <button type="button" id="tab-money" role="tab" data-desk-tab="money" aria-controls="desk-money" aria-selected="false" tabindex="-1"><span data-icon="tag"></span>Money</button>
+        </div>
+        <div id="desk-coins" class="desk-panel" role="tabpanel" aria-labelledby="tab-coins" tabindex="0">
+          <div class="desk-toolbar"><p id="coinSummary">Current launch rankings</p><label class="sr-only" for="coinSearch">Find a coin by name, symbol or mint</label><input id="coinSearch" type="search" placeholder="Find a coin" autocomplete="off"><label class="sr-only" for="coinChain">Network filter</label><select id="coinChain"><option value="">All networks</option></select></div>
+          <div id="coinRows"></div><button id="coinMore" class="desk-more" type="button" hidden>Show more</button>
+        </div>
+        <div id="desk-boxes" class="desk-panel" role="tabpanel" aria-labelledby="tab-boxes" tabindex="0" hidden>
+          <div class="desk-toolbar"><h3>Pack leaderboard</h3><p id="boxStatus">Checking public feed</p><a class="desk-link" href="https://www.trix.market/shop/leaderboard" target="_blank" rel="noopener noreferrer">Open TRIX shop &nearr;</a></div>
+          <div id="boxRows"></div>
+          <details class="shop-types"><summary>Shop pack types <small>website definitions, not live inventory</small></summary><div class="pack-type-grid">
+            <span><i data-icon="layers"></i>Base</span><span><i data-icon="bolt"></i>Hype</span><span><i data-icon="activity"></i>Viral</span><span><i data-icon="trophy"></i>Grail</span><span><i data-icon="spark"></i>Platinum</span><span><i data-icon="blocks"></i>Black Box</span>
+          </div><p>Pack types are not reveal rarities. Opening or “tearing” packs stays on TRIX; this desk is read-only.</p></details>
+        </div>
+        <div id="desk-activity" class="desk-panel" role="tabpanel" aria-labelledby="tab-activity" tabindex="0" hidden><div class="desk-toolbar"><h3>Recent trades</h3><p id="activityStatus"></p></div><div id="activityRows"></div></div>
+        <div id="desk-points" class="desk-panel" role="tabpanel" aria-labelledby="tab-points" tabindex="0" hidden><div class="desk-toolbar"><h3>User points</h3><p id="pointsStatus"></p></div><div id="pointsRows"></div></div>
+        <div id="desk-art" class="desk-panel" role="tabpanel" aria-labelledby="tab-art" tabindex="0" hidden><div class="desk-toolbar"><h3>Recent artworks</h3><p id="artStatus"></p></div><div id="artRows"></div></div>
+        <div id="desk-money" class="desk-panel" role="tabpanel" aria-labelledby="tab-money" tabindex="0" hidden><div class="desk-toolbar"><h3>Treasury &amp; flows</h3><p id="moneyStatus"></p></div><div id="moneyRows"></div></div>
+        <details class="desk-source"><summary>Sources &amp; timestamps</summary><pre id="deskSourceText"></pre></details>
+      </section>
+
+      <details class="section-fold signal-details"><summary><span class="section-fold-num">03</span><span class="section-fold-title">Network detail</span><span class="section-fold-hint">open</span></summary><div class="fold-body">
       <section id="story" class="story tone-muted" aria-live="polite">
         <div class="story-icon" data-icon="pulse"></div>
         <div class="story-copy">
@@ -270,7 +254,7 @@
         </div>
       </section>
 
-      <p class="deck-label"><span>03</span> Surface lanes · docs · products</p>
+      <p class="deck-label">Surface lanes</p>
       <section class="cue-rail" aria-label="Live surface cues">
         <section class="cue docs-cue" aria-label="Docs surface updates">
           <span class="cue-label">Docs</span>
@@ -319,7 +303,7 @@
         <p class="probe-note">Note = target host is www.geoff.ai. A 200 and stable hash confirm a served response only; they do not prove ownership, integration, or partnership. The MFT post is contextual material; this probe does not test MFT, MetaVault, or Trix.</p>
       </section>
 
-      <p class="deck-label"><span>04</span> Heat · proof in cubes</p>
+      <p class="deck-label">Activity history</p>
       <div class="signal-deck">
         <section class="panel pump-panel" aria-label="72 hour pump tape">
           <div class="panel-head">
@@ -414,11 +398,13 @@
         </div>
       </details>
 
+      </div></details>
+
       <details class="section-fold" aria-label="Value · Token Plan vs field">
         <summary>
-          <span class="section-fold-num">05</span>
-          <span class="section-fold-title">Value · Token Plan vs field</span>
-          <span class="section-fold-hint">collapsed · click to expand</span>
+          <span class="section-fold-num">04</span>
+          <span class="section-fold-title">Token plans</span>
+          <span class="section-fold-hint">open</span>
         </summary>
         <div class="fold-body">
       <section class="panel price-panel price-dense" aria-label="Token plan value sheet">
@@ -444,9 +430,9 @@
 
       <details class="section-fold" aria-label="Feed · ranked diffs only">
         <summary>
-          <span class="section-fold-num">06</span>
-          <span class="section-fold-title">Feed · ranked diffs only</span>
-          <span class="section-fold-hint">collapsed · click to expand</span>
+          <span class="section-fold-num">05</span>
+          <span class="section-fold-title">Change log</span>
+          <span class="section-fold-hint">open</span>
         </summary>
         <div class="fold-body">
       <div class="board">
@@ -488,114 +474,11 @@
         </div>
       </details>
 
-      <p class="deck-label"><span>07</span> TRIX reports · community board</p>
-
-      <section class="panel trix-report artwork-report" aria-label="Latest TRIX artworks">
-        <div class="panel-head">
-          <div class="panel-title">
-            <span class="ico-wrap sm" data-icon="image"></span>
-            <h2>Latest TRIX artworks</h2>
-          </div>
-          <p id="trixArtworkReportMeta">waiting on TRIX public feed…</p>
-        </div>
-        <p class="feed-hint">Newest memes · buyable ones open their linked coin with a live on-curve buy-price estimate · minted-only art links to its TRIX artwork page</p>
-        <div id="trixArtworkGrid" class="trix-artwork-grid"></div>
-      </section>
-
-      <section class="panel trix-report leaderboard-report" aria-label="TRIX points leaderboard">
-        <div class="panel-head">
-          <div class="panel-title">
-            <span class="ico-wrap sm" data-icon="trophy"></span>
-            <h2>TRIX points leaderboard</h2>
-          </div>
-          <p id="trixLeaderboardMeta">waiting on TRIX public feed…</p>
-        </div>
-        <p class="feed-hint">All-time points · username · wallet — full top 100 as TRIX publishes them</p>
-        <div class="leaderboard-table-wrap">
-          <table class="leaderboard-table">
-            <thead>
-              <tr><th>Rank</th><th>User</th><th>Wallet</th><th>Points</th></tr>
-            </thead>
-            <tbody id="trixLeaderboardBody"><tr><td colspan="4">waiting…</td></tr></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="panel trix-report money-report" aria-label="Follow the money">
-        <div class="panel-head">
-          <div class="panel-title">
-            <span class="ico-wrap sm" data-icon="coins"></span>
-            <h2>Follow the money · TRIX</h2>
-          </div>
-          <p id="trixMoneyMeta">waiting on TRIX money feed…</p>
-        </div>
-        <p class="feed-hint">Treasury + fee accounts · fee split · recent trade flow · 24h market (live on-chain balances, API aggregates)</p>
-
-        <div class="money-grid">
-          <div class="money-tile">
-            <h3>Treasury</h3>
-            <div class="money-stats">
-              <div class="money-stat"><span class="money-label">Balance (API)</span><b id="moneyTreasurySol">—</b></div>
-              <div class="money-stat"><span class="money-label">Balance (on-chain)</span><b id="moneyTreasuryOnChain">—</b></div>
-              <div class="money-stat"><span class="money-label">Total points</span><b id="moneyTreasuryPoints">—</b></div>
-            </div>
-            <p class="money-addr" id="moneyTreasuryAddr">—</p>
-          </div>
-
-          <div class="money-tile">
-            <h3>GEOFF leg 1</h3>
-            <div class="money-stats">
-              <div class="money-stat"><span class="money-label">Balance (on-chain)</span><b id="moneyGeoLeg1Sol">—</b></div>
-            </div>
-            <p class="money-addr" id="moneyGeoLeg1Addr">—</p>
-            <p class="money-note">separate wallet; treasury is itself GEOFF leg 2</p>
-          </div>
-
-          <div class="money-tile">
-            <h3>Fee split · non-GEOFF share</h3>
-            <div class="money-stats">
-              <div class="money-stat"><span class="money-label">Platform fee</span><b id="moneyPlatformFee">—</b></div>
-              <div class="money-stat"><span class="money-label">Creator fee</span><b id="moneyCreatorFee">—</b></div>
-              <div class="money-stat"><span class="money-label">Launch fee</span><b id="moneyLaunchFee">—</b></div>
-            </div>
-            <p class="money-note">the creator + platform shares split off each coin trade before any reaches the GEOFF rails</p>
-          </div>
-
-          <div class="money-tile">
-            <h3>Recent trade flow</h3>
-            <div class="money-stats">
-              <div class="money-stat"><span class="money-label">Buys</span><b id="moneyBuysSol">—</b></div>
-              <div class="money-stat"><span class="money-label">Sells</span><b id="moneySellsSol">—</b></div>
-              <div class="money-stat"><span class="money-label">Net</span><b id="moneyNetSol">—</b></div>
-              <div class="money-stat"><span class="money-label">Unique wallets</span><b id="moneyWallets">—</b></div>
-            </div>
-          </div>
-
-          <div class="money-tile">
-            <h3>24h market</h3>
-            <div class="money-stats">
-              <div class="money-stat"><span class="money-label">Volume 24h</span><b id="moneyVolume24h">—</b></div>
-              <div class="money-stat"><span class="money-label">Liquidity</span><b id="moneyLiquidity">—</b></div>
-              <div class="money-stat"><span class="money-label">Snapshotted</span><b id="moneySnapshotAt" class="money-small">—</b></div>
-            </div>
-          </div>
-
-          <div class="money-tile money-table-tile">
-            <h3>Top coins by recent flow</h3>
-            <table class="money-coins-table">
-              <thead>
-                <tr><th>Coin</th><th>Buy (SOL)</th><th>Sell (SOL)</th></tr>
-              </thead>
-              <tbody id="moneyTopCoinsBody"><tr><td colspan="3">waiting…</td></tr></tbody>
-            </table>
-          </div>
-        </div>
-      </section>
 
       <details class="raw-drawer">
         <summary>
           <span class="ico-wrap sm" data-icon="layers"></span>
-          Legacy pieces · raw model ids · full widget list
+          Source inventory
         </summary>
         <div id="pieces" class="pieces"></div>
         <div id="capGroups" class="cap-groups" hidden></div>
@@ -622,7 +505,7 @@
         </div>
       </div>
 
-    <script type="module" src="/app.js?v=rarity1"></script>
+    <script type="module" src="/app.js?v=desk2"></script>
   </body>
 </html>
 <!-- redeploy 20260901-164444 -->
