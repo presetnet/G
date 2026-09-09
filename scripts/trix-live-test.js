@@ -153,6 +153,15 @@ const context = vm.createContext({
       else if (rpc.method === "getTransaction") json = { result: { meta: { err: null }, transaction: { message: {
         instructions: providerTransfers.map((destination) => ({ program: "system", parsed: { type: "transfer", info: { destination } } })),
       } } } };
+      else if (rpc.method === "getSignaturesForAddress") {
+        const address = rpc.params[0];
+        if (address === "D8LYYHufXvEVAfMKfmv9amKLJjdJejpXAwsM5Wqp3iQe") {
+          json = { result: rpc.params[1]?.before ? [] : Array.from({ length: 12 }, (_, index) => ({
+            signature: `box-sig-${index}`, err: null,
+            blockTime: Date.parse(freshAt) / 1000 - index * 60,
+          })) };
+        } else json = { result: [] };
+      }
       else throw new Error(`Unexpected RPC ${rpc.method}`);
     } else if (url.hostname === "stacknet.fixture") {
       if (url.pathname === "/health") json = { status: "healthy", in_flight: 0 };
@@ -375,6 +384,16 @@ assert.equal(boardDown.stale, true);
 assert.equal(boardDown.status, 404);
 assert.equal(boardDown.collectors[0].username, "boxwhale");
 boxboardStatus = 200;
+
+// Live on-chain box events from the public RPC signature history.
+const chain = await api.sniffTrixBoxChain();
+assert.equal(chain.source, "trix.boxchain");
+assert.equal(chain.ok, true);
+assert.equal(chain.eventsSinceLaunch, 12);
+assert.equal(chain.totalScanned, 12);
+assert.equal(chain.pagesScanned, 1);
+assert.equal(chain.newestAt, new Date(freshAt).toISOString());
+assert.equal(chain.treasury, "D8LYYHufXvEVAfMKfmv9amKLJjdJejpXAwsM5Wqp3iQe");
 
 now += 1000;
 const stillUnavailable = await api.sniffTrixBoxes({ previous: unavailableBoxes });
@@ -637,12 +656,13 @@ failures.clear();
 
 // Full/minute summaries use the same source contract, including coverage.
 const coldMinute = await api.runMinuteSniff();
-assert.equal(Object.keys(coldMinute.sources).length, 14);
-assert.equal(coldMinute.summary.totalSources, 14);
+assert.equal(Object.keys(coldMinute.sources).length, 15);
+assert.equal(coldMinute.summary.totalSources, 15);
 assert.equal(coldMinute.sources["trix.boxes"].status, 404);
 assert.equal(coldMinute.sources["trix.boxboard"].ok, true);
+assert.equal(coldMinute.sources["trix.boxchain"].ok, true);
 const full = service.preserveTrixHistory(null, await api.runSniff());
-assert.equal(Object.keys(full.sources).length, 37);
+assert.equal(Object.keys(full.sources).length, 38);
 assert.equal(full.sources["trix.boxes"].status, 404);
 assert.equal(full.summary.trixBoxesOk, false);
 assert.equal(full.summary.trixBoxesStatus, 404);
@@ -650,6 +670,8 @@ assert.equal(full.summary.trixBoxesTopCoins, null);
 assert.equal(full.summary.coverage.find((source) => source.source === "trix.boxes").optional, true);
 assert.equal(full.summary.trixBoxBoardOk, true);
 assert.equal(full.summary.trixBoxBoardCollectorCount, 3);
+assert.equal(full.summary.trixBoxChainOk, true);
+assert.equal(full.summary.trixBoxChainEventsSinceLaunch, 12);
 const baseline = {
   ...plain(full),
   sources: { ...plain(full.sources), untouched: { source: "untouched", ok: true, checkedAt: oldAt } },
@@ -778,7 +800,7 @@ await pending;
 assert.ok(timed);
 assert.ok(now - timeoutStart <= 18000, `minute took ${now - timeoutStart}ms`);
 assert.ok(timed.durationMs < 60000);
-assert.ok(requests.length - timedRequestStart <= 24);
+assert.ok(requests.length - timedRequestStart <= 25);
 assert.ok(timeouts.every((timeout) => timeout <= 18000));
 for (const [name, source] of Object.entries(timed.sources)) {
   if (name.startsWith("trix.") || ["stacknet.health", "stacknet.root", "stacknet.network", "stacknet.node", "stacknet.models"].includes(name)) {

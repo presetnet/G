@@ -2,7 +2,7 @@ import { sourceDescription } from "./provenance.js";
 
 const TABS = ["coins", "boxes", "activity", "points", "art", "money"];
 const STATUS = { coins: "coinSummary", boxes: "boxStatus", activity: "activityStatus", points: "pointsStatus", art: "artStatus", money: "moneyStatus" };
-const SOURCES = { coins: ["trix.meme.market", "trix.frontpage"], boxes: ["trix.boxes", "trix.boxboard"], activity: ["trix.money"], points: ["trix.market", "trix.tiers"], art: ["trix.market"], money: ["trix.money", "trix.fee.config"] };
+const SOURCES = { coins: ["trix.meme.market", "trix.frontpage"], boxes: ["trix.boxes", "trix.boxboard", "trix.boxchain"], activity: ["trix.money"], points: ["trix.market", "trix.tiers"], art: ["trix.market"], money: ["trix.money", "trix.fee.config"] };
 const state = { tab: "coins", view: "all", search: "", chain: "", limit: 20 };
 const htmlCache = new WeakMap();
 const brokenImages = new Set();
@@ -148,18 +148,23 @@ function renderCoins(catalog, frontpage) {
   }
 }
 
-function renderBoxes(official, board) {
+function renderBoxes(official, board, chain) {
   const fromBoard = good(board) && (board.collectors.length + board.boxes.length > 0);
   const src = fromBoard ? board : official;
   const hasData = fromBoard || [official?.topCoins, official?.biggestPulls, official?.topCollectors].some((list) => rows(list).length);
+  const chainLive = good(chain) && number(chain.eventsSinceLaunch) !== null;
   status("boxes", src, hasData, fromBoard
-    ? `Round ${fmt(board.round, 0)} ${esc(board.roundStatus || "warming")} · ${fmt(board.mintedTotal, 0)} minted · ${fmt(board.boxesLeft, 0)} left`
+    ? `Round ${fmt(board.round, 0)} ${esc(board.roundStatus || "warming")} · ${chainLive ? `${fmt(chain.eventsSinceLaunch, 0)} on-chain events` : `${fmt(board.mintedTotal, 0)} minted`} · snapshot ${fmt(board.mintedTotal, 0)}`
     : !good(official) && hasData ? unavailable(official, "Last-known box results") : "Official box leaderboard");
   if (fromBoard) {
+    const chainStamp = chainLive
+      ? `On-chain box events ${fmt(chain.eventsSinceLaunch, 0)} · newest ${clock(chain.newestAt, "Newest box event")} · treasury ${short(chain.treasury)}`
+      : `On-chain count unavailable${chain?.reason ? ` · ${esc(chain.reason)}` : ""}`;
+    const snapshotStamp = `TRIX snapshot ${fmt(board.mintedTotal, 0)} minted · ${fmt(board.boxesLeft, 0)} left · taken ${clock(board.dataUpdatedAt, "Aggregator snapshot")}${board.fallbackReason ? ` · TRIX source ${esc(board.fallbackReason)}` : ""}`;
     const chainBit = board.chain?.walletsScanned != null
-      ? `On-chain scan · ${fmt(board.chain.walletsScanned, 0)} wallets · ${fmt(board.chain.boxEvents, 0)} box events · treasury ${short(board.chain.treasury)}`
+      ? `Aggregator scan · ${fmt(board.chain.walletsScanned, 0)} wallets · ${fmt(board.chain.boxEvents, 0)} events`
       : "";
-    const stamp = `Aggregator snapshot ${clock(board.dataUpdatedAt, "Aggregator snapshot")} · ${chainBit}${board.fallbackReason ? ` · TRIX source fallback: ${esc(board.fallbackReason)}` : ""}`;
+    const stamp = `<p class="desk-context">${chainStamp} · ${snapshotStamp}${chainBit ? ` · ${chainBit}` : ""}</p>`;
     const boxTiles = board.boxes.map((b) => `<section class="box-tile${b.inRound ? " in-round" : ""}" style="--box-hex:${esc(b.hex || "#444")}">
       <b>${esc(b.type)}</b><span class="box-color">${esc(b.color)}</span>
       <dl><dt>Minted</dt><dd>${fmt(b.minted, 0)}</dd><dt>Left</dt><dd>${fmt(b.left, 0)}</dd><dt>Price</dt><dd>${usd(b.priceUsd)} · ${sol(b.priceSol)}</dd></dl>
@@ -174,7 +179,7 @@ function renderBoxes(official, board) {
     </tr>`).join("");
     const rarityChips = board.rarities.map((r) => `<span class="rarity-chip" title="${esc(`${r.type} odds from snapshot`)}">${esc(r.type)} ${fmt(r.oddsPct)}%</span>`).join("");
     const cardChips = board.cards.map((c) => `<span class="rarity-chip muted" title="${esc(`${c.type} shop card`)}">${esc(c.type)} ${fmt(c.multiplier)}x · ${sol(c.priceSol)}</span>`).join("");
-    setHTML("boxRows", `<p class="desk-context">${stamp}</p>
+    setHTML("boxRows", `${stamp}
       <div class="box-type-grid">${boxTiles}</div>
       <h4 class="board-subhead">Most boxes · on-chain wallet scan</h4>
       ${collectorBody ? table("Most boxes per public wallet", [["#", "desk-number"], ["User"], ["Boxes", "desk-number"], ["Kinds"], ["Wallet", "desk-secondary"]], collectorBody) : empty("No collector rows reported.")}
@@ -328,7 +333,7 @@ export function renderTrixDesk(value) {
   if (!root) return;
   const sources = latest?.sources || {};
   renderCoins(sources["trix.meme.market"], sources["trix.frontpage"]);
-  renderBoxes(sources["trix.boxes"], sources["trix.boxboard"]);
+  renderBoxes(sources["trix.boxes"], sources["trix.boxboard"], sources["trix.boxchain"]);
   const generations = renderActivity(sources["trix.money"], sources["trix.geoff"]);
   renderPoints(sources["trix.market"], sources["trix.tiers"]);
   renderArt(sources["trix.market"]);

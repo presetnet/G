@@ -118,7 +118,7 @@ const previous = { sources: {
 } };
 const before = JSON.stringify(previous);
 const full = await api.runSniff({ previous });
-assert.equal(Object.keys(full.sources).length, 37);
+assert.equal(Object.keys(full.sources).length, 38);
 assert.equal(Object.keys(full.sources).some((key) => key.startsWith("source-")), false);
 for (const source of Object.values(full.sources)) assert.ok(source.checkedAt, source.source);
 assert.equal(full.sources["stacknet.health"].ok, true);

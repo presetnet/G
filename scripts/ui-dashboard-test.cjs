@@ -23,6 +23,7 @@ function fixture() {
       rarities: [{ type: 'MYTHIC', oddsPct: 0.04 }, { type: 'COMMON', oddsPct: 45.61 }, { type: 'VOID', oddsPct: 43 }],
       cards: [{ type: 'GOLD', multiplier: 1.69, priceSol: 0.69, active: true }],
       chain: { treasury: 'D8LYYH' + 'x'.repeat(35), walletsScanned: 669, boxEvents: 3924 } },
+    'trix.boxchain': { ok: true, status: 200, checkedAt: at, sourceUrl: 'https://api.mainnet-beta.solana.com', treasury: 'D8LYYH' + 'x'.repeat(35), eventsSinceLaunch: 4301, totalScanned: 4301, pagesScanned: 5, newestAt: at, oldestAt: new Date(Date.now() - 5 * 86400000).toISOString() },
     'trix.geoff': { ...base, count: 780, paidSol: 9.36, records: [], latest: { createdAt: at } },
     'trix.market': { ...base, endpoints: { leaderboard: base, recentMints: base }, leaderboard: { rows: Array.from({ length: 100 }, (_, i) => ({ rank: i + 1, username: `Collector ${i}`, wallet: `fixture-wallet-${i}`, points: (100 - i) * 100, verified: i < 2 })) }, recentMints: [{ id: 'art1', name: 'A new artwork', imageUrl: 'http://127.0.0.1:3851/test-logo.svg', linkedCoinMint: 'fixture-mint-0', linkedCoinSymbol: 'COIN0' }] },
     'trix.tiers': { ...base, tiers: [{ name: 'Starter', minPoints: 0 }, { name: 'Explorer', minPoints: 5000 }] },
@@ -157,13 +158,15 @@ async function main() {
 
     await page.locator('#tab-boxes').click();
     assert.match(await page.locator('#boxStatus').textContent(), /Round 1 warming/);
+    assert.match(await page.locator('#boxRows').textContent(), /On-chain box events 4,301/);
+    assert.match(await page.locator('#boxRows').textContent(), /TRIX snapshot 3,874 minted/);
     assert.match(await page.locator('#boxRows').textContent(), /BASE BOX/);
     assert.match(await page.locator('#boxRows').textContent(), /VIRAL BOX/);
     assert.match(await page.locator('#boxRows').textContent(), /BoxWhale0/);
     assert.match(await page.locator('#boxRows').textContent(), /MYTHIC 0.04%/);
-    assert.match(await page.locator('#boxRows').textContent(), /On-chain scan/);
     assert.match(await page.locator('#deskSourceText').textContent(), /trix.boxboard/);
-    // Real collector rows replace the 404 official feed; aggregator snapshot is stamped, not "live".
+    assert.match(await page.locator('#deskSourceText').textContent(), /trix.boxchain/);
+    // Real collector rows replace the 404 official feed; live chain count leads the snapshot.
     assert.equal(await page.locator('#boxRows a[href*="solscan.io/account"]').count(), 3);
     payload.latest.sources['trix.boxboard'] = { ok: false, status: 404, stale: true, checkedAt: new Date().toISOString(), sourceUrl: 'https://doswapz.com/api/trix-boxes', boxes: [], collectors: [] };
     payload.latest.sources['trix.boxes'] = { ok: true, checkedAt: new Date().toISOString(), status: 200, topCoins: [{ mint: 'box-token', symbol: 'BOX', rips: 32 }], biggestPulls: [{ ripper: 'Public user', rarity: 'Mythic', coinSymbol: 'BOX', rewardUsd: 30 }], topCollectors: [{ username: 'Collector', rips: 12, mythics: 1, earnedUsd: 30 }] };

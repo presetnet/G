@@ -2147,6 +2147,78 @@ const TRIX_LAUNCH_SOURCE_URL = `${TRIX_BASE_URL}/api/launches?limit=500&offset=0
 const TRIX_BOXES_SOURCE_URL = "https://www.trix.market/api/mkt/leaderboard";
 const TRIX_BOXES_ROW_LIMIT = 25;
 const TRIX_BOXBOARD_SOURCE_URL = "https://doswapz.com/api/trix-boxes";
+// TRIX routes every box purchase through this treasury; public RPC signatures on it
+// track live box buy events after TRIX retired /api/mkt/state.
+const TRIX_BOX_TREASURY = "D8LYYHufXvEVAfMKfmv9amKLJjdJejpXAwsM5Wqp3iQe";
+const TRIX_BOX_LAUNCH_START_MS = Date.parse("2026-08-29T00:00:00Z");
+const TRIX_BOX_CHAIN_PAGES = 8;
+let trixBoxChainInFlight = null;
+
+/** Live on-chain box event count: successful treasury signatures since box launch. */
+export async function sniffTrixBoxChain({ previous = null } = {}) {
+  if (!trixBoxChainInFlight) {
+    trixBoxChainInFlight = (async () => {
+      const started = Date.now();
+      const value = {
+        source: "trix.boxchain",
+        optional: true,
+        ok: false,
+        stale: false,
+        status: 0,
+        sourceUrl: `https://api.mainnet-beta.solana.com (getSignaturesForAddress ${TRIX_BOX_TREASURY})`,
+        treasury: TRIX_BOX_TREASURY,
+        reason: null,
+        eventsSinceLaunch: null,
+        totalScanned: null,
+        pagesScanned: 0,
+        newestAt: null,
+        oldestAt: null,
+        launchWindowStart: new Date(TRIX_BOX_LAUNCH_START_MS).toISOString(),
+      };
+      try {
+        let before;
+        let total = 0;
+        let launchEvents = 0;
+        let newest = null;
+        let oldest = null;
+        for (let page = 0; page < TRIX_BOX_CHAIN_PAGES; page += 1) {
+          const rows = await solanaRpc("getSignaturesForAddress", [
+            TRIX_BOX_TREASURY,
+            { limit: 1000, commitment: "confirmed", ...(before ? { before } : {}) },
+          ]);
+          if (!Array.isArray(rows) || rows.length === 0) break;
+          const okRows = rows.filter((row) => !row.err && row.blockTime != null);
+          total += okRows.length;
+          value.pagesScanned = page + 1;
+          const pageNewest = okRows[0]?.blockTime ?? rows[0]?.blockTime ?? null;
+          const pageOldest = okRows.at(-1)?.blockTime ?? rows.at(-1)?.blockTime ?? null;
+          if (newest === null) newest = pageNewest;
+          oldest = pageOldest;
+          if (pageNewest != null && pageNewest * 1000 >= TRIX_BOX_LAUNCH_START_MS) {
+            launchEvents += okRows.filter((row) => row.blockTime * 1000 >= TRIX_BOX_LAUNCH_START_MS).length;
+          }
+          if (pageOldest != null && pageOldest * 1000 < TRIX_BOX_LAUNCH_START_MS) break;
+          before = rows.at(-1)?.signature;
+        }
+        Object.assign(value, {
+          ok: total > 0,
+          status: 200,
+          eventsSinceLaunch: launchEvents || (oldest !== null && oldest * 1000 >= TRIX_BOX_LAUNCH_START_MS ? total : null),
+          totalScanned: total,
+          newestAt: newest !== null ? new Date(newest * 1000).toISOString() : null,
+          oldestAt: oldest !== null ? new Date(oldest * 1000).toISOString() : null,
+          ms: Date.now() - started,
+          note: "Successful Solana transactions on the TRIX box treasury since 2026-08-29, counted from the public RPC signature history. This counts buy events, not decoded box levels; TRIX no longer publishes a live minted total.",
+        });
+      } catch (error) {
+        value.reason = error?.message || String(error);
+      }
+      value.checkedAt = new Date().toISOString();
+      return value;
+    })().finally(() => { trixBoxChainInFlight = null; });
+  }
+  return trixBoxChainInFlight;
+}
 const TRIX_ARTWORK_WINDOW = 100; // /api/artworks hard cap; pagination params are ignored; values above ~100 return HTTP 500
 const TRIX_RECENT_MEME_LIMIT = 18; // newest memes shown in the grid; recent-activity feed itself caps at 12, so catalog fold-in fills the rest
 const TRIX_LEADERBOARD_WINDOW = 100; // /api/leaderboard returns one ranked page from the API
@@ -3652,6 +3724,7 @@ function trixAttempts(previous) {
     ["trix.money", sniffTrixMoney()],
     ["trix.boxes", sniffTrixBoxes()],
     ["trix.boxboard", sniffTrixBoxBoard()],
+    ["trix.boxchain", sniffTrixBoxChain()],
     ["trix.meme.market", sniffTrixMemeMarket()],
     ["trix.frontpage", sniffTrixFrontpage()],
     ["trix.tiers", sniffTrixTiers()],
@@ -3849,6 +3922,7 @@ export function summarizeTrix(bySource) {
   const money = bySource["trix.money"];
   const boxes = bySource["trix.boxes"];
   const board = bySource["trix.boxboard"];
+  const chain = bySource["trix.boxchain"];
   return {
     trixGeoffOk: Boolean(geoff?.ok),
     trixGeoffCount: geoff?.count ?? null,
@@ -3920,6 +3994,11 @@ export function summarizeTrix(bySource) {
     trixBoxBoardChainTreasury: board?.chain?.treasury ?? null,
     trixBoxBoardFallbackReason: board?.fallbackReason ?? null,
     trixBoxBoardReason: board?.reason ?? null,
+    trixBoxChainOk: Boolean(chain?.ok),
+    trixBoxChainEventsSinceLaunch: chain?.eventsSinceLaunch ?? null,
+    trixBoxChainNewestAt: chain?.newestAt ?? null,
+    trixBoxChainCheckedAt: chain?.checkedAt ?? null,
+    trixBoxChainReason: chain?.reason ?? null,
     trixMoneyOk: Boolean(money?.ok),
     trixMoneyRecentTrades: money?.recentTrades ?? null,
     trixMoneyTreasurySol: money?.treasury?.balanceSol ?? null,
