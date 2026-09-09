@@ -2,8 +2,8 @@ import { sourceDescription } from "./provenance.js";
 
 const TABS = ["coins", "boxes", "activity", "points", "art", "money"];
 const STATUS = { coins: "coinSummary", boxes: "boxStatus", activity: "activityStatus", points: "pointsStatus", art: "artStatus", money: "moneyStatus" };
-const SOURCES = { coins: ["trix.meme.market"], boxes: ["trix.boxes"], activity: ["trix.money"], points: ["trix.market", "trix.tiers"], art: ["trix.market"], money: ["trix.money"] };
-const state = { tab: "coins", search: "", chain: "", limit: 20 };
+const SOURCES = { coins: ["trix.meme.market", "trix.frontpage"], boxes: ["trix.boxes"], activity: ["trix.money"], points: ["trix.market", "trix.tiers"], art: ["trix.market"], money: ["trix.money", "trix.fee.config"] };
+const state = { tab: "coins", view: "all", search: "", chain: "", limit: 20 };
 const htmlCache = new WeakMap();
 const brokenImages = new Set();
 let root = null;
@@ -50,7 +50,8 @@ function currentLaunches(src) {
 function link(base, id, label, title = id) {
   return id == null || id === "" ? esc(label) : `<a href="${esc(base + encodeURIComponent(String(id)))}" target="_blank" rel="noopener noreferrer" title="${esc(title)}">${esc(label)}</a>`;
 }
-const coinLink = (mint, label) => link("https://trix.market/coin/", mint, label);
+const coinLink = (mint, label) => typeof mint === "string" && /^(?:[1-9A-HJ-NP-Za-km-z]{32,44}|0x[\da-fA-F]{40})$/.test(mint)
+  ? link("https://trix.market/coin/", mint, label) : esc(label);
 const badge = (label) => `<span class="desk-badge">${esc(label)}</span>`;
 const empty = (text) => `<div class="desk-empty"><span aria-hidden="true">[ - ]</span><span>${esc(text)}</span></div>`;
 
@@ -104,9 +105,24 @@ function table(label, headers, body) {
   return `<div class="desk-table-scroll" tabindex="0" role="region" aria-label="${esc(label)}"><table class="desk-table"><thead><tr>${headers.map(([text, cls = "", sort = ""]) => `<th scope="col" class="${esc(cls)}"${sort ? ` aria-sort="${esc(sort)}"` : ""}>${esc(text)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
-function renderCoins(src) {
-  const accepted = currentLaunches(src);
-  const coins = accepted ? rows(src?.coins).sort((a, b) => (number(b.currentMarketCap) ?? -Infinity) - (number(a.currentMarketCap) ?? -Infinity)) : [];
+function renderCoins(catalog, frontpage) {
+  const homepage = state.view !== "all";
+  let src = homepage ? frontpage : catalog;
+  const group = homepage ? src?.[state.view] : src?.coins;
+  const labels = { all: "Market cap", featured: "Featured", boosted: "Boosted", recent: "New launches" };
+  const raw = rows(group);
+  if (homepage && src) {
+    // Preserve homepage order; its categories are not market-cap rankings.
+    src = { ...src, coins: raw.map(r => ({
+      mintAddress: r.mintAddress, ticker: r.symbol, tokenName: r.name, logoUrl: r.logoUrl,
+      chain: r.chain, type: r.isCoinAgent === true ? "Agent" : "Token", status: r.status,
+      currentMarketCap: number(r.marketCap), marketCapUpdatedAt: r.marketCapUpdatedAt,
+      createdAt: r.createdAt,
+    })) };
+  }
+  const accepted = homepage ? Array.isArray(group) : currentLaunches(src);
+  const coins = accepted ? rows(src?.coins) : [];
+  if (!homepage) coins.sort((a, b) => (number(b.currentMarketCap) ?? -Infinity) - (number(a.currentMarketCap) ?? -Infinity));
   const chains = [...new Set(coins.map((coin) => coin.chain).filter((chain) => typeof chain === "string" && chain))];
   if (state.chain && !chains.includes(state.chain)) chains.push(state.chain);
   setHTML("coinChain", `<option value="">All networks</option>${chains.sort().map((chain) => `<option value="${esc(chain)}">${esc(chain)}</option>`).join("")}`);
@@ -116,9 +132,12 @@ function renderCoins(src) {
   const shown = filtered.slice(0, state.limit);
   const check = accepted ? src : { ok: false, checkedAt: src?.checkedAt };
   const knownRows = Array.isArray(src?.coins) && (coins.length > 0 || good(check));
-   status("coins", check, coins.length > 0, !accepted ? "Awaiting current launch data" : knownRows ? `${shown.length} / ${filtered.length} coins · ${usd(src?.totalMarketCap)} sample cap${src?.catalogTotal > coins.length ? ` · ${fmt(src.catalogTotal)} in catalog` : ""}` : "Launch rows unavailable");
-  const body = shown.map(({ coin, rank }) => `<tr><td class="desk-number">${rank}</td><td><div class="coin-identity">${image(coin.logoUrl, coin.ticker || coin.tokenName)}<div class="coin-copy"><b>${coinLink(coin.mintAddress, coin.ticker || coin.tokenName || "--")}</b><small title="${esc(coin.tokenName)}">${esc(coin.tokenName)}</small><div class="coin-tags">${["Agent", "Token"].includes(coin.type) ? badge(coin.type) : ""}${coin.chain ? badge(coin.chain) : ""}<span class="desk-badge">MCap ${clock(coin.marketCapUpdatedAt, "Reported market-cap update")}</span></div></div></div></td><td class="desk-number" title="${esc(`TRIX-reported MCap (USD): ${number(coin.currentMarketCap) ?? "unknown"}`)}">${esc(usd(coin.currentMarketCap))}</td><td class="desk-secondary">${esc(coin.status)}</td></tr>`).join("");
-  setHTML("coinRows", shown.length ? table("Coins ranked by reported market cap", [["#", "desk-number"], ["Coin"], ["MCap", "desk-number", "descending"], ["Status", "desk-secondary"]], body) : !accepted ? empty(src ? "Current /api/launches data unavailable; legacy snapshots are not shown." : "Launch ranking unavailable.") : coins.length ? empty("No coins match these filters.") : emptyRows(src, src?.coins, "No launches reported."));
+  status("coins", check, coins.length > 0, !accepted ? `${labels[state.view]} feed unavailable` : knownRows ? `${shown.length} / ${filtered.length} coins${homepage ? ` · ${labels[state.view]} on TRIX` : ` · ${usd(src?.totalMarketCap)} sample cap${src?.catalogTotal > coins.length ? ` · ${fmt(src.catalogTotal)} in catalog` : ""}`}` : "Launch rows unavailable");
+  const context = el("frontpageStatus");
+  if (context) context.hidden = !homepage;
+  setHTML("frontpageStatus", homepage ? `Homepage built ${clock(frontpage?.builtAt, "TRIX homepage build")} · categories can overlap` : "");
+  const body = shown.map(({ coin, rank }) => `<tr><td class="desk-number">${rank}</td><td><div class="coin-identity">${image(coin.logoUrl, coin.ticker || coin.tokenName)}<div class="coin-copy"><b>${coinLink(coin.mintAddress, coin.ticker || coin.tokenName || "--")}</b><small title="${esc(coin.tokenName)}">${esc(coin.tokenName)}</small><div class="coin-tags">${["Agent", "Token"].includes(coin.type) ? badge(coin.type) : ""}${coin.chain ? badge(coin.chain) : ""}<span class="desk-badge">${state.view === "recent" ? `Launched ${clock(coin.createdAt, "Launch creation")}` : `MCap ${clock(coin.marketCapUpdatedAt, "Reported market-cap update")}`}</span></div></div></div></td><td class="desk-number" title="${esc(`TRIX-reported MCap (USD): ${number(coin.currentMarketCap) ?? "unknown"}`)}">${esc(usd(coin.currentMarketCap))}${state.view === "recent" ? `<small class="value-age">${clock(coin.marketCapUpdatedAt, "Reported market-cap update")}</small>` : ""}</td><td class="desk-secondary">${esc(coin.status)}</td></tr>`).join("");
+  setHTML("coinRows", shown.length ? table(homepage ? `${labels[state.view]} on TRIX` : "Coins ranked by reported market cap", [["#", "desk-number"], ["Coin"], ["MCap", "desk-number", homepage ? "" : "descending"], ["Status", "desk-secondary"]], body) : !accepted ? empty(homepage ? "Homepage feed unavailable." : src ? "Current /api/launches data unavailable; legacy snapshots are not shown." : "Launch ranking unavailable.") : coins.length ? empty("No coins match these filters.") : emptyRows(src, group, "No launches reported."));
   const more = el("coinMore");
   if (more) {
     const remaining = filtered.length - shown.length;
@@ -152,16 +171,19 @@ function renderActivity(money, geoff) {
   const generations = trades.length || knownTrades ? [] : rows(geoff?.records).filter((r) => r.id != null).slice(0, 12);
   const fallback = generations.length > 0;
   const heading = el("desk-activity")?.querySelector("h3");
-  if (heading) heading.textContent = fallback ? "Paid generations" : "Recent trades";
-  status("activity", fallback ? geoff : check, trades.length > 0 || fallback, fallback ? "Paid generations · trades unavailable" : `${trades.length} recent trades · API reported`);
+  if (heading) heading.textContent = fallback ? "Paid generations" : "Recent feed events";
+  status("activity", fallback ? geoff : check, trades.length > 0 || fallback, fallback ? "Paid generations · trade feed unavailable" : trades.length || knownTrades ? `${trades.length} shown · API feed events` : "Feed unavailable");
   const body = (fallback ? generations : trades).map((r) => {
     const side = fallback ? r.inferred === true ? "Inferred gen" : "Paid gen" : r.side;
     const label = fallback ? short(String(r.id)) : r.symbol || short(r.mint) || "--";
     const amount = fallback ? number(r.feeLamports) === null ? null : r.feeLamports / 1e9 : r.solAmount;
     const signature = fallback ? r.txSignature : r.signature;
-    return `<div class="activity-row"><span>${esc(side)}</span><span class="coin-copy"><b>${fallback ? esc(label) : coinLink(r.mint, label)}</b><small title="${esc(r.id)}">${esc(fallback ? `Generation ${r.id}` : r.id == null ? "Trade" : `Trade ${short(String(r.id))}`)}</small></span><span class="desk-number">${sol(amount)}</span>${clock(r.createdAt, fallback ? "Generation event" : "Trade event")}${link("https://solscan.io/tx/", signature, signature ? "Receipt" : "--")}</div>`;
+    return `<div class="activity-row"><span>${esc(side)}</span><span class="coin-copy"><b>${fallback ? esc(label) : coinLink(r.mint, label)}</b><small title="${esc(r.id)}">${esc(fallback ? `Generation ${r.id}` : r.id == null ? "Feed event" : `Event ${short(String(r.id))}`)}</small></span><span class="desk-number">${sol(amount)}</span>${clock(r.createdAt, fallback ? "Generation event" : "Feed event")}${link("https://solscan.io/tx/", signature, signature ? "Receipt" : "--")}</div>`;
   }).join("");
   setHTML("activityRows", body || emptyRows(check, money?.recentTrades, "No trades reported in this sample."));
+  const flows = rows(money?.fees?.topCoins);
+  const flowRows = flows.map(r => `<tr><td>${coinLink(r.mint, r.symbol || short(r.mint) || "--")}</td><td class="desk-number">${fmt(r.buySol)}</td><td class="desk-number">${fmt(r.sellSol)}</td><td class="desk-number">${fmt(r.count, 0)}</td></tr>`).join("");
+  setHTML("activityFlow", flowRows ? table("Per-coin flow in the 50-event sample", [["Coin / event"], ["Buy SOL", "desk-number"], ["Sell SOL", "desk-number"], ["Events", "desk-number"]], flowRows) : emptyRows(check, money?.fees?.topCoins, "No per-coin flow in this sample."));
   return fallback;
 }
 
@@ -172,10 +194,10 @@ function renderPoints(market, tierSource) {
   const rawTiers = Array.isArray(tierSource) ? tierSource : tierSource?.tiers;
   const validTiers = Array.isArray(rawTiers) && rawTiers.every((tier) => typeof tier?.name === "string" && tier.name && number(tier.minPoints) !== null && tier.minPoints >= 0);
   const definitions = good(check) && (Array.isArray(tierSource) || good(tierSource)) && validTiers ? [...rawTiers].sort((a, b) => b.minPoints - a.minPoints) : [];
-  status("points", check, items.length > 0, `${items.length} users · all-time points${definitions.length ? " · loyalty tiers" : ""}`);
+  status("points", check, items.length > 0, `Top ${items.length} public users${market?.leaderboard?.capped ? " · capped page" : ""}${number(market?.leaderboard?.totalPoints) !== null ? ` · ${fmt(market.leaderboard.totalPoints, 0)} points in this page` : ""}`);
   const body = items.map((r) => {
-    const tier = number(r.points) === null ? null : definitions.find((entry) => r.points >= entry.minPoints)?.name;
-    return `<tr><td class="desk-number">${fmt(r.rank)}</td><td><b>${esc(r.username || short(r.wallet) || "--")}</b>${r.verified === true ? '<span class="desk-badge" title="TRIX-reported verification">Verified</span>' : ""}</td><td class="desk-number">${fmt(r.points)}</td><td>${esc(tier)}</td><td class="desk-secondary">${link("https://solscan.io/account/", r.wallet, short(r.wallet))}</td></tr>`;
+    const tier = number(r.points) === null ? null : definitions.find((entry) => r.points >= entry.minPoints);
+    return `<tr><td class="desk-number">${fmt(r.rank)}</td><td><b>${esc(r.username || short(r.wallet) || "--")}</b>${r.verified === true ? '<span class="desk-badge" title="TRIX-reported verification">Verified</span>' : ""}</td><td class="desk-number">${fmt(r.points)}</td><td title="${esc(tier ? `From ${fmt(tier.minPoints, 0)} reported points` : "Tier unavailable")}">${esc(tier?.name)}</td><td class="desk-secondary">${link("https://solscan.io/account/", r.wallet, short(r.wallet))}</td></tr>`;
   }).join("");
   setHTML("pointsRows", items.length ? table("Top 100 user points", [["#", "desk-number"], ["User"], ["User points", "desk-number"], ["Loyalty tier"], ["Wallet", "desk-secondary"]], body) : emptyRows(check, market?.leaderboard?.rows, "No user points entries reported."));
 }
@@ -183,18 +205,19 @@ function renderPoints(market, tierSource) {
 function renderArt(market) {
   const check = endpoint(market, "recentMints");
   const items = rows(market?.recentMints).slice(0, 20);
-  status("art", check, items.length > 0, items.length ? `${items.length} artworks · API reported` : good(check) && Array.isArray(market?.recentMints) ? "No artworks reported" : "Artwork rows unavailable");
-  const body = items.map((r) => `<tr><td><div class="coin-identity">${image(r.imageUrl, r.name)}<div class="coin-copy"><b>${link("https://trix.market/artwork/", r.id, r.name || "Untitled")}</b><small title="${esc(r.id)}">${esc(short(r.id))}</small></div></div></td><td>${coinLink(r.linkedCoinMint, r.linkedCoinSymbol || short(r.linkedCoinMint) || "--")}</td><td class="desk-secondary">${link("https://solscan.io/token/", r.mintAddress, short(r.mintAddress))}</td></tr>`).join("");
+  const catalog = market?.artworks;
+  status("art", check, items.length > 0, items.length ? `${items.length} shown${number(catalog?.total) !== null ? ` · ${fmt(catalog.total)} in catalog sample${catalog.capped ? ` (cap ${fmt(catalog.window)})` : ""}` : ""}${number(catalog?.printedSupply) !== null ? ` · ${fmt(catalog.printedSupply)} printed copies` : ""}` : good(check) && Array.isArray(market?.recentMints) ? "No artworks reported" : "Artwork rows unavailable");
+  const body = items.map((r) => `<tr><td><div class="coin-identity">${image(r.imageUrl, r.name)}<div class="coin-copy"><b>${link("https://trix.market/artwork/", r.id, r.name || "Untitled")}</b><div class="coin-tags">${r.artworkType ? badge(r.artworkType) : ""}${r.status ? badge(r.status) : ""}</div><small title="${esc(r.id)}">${esc(short(r.id))}</small></div></div></td><td>${coinLink(r.linkedCoinMint, r.linkedCoinSymbol || short(r.linkedCoinMint) || "--")}${r.linkedCoinMint && number(r.currentMarketCap) !== null ? `<small class="value-age" title="Linked coin's market cap, not the artwork price">MCap ${usd(r.currentMarketCap)} · ${clock(r.marketCapUpdatedAt, "Linked coin market-cap update")}</small>` : ""}</td><td class="desk-secondary">${link("https://solscan.io/token/", r.mintAddress, short(r.mintAddress))}</td></tr>`).join("");
   setHTML("artRows", items.length ? table("Reported artwork sample", [["Artwork"], ["Linked coin"], ["Mint", "desk-secondary"]], body) : emptyRows(check, market?.recentMints, "No artworks reported."));
 }
 
-function renderMoney(src) {
+function renderMoney(src, feeConfig) {
   const treasury = src?.treasury || {};
   const leg = src?.geoffLeg1 || {};
   const split = src?.feeSplit || {};
   const fees = src?.fees || {};
-  const hasData = [treasury.balanceSol, treasury.balanceSolOnChain, treasury.totalPoints, leg.balanceSol, split.platformFeeBps, split.creatorFeeBps, split.platformLaunchFeeSol, fees.recentBuysSol, fees.recentSellsSol, fees.recentNetSol, fees.buyCount, fees.sellCount, fees.uniqueWallets].some((v) => number(v) !== null);
-  status("money", src, hasData, "Reported fees · balances · sampled trades");
+  const hasData = [treasury.balanceSol, treasury.balanceSolOnChain, treasury.totalPoints, leg.balanceSol, split.platformFeeBps, split.creatorFeeBps, split.platformLaunchFeeSol, fees.recentBuysSol, fees.recentSellsSol, fees.recentNetSol, fees.buyCount, fees.sellCount, fees.uniqueWallets, feeConfig?.feeBps].some((v) => number(v) !== null) || Boolean(feeConfig?.feeWallet || feeConfig?.treasuryWallet);
+  status("money", src || feeConfig, hasData, "Configured fees · balances · sampled trades");
   if (!hasData) { setHTML("moneyRows", empty(unavailable(src, "Money feed unavailable"))); return; }
   const address = (value) => link("https://solscan.io/account/", value, short(value));
   const bps = (value) => number(value) === null ? "--" : `${fmt(value)} bps (${fmt(value / 100)}%)`;
@@ -205,6 +228,10 @@ function renderMoney(src) {
     ["Geoff leg 1 (separate wallet)", [["SOL balance", sol(leg.balanceSol)], ["Balance read", clock(leg.balanceSolOnChainAt ?? src?.endpoints?.geoffLeg1?.checkedAt, "Geoff leg 1 balance read")], ["Wallet", address(leg.address)]]],
     ["Trades (sample, not fees)", [["Buys", sol(fees.recentBuysSol)], ["Sells", sol(fees.recentSellsSol)], ["Buy - sell", sol(fees.recentNetSol)], ["Buy / sell count", `${fmt(fees.buyCount)} / ${fmt(fees.sellCount)}`], ["Wallets", fmt(fees.uniqueWallets)]]],
   ];
+  if (feeConfig) {
+    const match = (configured, watched) => !good(feeConfig) || !good(src) || !configured || !watched ? "Unknown" : configured === watched ? "Match" : "Different";
+    tiles.unshift(["Fee configuration (TRIX)", [["Configured rate", bps(feeConfig.feeBps)], ["Fee recipient", address(feeConfig.feeWallet)], ["Treasury recipient", address(feeConfig.treasuryWallet)], ["Fee / watched leg", match(feeConfig.feeWallet, leg.address)], ["Treasury / watched", match(feeConfig.treasuryWallet, treasury.address)], ["Config checked", `${good(feeConfig) ? "" : "Unavailable / retained · "}${clock(feeConfig.checkedAt, "Fee configuration check")}`]]]);
+  }
   setHTML("moneyRows", `<div class="desk-money-grid">${tiles.map(([name, fields]) => `<section class="desk-money-tile"><h3>${esc(name)}</h3><dl>${fields.map(([key, value]) => `<dt>${esc(key)}</dt><dd class="desk-number">${value}</dd>`).join("")}</dl></section>`).join("")}</div>`);
 }
 
@@ -253,6 +280,12 @@ export function initTrixDesk() {
   }, true);
   el("coinSearch")?.addEventListener("input", (event) => { state.search = event.target.value; renderTrixDesk(latest); });
   el("coinChain")?.addEventListener("change", (event) => { state.chain = event.target.value; renderTrixDesk(latest); });
+  el("coinView")?.addEventListener("change", (event) => {
+    if (!["all", "featured", "boosted", "recent"].includes(event.target.value)) return;
+    state.view = event.target.value;
+    state.limit = 20;
+    renderTrixDesk(latest);
+  });
   el("coinMore")?.addEventListener("click", () => { state.limit += 20; renderTrixDesk(latest); });
   selectTab(state.tab);
 }
@@ -263,12 +296,12 @@ export function renderTrixDesk(value) {
   initTrixDesk();
   if (!root) return;
   const sources = latest?.sources || {};
-  renderCoins(sources["trix.meme.market"]);
+  renderCoins(sources["trix.meme.market"], sources["trix.frontpage"]);
   renderBoxes(sources["trix.boxes"]);
   const generations = renderActivity(sources["trix.money"], sources["trix.geoff"]);
   renderPoints(sources["trix.market"], sources["trix.tiers"]);
   renderArt(sources["trix.market"]);
-  renderMoney(sources["trix.money"]);
+  renderMoney(sources["trix.money"], sources["trix.fee.config"]);
   const names = [...SOURCES[state.tab], ...(state.tab === "activity" && generations ? ["trix.geoff"] : [])];
   const descriptions = names.flatMap((name) => {
     const src = sources[name];

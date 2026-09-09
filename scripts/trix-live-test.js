@@ -109,7 +109,7 @@ const context = vm.createContext({
     }
     else if (url.pathname === "/api/launchpad-settings/public") json = { platformFeeBps: 0, creatorFeeBps: null, platformLaunchFeeSol: "0" };
     else if (url.pathname === "/api/feed/trades") json = { items: tradeItems };
-    else if (url.pathname === "/api/frontpage") json = { featured: [], boosted: [], recent: [], builtAt: freshAt };
+    else if (url.pathname === "/api/frontpage") json = { featured: [], boosted: [], recent: [], builtAt: Date.parse(freshAt) };
     else if (url.pathname === "/api/tiers") json = [{ name: "Start", minPoints: null }, { name: "Zero", minPoints: 0 }];
     else if (url.pathname === "/api/fee-config") json = { feeWallet: "fixture-wallet", treasuryWallet: "fixture-treasury", feeBps: 0 };
     else if (url.hostname === "api.mainnet-beta.solana.com") {
@@ -204,6 +204,7 @@ assert.equal(meme.coins.find((coin) => coin.chain === "base").type, "Token");
 assert.equal(meme.coins[0].logoUrl, "https://trix.market/logo-0.png");
 assert.equal(meme.dataUpdatedAt, new Date(freshAt).toISOString());
 assert.equal(geoff.launchCatalogCheckedAt, meme.checkedAt);
+assert.equal((await api.sniffTrixFrontpage()).builtAt, freshAt.replace("Z", ".000Z"));
 assert.equal(market.endpoints.launches.checkedAt, meme.checkedAt);
 assert.equal(market.recentMints[0].currentMarketCap, 9000);
 assert.equal(Object.hasOwn(market.recentMints[0], "buyPriceSol"), false);

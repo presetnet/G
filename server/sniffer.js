@@ -2174,7 +2174,9 @@ function trixString(value) {
 }
 
 function trixDate(value) {
-  const time = typeof value === "string" && value.trim() ? Date.parse(value) : NaN;
+  const time = typeof value === "number" && Number.isFinite(value)
+    ? new Date(value).getTime()
+    : typeof value === "string" && value.trim() ? Date.parse(value) : NaN;
   return Number.isFinite(time) ? new Date(time).toISOString() : null;
 }
 

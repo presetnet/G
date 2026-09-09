@@ -22,6 +22,14 @@ function fixture() {
     'trix.tiers': { ...base, tiers: [{ name: 'Starter', minPoints: 0 }, { name: 'Explorer', minPoints: 5000 }] },
     'trix.money': { ...base, endpoints: { trades: base }, recentTrades: [{ id: 'trade1', signature: 'fixture-signature', side: 'buy', symbol: 'COIN0', mint: 'fixture-mint-0', solAmount: .1234, createdAt: at }], fees: { recentBuysSol: 12.34, recentSellsSol: 4.32, recentNetSol: 8.02, uniqueWallets: 12, buyCount: 15, sellCount: 6 }, treasury: { balanceSol: 143.21, balanceSolOnChain: 143.21, balanceSolOnChainAt: at, totalPoints: 98230, address: 'fixture-treasury' }, feeSplit: { platformFeeBps: 100, creatorFeeBps: 100, platformLaunchFeeSol: 0 }, geoffLeg1: { address: 'fixture-provider', balanceSol: .01, balanceSolOnChainAt: at } },
   });
+  sources['trix.frontpage'] = { ...base, builtAt: at,
+    featured: [{ name: 'Spotlight token', symbol: 'SPOT', mintAddress: 'A'.repeat(32), chain: 'solana', marketCap: 1234, marketCapUpdatedAt: at }],
+    boosted: [{ name: 'Promoted token', symbol: 'BOOST', mintAddress: 'B'.repeat(32), chain: 'solana', marketCap: 5678, marketCapUpdatedAt: at }],
+    recent: [{ name: 'New launch', symbol: 'NEW', mintAddress: 'C'.repeat(32), chain: 'solana', marketCap: 1000, marketCapUpdatedAt: at, createdAt: at }],
+  };
+  sources['trix.fee.config'] = { ...base, feeBps: 100, feeWallet: 'fixture-provider', treasuryWallet: 'fixture-treasury' };
+  sources['trix.money'].fees.topCoins = [{ mint: 'verification', symbol: 'Verification', buySol: 0, sellSol: 0, count: 1 }, { mint: 'A'.repeat(32), symbol: 'SPOT', buySol: 1.234, sellSol: 0, count: 2 }];
+  Object.assign(sources['trix.market'].recentMints[0], { artworkType: 'digital', status: 'minted', currentMarketCap: 1234, marketCapUpdatedAt: at });
   sources['solana.tokens'].mintsCheckedAt = at;
   sources['solana.tokens'].mints = [{ symbol: 'PAPER', supplyUi: 14369.47, mint: 'fixture-paper' }];
   sources['geoff.keys.9g'] = { ...base, solIn: .064, decoded: 10, windowTx: 50, senders: 5 };
@@ -102,6 +110,29 @@ async function main() {
     }
 
     await page.locator('#tab-coins').click();
+    for (const [view, text] of [['featured', 'SPOT'], ['boosted', 'BOOST'], ['recent', 'NEW']]) {
+      await page.locator('#coinView').selectOption(view);
+      assert.match(await page.locator('#coinRows').textContent(), new RegExp(text));
+      assert.equal(await page.locator('#coinRows tbody tr').count(), 1);
+      assert.match(await page.locator('#deskSourceText').textContent(), /trix.frontpage/);
+      assert.doesNotMatch(await page.locator('#frontpageStatus').textContent(), /age unknown/);
+      await page.setViewportSize({ width: 320, height: 844 });
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    }
+    await page.locator('#tab-money').click();
+    assert.match(await page.locator('#moneyRows').textContent(), /Fee configuration \(TRIX\)/);
+    assert.match(await page.locator('#moneyRows').textContent(), /100 bps \(1%\)/);
+    assert.match(await page.locator('#moneyRows').textContent(), /Match/);
+    await page.locator('#tab-art').click();
+    assert.match(await page.locator('#artRows').textContent(), /digital/);
+    assert.match(await page.locator('#artRows').textContent(), /MCap \$1.23K/);
+    await page.locator('#tab-activity').click();
+    await page.locator('.activity-breakdown > summary').click();
+    assert.match(await page.locator('#activityFlow').textContent(), /1.234/);
+    assert.equal(await page.locator('#activityFlow a[href*="verification"]').count(), 0);
+    console.log('PASS: featured, boosted, new launches, fee config, artwork metadata and per-coin flow are visible');
+    await page.locator('#tab-coins').click();
+    await page.locator('#coinView').selectOption('all');
     await page.locator('#coinMore').click();
     assert.equal(await page.locator('#coinRows tbody tr').count(), 40);
     await page.locator('#coinSearch').fill('COIN1');

@@ -205,7 +205,8 @@
           <button type="button" id="tab-money" role="tab" data-desk-tab="money" aria-controls="desk-money" aria-selected="false" tabindex="-1"><span data-icon="tag"></span>Money</button>
         </div>
         <div id="desk-coins" class="desk-panel" role="tabpanel" aria-labelledby="tab-coins" tabindex="0">
-          <div class="desk-toolbar"><p id="coinSummary">Current launch rankings</p><label class="sr-only" for="coinSearch">Find a coin by name, symbol or mint</label><input id="coinSearch" type="search" placeholder="Find a coin" autocomplete="off"><label class="sr-only" for="coinChain">Network filter</label><select id="coinChain"><option value="">All networks</option></select></div>
+          <div class="desk-toolbar"><p id="coinSummary">Current launch rankings</p><label class="sr-only" for="coinView">Coin view</label><select id="coinView"><option value="all">Market cap</option><option value="featured">Featured</option><option value="boosted">Boosted</option><option value="recent">New launches</option></select><label class="sr-only" for="coinSearch">Find a coin by name, symbol or mint</label><input id="coinSearch" type="search" placeholder="Find a coin" autocomplete="off"><label class="sr-only" for="coinChain">Network filter</label><select id="coinChain"><option value="">All networks</option></select></div>
+          <p id="frontpageStatus" class="desk-context" hidden></p>
           <div id="coinRows"></div><button id="coinMore" class="desk-more" type="button" hidden>Show more</button>
         </div>
         <div id="desk-boxes" class="desk-panel" role="tabpanel" aria-labelledby="tab-boxes" tabindex="0" hidden>
@@ -215,9 +216,9 @@
             <span><i data-icon="layers"></i>Base</span><span><i data-icon="bolt"></i>Hype</span><span><i data-icon="activity"></i>Viral</span><span><i data-icon="trophy"></i>Grail</span><span><i data-icon="spark"></i>Platinum</span><span><i data-icon="blocks"></i>Black Box</span>
           </div><p>Pack types are not reveal rarities. Opening or “tearing” packs stays on TRIX; this desk is read-only.</p></details>
         </div>
-        <div id="desk-activity" class="desk-panel" role="tabpanel" aria-labelledby="tab-activity" tabindex="0" hidden><div class="desk-toolbar"><h3>Recent trades</h3><p id="activityStatus"></p></div><div id="activityRows"></div></div>
+        <div id="desk-activity" class="desk-panel" role="tabpanel" aria-labelledby="tab-activity" tabindex="0" hidden><div class="desk-toolbar"><h3>Recent feed events</h3><p id="activityStatus"></p></div><div id="activityRows"></div><details class="activity-breakdown"><summary>Flow by coin <small>up to 50 feed events, not 24h volume</small></summary><div id="activityFlow"></div></details></div>
         <div id="desk-points" class="desk-panel" role="tabpanel" aria-labelledby="tab-points" tabindex="0" hidden><div class="desk-toolbar"><h3>User points</h3><p id="pointsStatus"></p></div><div id="pointsRows"></div></div>
-        <div id="desk-art" class="desk-panel" role="tabpanel" aria-labelledby="tab-art" tabindex="0" hidden><div class="desk-toolbar"><h3>Recent artworks</h3><p id="artStatus"></p></div><div id="artRows"></div></div>
+        <div id="desk-art" class="desk-panel" role="tabpanel" aria-labelledby="tab-art" tabindex="0" hidden><div class="desk-toolbar"><h3>Artwork sample</h3><p id="artStatus"></p></div><div id="artRows"></div></div>
         <div id="desk-money" class="desk-panel" role="tabpanel" aria-labelledby="tab-money" tabindex="0" hidden><div class="desk-toolbar"><h3>Treasury &amp; flows</h3><p id="moneyStatus"></p></div><div id="moneyRows"></div></div>
         <details class="desk-source"><summary>Sources &amp; timestamps</summary><pre id="deskSourceText"></pre></details>
       </section>
