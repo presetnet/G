@@ -5236,13 +5236,54 @@ details[open] > .fold-summary::after {
 .trix-meme-table .tx-name b { color: var(--ink); }
 .trix-type {
   display: inline-block;
-  padding: 0.12rem 0.28rem;
+  padding: 0.12rem 0.34rem;
   border: 1px solid rgba(255, 214, 0, 0.22);
   border-radius: 999px;
   color: var(--accent);
   font-size: 0.55rem;
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  white-space: nowrap;
+}
+.trix-type.kind-pump { color: #fb7185; border-color: rgba(251, 113, 133, 0.45); background: rgba(251, 113, 133, 0.1); }
+.trix-type.kind-rising { color: var(--green-bright); border-color: rgba(74, 222, 128, 0.4); background: rgba(74, 222, 128, 0.08); }
+.trix-type.kind-dipping { color: #fbbf24; border-color: rgba(251, 191, 36, 0.4); background: rgba(251, 191, 36, 0.08); }
+.trix-type.kind-dump { color: #f87171; border-color: rgba(248, 113, 113, 0.45); background: rgba(248, 113, 113, 0.1); }
+.trix-type.kind-steady { color: #67e8f9; border-color: rgba(103, 232, 249, 0.35); background: rgba(103, 232, 249, 0.07); }
+.trix-type.kind-quiet { color: rgba(161, 161, 170, 0.8); border-color: rgba(161, 161, 170, 0.25); }
+.trix-type.kind-agent { color: #c084fc; border-color: rgba(192, 132, 252, 0.45); background: rgba(192, 132, 252, 0.1); }
+.trix-type.kind-boosted { color: #ffd60a; border-color: rgba(255, 214, 10, 0.5); background: rgba(255, 214, 10, 0.12); }
+.trix-type.kind-chain { color: #93c5fd; border-color: rgba(147, 197, 253, 0.4); background: rgba(147, 197, 253, 0.08); }
+.trix-coin-logo {
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  object-fit: cover;
+  vertical-align: middle;
+  margin-right: 0.35rem;
+  border: 1px solid rgba(255, 214, 0, 0.18);
+  background: rgba(255, 255, 255, 0.03);
+  flex: 0 0 auto;
+}
+.trix-coin-logo.placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+.trix-meme-table .tx-name {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+.trix-meme-table .tx-name b { color: var(--ink); }
+.trix-meme-table .tx-ticker {
+  color: var(--muted);
+  font-size: 0.55rem;
+  letter-spacing: 0.04em;
 }
 .trix-meme-table .tx-up { color: var(--green-bright); }
 .trix-meme-table .tx-down { color: var(--heat-bright); }

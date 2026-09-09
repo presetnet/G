@@ -232,6 +232,9 @@ const els = {
   trixMarketCount: document.getElementById("trixMarketCount"),
   trixMarketMeta: document.getElementById("trixMarketMeta"),
   trixMarketStats: document.getElementById("trixMarketStats"),
+  trixMemeMarketCount: document.getElementById("trixMemeMarketCount"),
+  trixMemeMarketMeta: document.getElementById("trixMemeMarketMeta"),
+  trixMemeMarketStats: document.getElementById("trixMemeMarketStats"),
   trixArtworkReportMeta: document.getElementById("trixArtworkReportMeta"),
   trixArtworkGrid: document.getElementById("trixArtworkGrid"),
   trixLeaderboardMeta: document.getElementById("trixLeaderboardMeta"),
@@ -1411,16 +1414,12 @@ function renderTrixMemeMarket(s) {
     ? Number(memeMarket.totalCoins)
     : Number(summary.trixMemeMarketCoins) || 0;
   const frontpage = lastLatest?.sources?.["trix.frontpage"];
-  const frontpageByMint = new Map(
-    [...(frontpage?.featured || []), ...(frontpage?.boosted || []), ...(frontpage?.recent || [])]
-      .filter((row) => row?.mintAddress)
-      .map((row) => [row.mintAddress, row]),
-  );
   const totalMc = memeMarket?.totalMarketCap || summary.trixMemeMarketTotalMc || 0;
   const totalVol = memeMarket?.totalVolume24h || summary.trixMemeMarketTotalVol || 0;
   const totalLiq = memeMarket?.totalLiquidity || summary.trixMemeMarketTotalLiq || 0;
   const totalHolders = memeMarket?.totalHolders || summary.trixMemeMarketTotalHolders || 0;
   const snapshotAt = memeMarket?.snapshotAt || summary.trixMemeMarketSnapshotAt || null;
+  const typeCounts = memeMarket?.typeCounts || null;
   const fmt = (value, digits = 0) =>
     Number.isFinite(Number(value)) && Number(value) !== 0
       ? Number(value).toLocaleString(undefined, { maximumFractionDigits: digits })
@@ -1445,6 +1444,9 @@ function renderTrixMemeMarket(s) {
   }
   if (els.trixMemeMarketMeta) {
     const bits = [];
+    if (typeCounts && Object.keys(typeCounts).length) {
+      bits.push(Object.entries(typeCounts).map(([k, n]) => `${n} ${k}`).join(" · "));
+    }
     if (memeMarket?.checkedAt) bits.push(`checked ${fmtTime(memeMarket.checkedAt)}`);
     if (!memeMarket?.ok && memeMarket?.reason) bits.push("partial read");
     els.trixMemeMarketMeta.textContent = bits.length ? bits.join(" · ") : "waiting on TRIX /api/meme-market";
@@ -1475,14 +1477,12 @@ function renderTrixMemeMarket(s) {
             ${top10
               .map((c, i) => {
                 const name = c.tokenName || c.ticker || "—";
-                const lane = frontpageByMint.get(c.mintAddress);
-                const type = lane?.isCoinAgent
-                  ? "agent"
-                  : lane?.boosted
-                    ? "boosted"
-                    : lane?.chain
-                      ? String(lane.chain).toUpperCase()
-                      : "meme";
+                const ticker = c.ticker || "";
+                const typeLabel = c.type || "meme";
+                const typeKind = c.typeKind || "meme";
+                const logo = c.logoUrl
+                  ? `<img class="trix-coin-logo" src="${escapeHtml(trixImageUrl(c.logoUrl))}" alt="" loading="lazy" decoding="async">`
+                  : `<span class="trix-coin-logo placeholder">${escapeHtml((ticker || name).slice(0, 1).toUpperCase())}</span>`;
                 const mc = fmt(c.currentMarketCap, 0);
                 const change = fmtPct(c.priceChange24hPercent);
                 const vol = fmt(c.volume24h, 0);
@@ -1496,8 +1496,8 @@ function renderTrixMemeMarket(s) {
                   : "—";
                 return `<tr>
                   <td class="tx-rank">${i + 1}</td>
-                  <td class="tx-name"><b>${escapeHtml(name)}</b> <code title="${escapeHtml(c.mintAddress || "")}">${escapeHtml(shortAddr(c.mintAddress || ""))}</code></td>
-                  <td><span class="trix-type">${escapeHtml(type)}</span></td>
+                  <td class="tx-name">${logo}<b>${escapeHtml(name)}</b>${ticker ? ` <span class="tx-ticker">${escapeHtml(ticker)}</span>` : ""} <code title="${escapeHtml(c.mintAddress || "")}">${escapeHtml(shortAddr(c.mintAddress || ""))}</code></td>
+                  <td><span class="trix-type kind-${escapeHtml(typeKind)}">${escapeHtml(typeLabel)}</span></td>
                   <td>${mc}</td>
                   <td class="${change.startsWith("+") ? "tx-up" : change.startsWith("-") ? "tx-down" : ""}">${change}</td>
                   <td>${vol}</td>
@@ -1520,7 +1520,7 @@ function renderTrixMemeMarket(s) {
     els.trixMemeMarketStats.innerHTML = html;
     els.trixMemeMarketStats.title =
       memeMarket?.note ||
-      "TRIX /api/meme-market leaderboard — top 10 meme tokens by market cap. Data is a TRIX API snapshot (not live on-curve). Type tags are sourced frontpage lanes or chain labels, not box rarity. All values are TRIX-reported from their internal indexer; snapshot age noted when available. No on-chain verification is performed; treat as informational only.";
+      "TRIX /api/meme-market leaderboard — top 10 meme tokens by market cap. Data is a TRIX API snapshot (not live on-curve). Type is sourced (AGENT/BOOSTED/chain) or derived from the coin's own 24h momentum and buy/sell pressure (PUMP/RISING/DIPPING/DUMP/STEADY/QUIET) — a derived activity class, not a box rarity. All values are TRIX-reported from their internal indexer; snapshot age noted when available. No on-chain verification is performed; treat as informational only.";
   }
 }
 function renderTrixReports() {

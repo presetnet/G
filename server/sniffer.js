@@ -3171,43 +3171,111 @@ export async function sniffTrixMoney({ previous = null } = {}) {
   };
 }
 
+/**
+ * Derive a real, sourced class for a meme coin. Lane overrides (agent / boosted /
+ * non-solana chain) win first; otherwise classify from the coin's own 24h momentum
+ * and buy/sell pressure so the leaderboard has honest visual variety instead of a
+ * uniform "meme" tag. Returns {label, kind} where kind drives the CSS color.
+ */
+function trixCoinType(launch, coin) {
+  if (launch?.isCoinAgent) return { label: "AGENT", kind: "agent" };
+  if (launch?.boosted) return { label: "BOOSTED", kind: "boosted" };
+  const chain = typeof launch?.chain === "string" ? launch.chain.toLowerCase() : "";
+  if (chain && chain !== "solana") return { label: chain.toUpperCase(), kind: "chain" };
+
+  const change = Number(coin?.priceChange24hPercent);
+  const buys = Number(coin?.buyCount24h);
+  const sells = Number(coin?.sellCount24h);
+  const vol = Number(coin?.volume24h);
+  const hasChange = Number.isFinite(change);
+  const hasFlow = Number.isFinite(buys) && Number.isFinite(sells) && (buys + sells) > 0;
+
+  if (!hasChange && !hasFlow && !(Number.isFinite(vol) && vol > 0)) {
+    return { label: "QUIET", kind: "quiet" };
+  }
+  const buyPressure = hasFlow ? buys - sells : 0;
+  if (hasChange && change >= 50 && (!hasFlow || buyPressure >= 0)) {
+    return { label: "PUMP", kind: "pump" };
+  }
+  if (hasChange && change <= -20) {
+    return { label: "DUMP", kind: "dump" };
+  }
+  if ((hasChange && change > 0) || buyPressure > 0) {
+    return { label: "RISING", kind: "rising" };
+  }
+  if ((hasChange && change < 0) || buyPressure < 0) {
+    return { label: "DIPPING", kind: "dipping" };
+  }
+  return { label: "STEADY", kind: "steady" };
+}
+
 export async function sniffTrixMemeMarket({ previous = null } = {}) {
   const started = Date.now();
   try {
-    const res = await fetchJson(`${TRIX_BASE_URL}/api/meme-market`);
+    const [res, launchPages] = await Promise.all([
+      fetchJson(`${TRIX_BASE_URL}/api/meme-market`),
+      Promise.allSettled([
+        fetchJson(`${TRIX_BASE_URL}/api/launches?limit=500&offset=0&sort=marketCap`),
+        fetchJson(`${TRIX_BASE_URL}/api/launches?limit=500&offset=500&sort=marketCap`),
+      ]),
+    ]);
     const market = Array.isArray(res.json) ? res.json : [];
     const ok = res.ok && market.length > 0;
+    const launchByMint = new Map();
+    for (const page of launchPages) {
+      if (page.status !== "fulfilled" || !Array.isArray(page.value.json?.items)) continue;
+      for (const item of page.value.json.items) {
+        if (item?.mintAddress) launchByMint.set(item.mintAddress, item);
+      }
+    }
     const coins = market
       .filter((c) => c && typeof c === "object")
-      .map((c) => ({
-        id: c.id ?? null,
-        tokenName: typeof c.tokenName === "string" ? c.tokenName : null,
-        ticker: typeof c.ticker === "string" ? c.ticker : null,
-        description: typeof c.description === "string" ? c.description : null,
-        mintAddress: typeof c.mintAddress === "string" ? c.mintAddress : null,
-        launchId: c.launchId ?? null,
-        snapshotTimestamp: typeof c.snapshotTimestamp === "string" ? c.snapshotTimestamp : null,
-        currentMarketCap: Number.isFinite(Number(c.currentMarketCap)) ? Number(c.currentMarketCap) : null,
-        priceChange24hPercent: Number.isFinite(Number(c.priceChange24hPercent)) ? Number(c.priceChange24hPercent) : null,
-        holderCount: Number.isFinite(Number(c.holderCount)) ? Number(c.holderCount) : null,
-        volume24h: Number.isFinite(Number(c.volume24h)) ? Number(c.volume24h) : null,
-        price: Number.isFinite(Number(c.price)) ? Number(c.price) : null,
-        liquidity: Number.isFinite(Number(c.liquidity)) ? Number(c.liquidity) : null,
-        fdv: Number.isFinite(Number(c.fdv)) ? Number(c.fdv) : null,
-        buyCount24h: Number.isFinite(Number(c.buyCount24h)) ? Number(c.buyCount24h) : null,
-        sellCount24h: Number.isFinite(Number(c.sellCount24h)) ? Number(c.sellCount24h) : null,
-        uniqueWallets24h: Number.isFinite(Number(c.uniqueWallets24h)) ? Number(c.uniqueWallets24h) : null,
-        circulatingSupply: Number.isFinite(Number(c.circulatingSupply)) ? Number(c.circulatingSupply) : null,
-        totalSupply: Number.isFinite(Number(c.totalSupply)) ? Number(c.totalSupply) : null,
-        lastTradeTime: typeof c.lastTradeTime === "string" ? c.lastTradeTime : null,
-        createdAt: typeof c.createdAt === "string" ? c.createdAt : null,
-      }))
+      .map((c) => {
+        const launch = c.mintAddress ? launchByMint.get(c.mintAddress) : null;
+        const coin = {
+          id: c.id ?? null,
+          tokenName: typeof c.tokenName === "string" ? c.tokenName : (launch?.name ?? null),
+          ticker: typeof c.ticker === "string" ? c.ticker : (launch?.symbol ?? null),
+          description: typeof c.description === "string" ? c.description : null,
+          mintAddress: typeof c.mintAddress === "string" ? c.mintAddress : null,
+          launchId: c.launchId ?? launch?.id ?? null,
+          snapshotTimestamp: typeof c.snapshotTimestamp === "string" ? c.snapshotTimestamp : null,
+          currentMarketCap: Number.isFinite(Number(c.currentMarketCap)) ? Number(c.currentMarketCap) : null,
+          priceChange24hPercent: Number.isFinite(Number(c.priceChange24hPercent)) ? Number(c.priceChange24hPercent) : null,
+          holderCount: Number.isFinite(Number(c.holderCount)) ? Number(c.holderCount) : null,
+          volume24h: Number.isFinite(Number(c.volume24h)) ? Number(c.volume24h) : null,
+          price: Number.isFinite(Number(c.price)) ? Number(c.price) : null,
+          liquidity: Number.isFinite(Number(c.liquidity)) ? Number(c.liquidity) : null,
+          fdv: Number.isFinite(Number(c.fdv)) ? Number(c.fdv) : null,
+          buyCount24h: Number.isFinite(Number(c.buyCount24h)) ? Number(c.buyCount24h) : null,
+          sellCount24h: Number.isFinite(Number(c.sellCount24h)) ? Number(c.sellCount24h) : null,
+          uniqueWallets24h: Number.isFinite(Number(c.uniqueWallets24h)) ? Number(c.uniqueWallets24h) : null,
+          circulatingSupply: Number.isFinite(Number(c.circulatingSupply)) ? Number(c.circulatingSupply) : null,
+          totalSupply: Number.isFinite(Number(c.totalSupply)) ? Number(c.totalSupply) : null,
+          lastTradeTime: typeof c.lastTradeTime === "string" ? c.lastTradeTime : null,
+          createdAt: typeof c.createdAt === "string" ? c.createdAt : null,
+          // Joined from /api/launches (full launch object per mint):
+          chain: typeof launch?.chain === "string" ? launch.chain : null,
+          status: typeof launch?.status === "string" ? launch.status : null,
+          isCoinAgent: Boolean(launch?.isCoinAgent),
+          boosted: Boolean(launch?.boosted),
+          logoUrl: typeof launch?.logoUrl === "string" ? launch.logoUrl : null,
+        };
+        const typed = trixCoinType(launch, coin);
+        coin.type = typed.label;
+        coin.typeKind = typed.kind;
+        return coin;
+      })
       .sort((a, b) => (b.currentMarketCap || 0) - (a.currentMarketCap || 0));
     const top10 = coins.slice(0, 10);
     const totalMarketCap = coins.reduce((s, c) => s + (c.currentMarketCap || 0), 0);
     const totalVolume24h = coins.reduce((s, c) => s + (c.volume24h || 0), 0);
     const totalLiquidity = coins.reduce((s, c) => s + (c.liquidity || 0), 0);
     const totalHolders = coins.reduce((s, c) => s + (c.holderCount || 0), 0);
+    const typeCounts = coins.reduce((acc, c) => {
+      acc[c.type] = (acc[c.type] || 0) + 1;
+      return acc;
+    }, {});
     return {
       source: "trix.meme.market",
       ok,
@@ -3221,10 +3289,12 @@ export async function sniffTrixMemeMarket({ previous = null } = {}) {
       totalVolume24h,
       totalLiquidity,
       totalHolders,
+      typeCounts,
+      launchJoinCount: launchByMint.size,
       snapshotAt: market[0]?.snapshotTimestamp ?? null,
-      fingerprint: bodyHash(JSON.stringify({ coins: coins.map((c) => c.mintAddress).slice(0, 10) })),
+      fingerprint: bodyHash(JSON.stringify({ coins: coins.map((c) => `${c.mintAddress}:${c.type}`).slice(0, 10) })),
       url: `${TRIX_BASE_URL}/`,
-      note: "TRIX /api/meme-market returns a snapshot of all meme tokens with market data (market cap, 24h volume, liquidity, holders, price change). Sorted by market cap descending. This is a leaderboard for boxes/meme tokens, not live on-curve data.",
+      note: "TRIX /api/meme-market snapshot of all meme tokens (market cap, 24h volume, liquidity, holders, price change, buy/sell counts), sorted by market cap. Each coin is joined against /api/launches by mint address for logo/status/chain. Type is sourced (AGENT / BOOSTED / non-solana CHAIN) or derived from the coin's own 24h momentum and buy/sell pressure (PUMP / RISING / DIPPING / DUMP / STEADY / QUIET) — a derived activity class, not a box rarity. This is a leaderboard for boxes/meme tokens, not live on-curve data.",
       reason: ok ? null : `HTTP ${res.status || 0} from /api/meme-market`,
     };
   } catch (error) {
@@ -3241,6 +3311,8 @@ export async function sniffTrixMemeMarket({ previous = null } = {}) {
       totalVolume24h: 0,
       totalLiquidity: 0,
       totalHolders: 0,
+      typeCounts: {},
+      launchJoinCount: 0,
       snapshotAt: null,
       fingerprint: null,
       url: `${TRIX_BASE_URL}/`,
@@ -3598,6 +3670,7 @@ trixGeoffCount: bySource["trix.geoff"]?.count ?? null,
       trixMemeMarketTotalLiq: bySource["trix.meme.market"]?.totalLiquidity ?? null,
       trixMemeMarketTotalHolders: bySource["trix.meme.market"]?.totalHolders ?? null,
       trixMemeMarketSnapshotAt: bySource["trix.meme.market"]?.snapshotAt ?? null,
+      trixMemeMarketTypeCounts: bySource["trix.meme.market"]?.typeCounts ?? null,
       trixMemeMarketFingerprint: bySource["trix.meme.market"]?.fingerprint ?? null,
       trixFrontpageFeatured: bySource["trix.frontpage"]?.featuredCount ?? null,
       trixFrontpageBoosted: bySource["trix.frontpage"]?.boostedCount ?? null,
