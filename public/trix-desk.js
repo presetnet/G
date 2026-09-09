@@ -1,9 +1,9 @@
 import { sourceDescription } from "./provenance.js";
 
-const TABS = ["coins", "boxes", "activity", "points", "art", "money"];
+const TABS = ["boxes", "coins", "activity", "points", "art", "money"];
 const STATUS = { coins: "coinSummary", boxes: "boxStatus", activity: "activityStatus", points: "pointsStatus", art: "artStatus", money: "moneyStatus" };
 const SOURCES = { coins: ["trix.meme.market", "trix.frontpage"], boxes: ["trix.boxes", "trix.boxboard", "trix.boxchain"], activity: ["trix.money"], points: ["trix.market", "trix.tiers"], art: ["trix.market"], money: ["trix.money", "trix.fee.config"] };
-const state = { tab: "coins", view: "all", search: "", chain: "", limit: 20 };
+const state = { tab: "boxes", view: "all", search: "", chain: "", limit: 20 };
 const htmlCache = new WeakMap();
 const brokenImages = new Set();
 let root = null;

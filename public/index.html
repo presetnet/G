@@ -197,24 +197,24 @@
       <section id="trixDesk" class="panel trix-desk" aria-labelledby="trixDeskTitle">
         <header class="desk-header"><div><p class="eyebrow">02 / COMMUNITY MARKET</p><h2 id="trixDeskTitle">TRIX desk</h2></div><span id="trixDeskStatus" class="desk-status">Waiting for data</span></header>
         <div class="desk-tabs" role="tablist" aria-label="TRIX views">
-          <button type="button" id="tab-coins" role="tab" data-desk-tab="coins" aria-controls="desk-coins" aria-selected="true"><span data-icon="coins"></span>Coins</button>
-          <button type="button" id="tab-boxes" role="tab" data-desk-tab="boxes" aria-controls="desk-boxes" aria-selected="false" tabindex="-1"><span data-icon="layers"></span>Boxes</button>
+          <button type="button" id="tab-boxes" role="tab" data-desk-tab="boxes" aria-controls="desk-boxes" aria-selected="true"><span data-icon="layers"></span>Boxes</button>
+          <button type="button" id="tab-coins" role="tab" data-desk-tab="coins" aria-controls="desk-coins" aria-selected="false" tabindex="-1"><span data-icon="coins"></span>Coins</button>
           <button type="button" id="tab-activity" role="tab" data-desk-tab="activity" aria-controls="desk-activity" aria-selected="false" tabindex="-1"><span data-icon="activity"></span>Activity</button>
           <button type="button" id="tab-points" role="tab" data-desk-tab="points" aria-controls="desk-points" aria-selected="false" tabindex="-1"><span data-icon="trophy"></span>Points</button>
           <button type="button" id="tab-art" role="tab" data-desk-tab="art" aria-controls="desk-art" aria-selected="false" tabindex="-1"><span data-icon="image"></span>Art</button>
           <button type="button" id="tab-money" role="tab" data-desk-tab="money" aria-controls="desk-money" aria-selected="false" tabindex="-1"><span data-icon="tag"></span>Money</button>
         </div>
-        <div id="desk-coins" class="desk-panel" role="tabpanel" aria-labelledby="tab-coins" tabindex="0">
-          <div class="desk-toolbar"><p id="coinSummary">Current launch rankings</p><label class="sr-only" for="coinView">Coin view</label><select id="coinView"><option value="all">Market cap</option><option value="featured">Featured</option><option value="boosted">Boosted</option><option value="recent">New launches</option></select><label class="sr-only" for="coinSearch">Find a coin by name, symbol or mint</label><input id="coinSearch" type="search" placeholder="Find a coin" autocomplete="off"><label class="sr-only" for="coinChain">Network filter</label><select id="coinChain"><option value="">All networks</option></select></div>
-          <p id="frontpageStatus" class="desk-context" hidden></p>
-          <div id="coinRows"></div><button id="coinMore" class="desk-more" type="button" hidden>Show more</button>
-        </div>
-        <div id="desk-boxes" class="desk-panel" role="tabpanel" aria-labelledby="tab-boxes" tabindex="0" hidden>
+        <div id="desk-boxes" class="desk-panel" role="tabpanel" aria-labelledby="tab-boxes" tabindex="0">
           <div class="desk-toolbar"><h3>Box leaderboard</h3><p id="boxStatus">Checking public feed</p><a class="desk-link" href="https://www.trix.market/shop/leaderboard" target="_blank" rel="noopener noreferrer">Open TRIX shop &nearr;</a></div>
           <div id="boxRows"></div>
           <details class="shop-types"><summary>Shop pack types <small>website definitions, not live inventory</small></summary><div class="pack-type-grid">
             <span><i data-icon="layers"></i>Base</span><span><i data-icon="bolt"></i>Hype</span><span><i data-icon="activity"></i>Viral</span><span><i data-icon="trophy"></i>Grail</span><span><i data-icon="spark"></i>Platinum</span><span><i data-icon="blocks"></i>Black Box</span>
           </div><p>Pack types are not reveal rarities. Opening or “tearing” packs stays on TRIX; this desk is read-only.</p></details>
+        </div>
+        <div id="desk-coins" class="desk-panel" role="tabpanel" aria-labelledby="tab-coins" tabindex="0" hidden>
+          <div class="desk-toolbar"><p id="coinSummary">Current launch rankings</p><label class="sr-only" for="coinView">Coin view</label><select id="coinView"><option value="all">Market cap</option><option value="featured">Featured</option><option value="boosted">Boosted</option><option value="recent">New launches</option></select><label class="sr-only" for="coinSearch">Find a coin by name, symbol or mint</label><input id="coinSearch" type="search" placeholder="Find a coin" autocomplete="off"><label class="sr-only" for="coinChain">Network filter</label><select id="coinChain"><option value="">All networks</option></select></div>
+          <p id="frontpageStatus" class="desk-context" hidden></p>
+          <div id="coinRows"></div><button id="coinMore" class="desk-more" type="button" hidden>Show more</button>
         </div>
         <div id="desk-activity" class="desk-panel" role="tabpanel" aria-labelledby="tab-activity" tabindex="0" hidden><div class="desk-toolbar"><h3>Recent feed events</h3><p id="activityStatus"></p></div><div id="activityRows"></div><details class="activity-breakdown"><summary>Flow by coin <small>up to 50 feed events, not 24h volume</small></summary><div id="activityFlow"></div></details></div>
         <div id="desk-points" class="desk-panel" role="tabpanel" aria-labelledby="tab-points" tabindex="0" hidden><div class="desk-toolbar"><h3>User points</h3><p id="pointsStatus"></p></div><div id="pointsRows"></div></div>

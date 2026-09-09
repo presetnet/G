@@ -183,7 +183,7 @@ async function main() {
     await page.waitForFunction(() => document.querySelector('#boxRows').textContent.includes('404'));
     await page.locator('#tab-boxes').focus();
     await page.keyboard.press('ArrowRight');
-    assert.equal(await page.locator('#tab-activity').getAttribute('aria-selected'), 'true');
+    assert.equal(await page.locator('#tab-coins').getAttribute('aria-selected'), 'true');
     console.log('PASS: on-chain box leaderboard, box types, fallback to official rows, and keyboard tabs');
 
     payload.latest.takenAt = new Date(Date.now() - 3600000).toISOString();
