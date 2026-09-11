@@ -704,10 +704,10 @@ const PROOFS = {
     fields: ["pile"],
     curls: [`curl -s ${SN_BASE}/api/v2/node-keys/pile`],
   },
-  paperworkUsd: {
+paperworkUsd: {
     title: "Paperwork ledger",
     explain:
-      "Booked and paid USD are StackNet ledger claims from /network/summary, not verified revenue. Solana RPC supplies treasury balance and a capped signature page, not a lifetime transaction count or proof that the ledger was paid.",
+      "Booked and paid USD are StackNet ledger claims from /network/summary, not verified revenue. Solana RPC supplies treasury balance and a capped signature page, not a lifetime transaction count or proof that the ledger was paid. NOTE: with no treasuryAddress published by StackNet, the chain wallet falls back to StackNet's devnet-era TEST treasury — a mainnet dust mailbox, not live capital.",
     sources: ["stacknet.network", "solana.treasury"],
     fields: [
       "metaproofsPaperworkUsd",
@@ -1085,8 +1085,9 @@ function renderMetrics(latest) {
     if (s.metaproofsPaidUsd != null)
       bits.push(`paid ${fmtCompactUsd(Number(s.metaproofsPaidUsd))}`);
     if (s.metaproofsTotal != null) bits.push(`${s.metaproofsTotal} proofs`);
-    if (s.treasuryRpcOk) {
+if (s.treasuryRpcOk) {
       bits.push(`chain ${Number(s.treasuryRpcSol ?? 0).toFixed(3)} SOL`);
+      if (s.treasuryRpcKnownDustTarget) bits.push(`dust-target mailbox`);
       if (s.treasuryRpcSigCount != null)
         bits.push(`${s.treasuryRpcSigCount} sampled tx`);
     }
@@ -1103,6 +1104,9 @@ function renderMetrics(latest) {
       `Booked vs paid metaproof ledger · chain balance via public Solana RPC${
         s.treasuryAddress ? ` · ${s.treasuryAddress}` : ""
       }`,
+      s.treasuryRpcKnownDustTarget
+        ? "This chain address is StackNet's devnet-era TEST treasury: NO live treasury use on mainnet, only a single 0.0016 SOL dust ping from a spam-distribution blaster. Treat any balance here as dust, not StackNet capital."
+        : null,
       press.length
         ? `Tokens held by watched owner ${tokenOwner} — holding token accounts does not grant minting control. INTERNAL TEST SCRIPT, microscopic float, zero liquidity. Do NOT buy: ${press
             .map((p) => `${p.symbol}=${p.supplyUi}`)

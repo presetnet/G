@@ -951,7 +951,12 @@ export async function sniffZenErrorShape() {
 }
 
 const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
-const DEFAULT_TREASURY_ADDRESS = "2W5gxAio1Bz76P58EaDtGC71MuyH4ZAdXHu3qqmeGy7g";
+/** StackNet's devnet-era TEST treasury. On mainnet it holds a single 0.0016 SOL dust
+ * ping from a spam-distribution blaster (the ETUdaF4… → G2YxRa6w… tree), no other
+ * transaction ever. It is NOT a live treasury: only used as a last-resort fallback
+ * when stacknet.network publishes no treasuryAddress. If this is ever flagged as a
+ * 9G funding hit it is a dust event, not StackNet capital. */
+const DEVNET_TEST_TREASURY_ADDRESS = "2W5gxAio1Bz76P58EaDtGC71MuyH4ZAdXHu3qqmeGy7g";
 const SIG_CACHE_TTL_MS = 10 * 60 * 1000;
 let sigCache = { at: 0, value: null };
 
@@ -974,8 +979,9 @@ async function solanaRpc(method, params = [], { timeoutMs = DEFAULT_TIMEOUT_MS }
   }
 }
 
-export async function sniffSolanaTreasury(address = DEFAULT_TREASURY_ADDRESS) {
+export async function sniffSolanaTreasury(address = DEVNET_TEST_TREASURY_ADDRESS) {
   const started = Date.now();
+  const isDevnetTest = address === DEVNET_TEST_TREASURY_ADDRESS;
   try {
     const balRes = await solanaRpc("getBalance", [address, { commitment: "confirmed" }]);
     const lamports = typeof balRes?.value === "number" ? balRes.value : null;
@@ -1000,13 +1006,15 @@ export async function sniffSolanaTreasury(address = DEFAULT_TREASURY_ADDRESS) {
       };
       sigCache = { at: Date.now(), value: sigs };
     }
-    return {
+return {
       source: "solana.treasury",
       ok: lamports !== null,
       status: lamports !== null ? 200 : 0,
       ms: Date.now() - started,
       address,
       cluster: "mainnet",
+      devnetTest: isDevnetTest,
+      knownDustTarget: isDevnetTest,
       lamports,
       sol: lamports !== null ? lamports / 1e9 : null,
       sigCount: sigs.count,
@@ -1025,6 +1033,8 @@ export async function sniffSolanaTreasury(address = DEFAULT_TREASURY_ADDRESS) {
       ms: Date.now() - started,
       address,
       cluster: "mainnet",
+      devnetTest: isDevnetTest,
+      knownDustTarget: isDevnetTest,
       lamports: null,
       sol: null,
       sigCount: sigCache.value?.count ?? null,
@@ -1483,7 +1493,7 @@ export function summarizeKey9g(source) {
   const visited = new Set();
   const hits = [];
   for (const [label, address] of [
-    ["stacknet-treasury", DEFAULT_TREASURY_ADDRESS],
+    ["stacknet-devnet-test-treasury (dust target)", DEVNET_TEST_TREASURY_ADDRESS],
     ["pond0x-treasury", POND0X_TREASURY],
   ]) {
     const digest = hash9gAddr(address);
@@ -3766,7 +3776,7 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
 
   const treasuryAddress =
     sources.find((s) => s.source === "stacknet.network")?.treasury?.treasuryAddress ||
-    DEFAULT_TREASURY_ADDRESS;
+    DEVNET_TEST_TREASURY_ADDRESS;
   sources.push(await observeSource("solana.treasury", sniffSolanaTreasury(treasuryAddress)));
   sources.push(await observeSource("solana.tokens", sniffSolanaTokens()));
 
@@ -3806,6 +3816,8 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
       x402Fingerprint: bySource["stacknet.x402"]?.fingerprint ?? null,
       treasuryRpcOk: Boolean(bySource["solana.treasury"]?.ok),
       treasuryRpcAddress: bySource["solana.treasury"]?.address ?? null,
+      treasuryRpcDevnetTest: Boolean(bySource["solana.treasury"]?.devnetTest),
+      treasuryRpcKnownDustTarget: Boolean(bySource["solana.treasury"]?.knownDustTarget),
       treasuryRpcLamports: bySource["solana.treasury"]?.lamports ?? null,
       treasuryRpcSol: bySource["solana.treasury"]?.sol ?? null,
       treasuryRpcSigCount: bySource["solana.treasury"]?.sigCount ?? null,

@@ -184,7 +184,9 @@ function renderClaimsDesk(summary) {
     chainBits.push(
       `${summary.treasuryRpcSigCount} lifetime signatures`,
     );
-  if (chainSol === 0 && !chainBits.length) chainBits.push("wallet never touched");
+  if (summary.treasuryRpcKnownDustTarget)
+    chainBits.push("dust-target mailbox");
+  else if (chainSol === 0 && !chainBits.length) chainBits.push("wallet never touched");
   els.claimChainNote.textContent = `${
     chainBits.length ? `${chainBits.join(" · ")} · ` : ""
   }verified via public Solana RPC`;
