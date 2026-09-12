@@ -1576,7 +1576,7 @@ function extractDocsFingerprint(html = "") {
   const text = extractDocsBodyText(html).slice(0, 50_000);
   const modelHits = [
     ...new Set(
-      [...text.matchAll(/\b(magma(?:-2\.1)?|pyro(?::max)?|preview|stack-embed|mom-preview)\b/gi)].map((m) =>
+      [...text.matchAll(/\b(magma(?:-2\.1)?|pyro(?::max)?|wildfire(?::preview)?|preview|stack-embed|mom-preview)\b/gi)].map((m) =>
         m[0].toLowerCase(),
       ),
     ),
@@ -1596,6 +1596,9 @@ function extractDocsFingerprint(html = "") {
         "model training",
         "sandbox",
         "voice clone",
+        "wildfire",
+        "orchestration effort",
+        "resume",
       ].filter((k) => new RegExp(`\\b${k.replace(/\s+/g, "\\s+")}\\b`, "i").test(text)),
     ),
   ].sort();
@@ -2048,7 +2051,7 @@ async function sniffGeoffDocsSurface() {
 
   const okPages = pages.filter((p) => p.ok);
   const publishedModelLayers = (pages.find((p) => p.id === "models")?.modelHits || [])
-    .filter((id) => ["magma", "magma-2.1", "pyro"].includes(id));
+    .filter((id) => ["magma", "magma-2.1", "pyro", "wildfire"].includes(id));
   const fingerprint = simpleHash(
     okPages.map((p) => `${p.id}:${p.hash}`).sort().join("|"),
   );

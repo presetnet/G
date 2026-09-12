@@ -123,7 +123,16 @@ laundered before users see them.
 Every layer is `owned_by: stacknet-layer` with upstream identities anonymized.
 No third-party model names anywhere. **big-pickle does not appear.**
 
-**INTERNAL FLEET SUMMARY** (`GET https://stacknet.magma-rpc.com/network/summary` — also public, no auth):
+**DOCS-ONLY LAYER — Wildfire Preview** (`docs.geoff.ai/introduction/models` + `/api-reference/text/chat`):
+`wildfire:preview` is a text-orchestration model with its own `orchestration_effort`
+(low/med/high/max, default medium), gated by the authenticated catalog capability
+`wildfire_run_v1`, with Resume/idempotency semantics for held requests. It is NOT in the
+public `/v1/models` catalog (auth-gated), lives only in the docs surface, and is
+text-only in its initial slice. No third-party upstream named. big-pickle absent here too.
+
+**INTERNAL FLEET SUMMARY** (`GET https://stacknet.magma-rpc.com/network/summary`):
+*now requires auth (401 as of 2026-09-12)* — the last public payload is retained by the
+desk with `stale: true`.
 
 The full 29-model internal fleet is just two naming axes multiplied out:
 

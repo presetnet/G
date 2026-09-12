@@ -41,6 +41,7 @@ const MODEL_ROLE = {
   preview: { role: "Everyday multimodal", use: "Chat, code, images, and tool use." },
   pyro: { role: "Agentic coding layer", use: "1M-context code, refactoring, tools, and structured output." },
   "pyro:max": { role: "Pyro Max API card", use: "1M-context multimodal reasoning as described by the live API card; not a current docs layer." },
+  "wildfire:preview": { role: "Wildfire Preview", use: "Text-orchestration model with separate orchestration_effort (low/med/high/max), gated by wildfire_run_v1 catalog capability; initial slice is text-only chat." },
   "pyro-magma": { role: "Pyro × Magma blend", use: "Network-listed pyro/magma hybrid id." },
   "pyro-preview": { role: "Pyro preview lane", use: "Preview-tier pyro family id." },
   "stack-chat": { role: "Chat specialist", use: "Conversation-focused replies." },

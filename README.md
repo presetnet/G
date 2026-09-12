@@ -16,7 +16,7 @@ Designed to deploy on **Vercel** with a **shared live desk** (same feed in every
 | Stacknet widgets | `/widgets` | public widget catalog |
 | Stacknet node | `/node` | node id / tasks when the public route is available |
 | Geoff catalogs | `/api/catalog/*` | optional auth cookie / preview code |
-| Geoff docs | 24 representative live pages | Body fingerprints across Introduction, Geoff Code, API Reference, and Token Plan; 70 linked pages inventoried |
+| Geoff docs | 24 representative live pages | Body fingerprints across Introduction, Geoff Code, API Reference, and Token Plan; 70 linked pages inventoried. Model mentions incl. Wildfire Preview (`wildfire:preview`), a docs-only auth-gated slice not present in `/v1/models` |
 | TRIX Packs | `/api/mkt/state`, `/api/mkt/g` + Solana RPC | API-reported Pack mints, Genesis status, observed Base payment maxima, Card odds, and gross reward multiples |
 
 The translator turns diffs into a readable feed and a **temperature** score (cool → blazing).

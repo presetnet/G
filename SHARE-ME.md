@@ -38,6 +38,9 @@ Final receipt: StackNet's model list is PUBLIC.
 preview • magma • pyro • pyro:max — all "owned_by: stacknet-layer"
 upstreams anonymous by design. And big-pickle?
 NOT ON THE MENU.
+Docs (docs.geoff.ai) additionally list **Wildfire Preview** (`wildfire:preview`) —
+auth-gated by the `wildfire_run_v1` capability, text-orchestration slice with its own
+effort control — but that name isn't big-pickle either.
 
 **6/**
 Verdict:

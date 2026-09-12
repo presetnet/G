@@ -23,7 +23,7 @@ export const marketCatalog = {
       horsepower: {
         flagship: "magma",
         context: "Network-routed (varies by model lane)",
-        maxContextLabel: "1M on documented magma, magma-2.1, and pyro layers",
+        maxContextLabel: "1M on documented magma, magma-2.1, and pyro layers; Wildfire Preview is a text-orchestration slice",
         modalities: ["text", "image", "music", "video", "voice", "code", "agents"],
         apiStyle: "geoff.ai/api gateway · OpenAI, Anthropic, and Stacknet-compatible text APIs",
         pricingModel:
@@ -45,6 +45,14 @@ export const marketCatalog = {
           input: "plan tokens",
           output: "plan tokens",
           notes: "Current docs layer for long-horizon coding, media, tools, and MoM; not present in the current public /v1/models card list",
+        },
+        {
+          id: "wildfire:preview",
+          role: "Wildfire Preview",
+          context: "Text-orchestration (slice)",
+          input: "plan tokens",
+          output: "plan tokens",
+          notes: "New docs model layer · orchestration_effort low/med/high/max (default medium) · gated by wildfire_run_v1 catalog capability · initial slice text-only, no tools/attachments · Resume via idempotencyKey; not in public /v1/models (auth-gated)",
         },
         {
           id: "pyro",
