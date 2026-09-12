@@ -218,9 +218,11 @@ function renderActivity(money, geoff) {
     return `<div class="activity-row"><span>${esc(side)}</span><span class="coin-copy"><b>${fallback ? esc(label) : coinLink(r.mint, label)}</b><small title="${esc(r.id)}">${esc(fallback ? `Generation ${r.id}` : r.id == null ? "Feed event" : `Event ${short(String(r.id))}`)}</small></span><span class="desk-number">${sol(amount)}</span>${clock(r.createdAt, fallback ? "Generation event" : "Feed event")}${link("https://solscan.io/tx/", signature, signature ? "Receipt" : "--")}</div>`;
   }).join("");
   setHTML("activityRows", body || emptyRows(check, money?.recentTrades, "No trades reported in this sample."));
+  const fees = money?.fees || {};
   const flows = rows(money?.fees?.topCoins);
-  const flowRows = flows.map(r => `<tr><td>${coinLink(r.mint, r.symbol || short(r.mint) || "--")}</td><td class="desk-number">${fmt(r.buySol)}</td><td class="desk-number">${fmt(r.sellSol)}</td><td class="desk-number">${fmt(r.count, 0)}</td></tr>`).join("");
-  setHTML("activityFlow", flowRows ? table("Per-coin flow in the 50-event sample", [["Coin / event"], ["Buy SOL", "desk-number"], ["Sell SOL", "desk-number"], ["Events", "desk-number"]], flowRows) : emptyRows(check, money?.fees?.topCoins, "No per-coin flow in this sample."));
+  const flowRows = flows.map(r => `<tr><td>${coinLink(r.mint, r.symbol || short(r.mint) || "--")}</td><td class="desk-number">${fmt(r.buySol)}</td><td class="desk-number">${fmt(r.sellSol)}</td><td class="desk-number" title="Void-side events carry value into the void pool, not to a buyer or seller">${fmt(r.voidSol)}</td><td class="desk-number">${fmt(r.count, 0)}</td></tr>`).join("");
+  const voidTotal = `<div class="activity-void-total">Void total in sample: <strong>${sol(fees.recentVoidSol)}</strong> across ${fmt(fees.voidCount, 0)} void-side event${fees.voidCount === 1 ? "" : "s"}</div>`;
+  setHTML("activityFlow", flowRows ? `${voidTotal}<p class="flow-caption">Per-coin flow in the 50-event sample · Void is the value that vanishes into the void pool, not into a buyer or seller.</p>${table("Per-coin flow in the 50-event sample", [["Coin / event"], ["Buy SOL", "desk-number"], ["Sell SOL", "desk-number"], ["Void SOL", "desk-number"], ["Events", "desk-number"]], flowRows)}` : emptyRows(check, money?.fees?.topCoins, "No per-coin flow in this sample."));
   return fallback;
 }
 

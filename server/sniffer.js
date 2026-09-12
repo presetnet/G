@@ -3216,8 +3216,10 @@ export async function sniffTrixMoney({ previous = null } = {}) {
     })) : null;
   let buySol = 0;
   let sellSol = 0;
+  let voidSol = 0;
   let buyCount = 0;
   let sellCount = 0;
+  let voidCount = 0;
   const wallets = new Set();
   const byCoin = new Map();
   for (const t of trades) {
@@ -3226,20 +3228,22 @@ export async function sniffTrixMoney({ previous = null } = {}) {
     if (sol === null) continue;
     const mint = t?.mint;
     if (side === "buy") { buySol += sol; buyCount += 1; }
-    if (side === "sell") { sellSol += sol; sellCount += 1; }
+    else if (side === "sell") { sellSol += sol; sellCount += 1; }
+    else if (side === "void") { voidSol += sol; voidCount += 1; }
     if (t?.walletAddress) wallets.add(t.walletAddress);
     if (mint) {
-      const coin = byCoin.get(mint) || { mint, symbol: t?.symbol, buySol: 0, sellSol: 0, count: 0 };
+      const coin = byCoin.get(mint) || { mint, symbol: t?.symbol, buySol: 0, sellSol: 0, voidSol: 0, count: 0 };
       coin.buySol += side === "buy" ? sol : 0;
       coin.sellSol += side === "sell" ? sol : 0;
+      coin.voidSol += side === "void" ? sol : 0;
       coin.count += 1;
       byCoin.set(mint, coin);
     }
   }
   const topCoins = [...byCoin.values()]
-    .sort((a, b) => (b.buySol + b.sellSol) - (a.buySol + a.sellSol))
+    .sort((a, b) => (b.buySol + b.sellSol + b.voidSol) - (a.buySol + a.sellSol + a.voidSol))
     .slice(0, 8)
-    .map((c) => ({ ...c, buySol: roundSol(c.buySol), sellSol: roundSol(c.sellSol) }));
+    .map((c) => ({ ...c, buySol: roundSol(c.buySol), sellSol: roundSol(c.sellSol), voidSol: roundSol(c.voidSol) }));
 
   const tradesKnown = Boolean(results.trades) && trades.every((trade) => trixNumber(trade?.solAmount) !== null);
   const aggregations = {
@@ -3265,9 +3269,11 @@ export async function sniffTrixMoney({ previous = null } = {}) {
     fees: {
       recentBuysSol: tradesKnown ? roundSol(buySol) : null,
       recentSellsSol: tradesKnown ? roundSol(sellSol) : null,
+      recentVoidSol: tradesKnown ? roundSol(voidSol) : null,
       recentNetSol: tradesKnown ? roundSol(buySol - sellSol) : null,
       buyCount: tradesKnown ? buyCount : null,
       sellCount: tradesKnown ? sellCount : null,
+      voidCount: tradesKnown ? voidCount : null,
       uniqueWallets: tradesKnown ? wallets.size : null,
       topCoins: tradesKnown ? topCoins : [],
     },

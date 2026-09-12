@@ -520,6 +520,23 @@ assert.equal(emptyTrades.fees.recentBuysSol, 0);
 assert.equal(emptyTrades.fees.buyCount, 0);
 assert.deepEqual(plain(emptyTrades.recentTrades), []);
 
+// Void-side events are their own pool: counted and valued separately from buys/sells.
+tradeItems = [
+  { id: "t-1", side: "buy", symbol: "A", mint: "mint-void-a", solAmount: "4", createdAt: freshAt },
+  { id: "t-2", side: "sell", symbol: "A", mint: "mint-void-a", solAmount: "1", createdAt: freshAt },
+  { id: "t-3", side: "void", symbol: "A", mint: "mint-void-a", solAmount: "2.5", createdAt: freshAt },
+  { id: "t-4", side: "void", symbol: "B", mint: "mint-void-b", solAmount: "0.75", createdAt: freshAt },
+];
+const voidTrades = await api.sniffTrixMoney();
+assert.equal(voidTrades.fees.buyCount, 1);
+assert.equal(voidTrades.fees.sellCount, 1);
+assert.equal(voidTrades.fees.recentBuysSol, 4);
+assert.equal(voidTrades.fees.recentSellsSol, 1);
+assert.equal(voidTrades.fees.voidCount, 2);
+assert.equal(voidTrades.fees.recentVoidSol, 3.25);
+const voidTop = voidTrades.fees.topCoins.find((c) => c.mint === "mint-void-a");
+assert.deepEqual(plain({ ...voidTop, buySol: voidTop.buySol, sellSol: voidTop.sellSol, voidSol: voidTop.voidSol }), plain({ mint: "mint-void-a", symbol: "A", buySol: 4, sellSol: 1, voidSol: 2.5, count: 3 }));
+
 // Live GET exposes txSignature, not signature; never derive an ID or event time.
 tradeItems = Array.from({ length: 15 }, (_, index) => ({
   id: `trade-${index}`, txSignature: index === 1 ? null : `trade-signature-${index}`,
@@ -545,6 +562,8 @@ assert.equal(actualTrades.recentTrades[2].createdAt, null);
 assert.equal(actualTrades.recentTrades[2].solAmount, null);
 assert.equal(actualTrades.recentTrades.at(-1).id, "trade-11");
 assert.deepEqual(plain(api.summarizeTrix({ "trix.money": actualTrades }).trixMoneyRecentTrades), plain(actualTrades.recentTrades));
+assert.equal(actualTrades.fees.voidCount, null);
+assert.equal(actualTrades.fees.recentVoidSol, null);
 for (const row of actualTrades.recentTrades) {
   assert.deepEqual(Object.keys(row).sort(), ["signature", "id", "side", "symbol", "mint", "solAmount", "createdAt"].sort());
 }

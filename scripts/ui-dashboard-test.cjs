@@ -27,7 +27,7 @@ function fixture() {
     'trix.geoff': { ...base, count: 780, paidSol: 9.36, records: [], latest: { createdAt: at } },
     'trix.market': { ...base, endpoints: { leaderboard: base, recentMints: base }, leaderboard: { rows: Array.from({ length: 100 }, (_, i) => ({ rank: i + 1, username: `Collector ${i}`, wallet: `fixture-wallet-${i}`, points: (100 - i) * 100, verified: i < 2 })) }, recentMints: [{ id: 'art1', name: 'A new artwork', imageUrl: 'http://127.0.0.1:3851/test-logo.svg', linkedCoinMint: 'fixture-mint-0', linkedCoinSymbol: 'COIN0' }] },
     'trix.tiers': { ...base, tiers: [{ name: 'Starter', minPoints: 0 }, { name: 'Explorer', minPoints: 5000 }] },
-    'trix.money': { ...base, endpoints: { trades: base }, recentTrades: [{ id: 'trade1', signature: 'fixture-signature', side: 'buy', symbol: 'COIN0', mint: 'fixture-mint-0', solAmount: .1234, createdAt: at }], fees: { recentBuysSol: 12.34, recentSellsSol: 4.32, recentNetSol: 8.02, uniqueWallets: 12, buyCount: 15, sellCount: 6 }, treasury: { balanceSol: 143.21, balanceSolOnChain: 143.21, balanceSolOnChainAt: at, totalPoints: 98230, address: 'fixture-treasury' }, feeSplit: { platformFeeBps: 100, creatorFeeBps: 100, platformLaunchFeeSol: 0 }, geoffLeg1: { address: 'fixture-provider', balanceSol: .01, balanceSolOnChainAt: at } },
+    'trix.money': { ...base, endpoints: { trades: base }, recentTrades: [{ id: 'trade1', signature: 'fixture-signature', side: 'buy', symbol: 'COIN0', mint: 'fixture-mint-0', solAmount: .1234, createdAt: at }, { id: 'trade0', signature: 'fixture-signature-void', side: 'void', symbol: 'COIN0', mint: 'fixture-mint-0', solAmount: 5, createdAt: at }], fees: { recentBuysSol: 12.34, recentSellsSol: 4.32, recentVoidSol: 5, recentNetSol: 8.02, uniqueWallets: 12, buyCount: 15, sellCount: 6, voidCount: 2 }, treasury: { balanceSol: 143.21, balanceSolOnChain: 143.21, balanceSolOnChainAt: at, totalPoints: 98230, address: 'fixture-treasury' }, feeSplit: { platformFeeBps: 100, creatorFeeBps: 100, platformLaunchFeeSol: 0 }, geoffLeg1: { address: 'fixture-provider', balanceSol: .01, balanceSolOnChainAt: at } },
   });
   sources['trix.frontpage'] = { ...base, builtAt: at,
     featured: [{ name: 'Spotlight token', symbol: 'SPOT', mintAddress: 'A'.repeat(32), chain: 'solana', marketCap: 1234, marketCapUpdatedAt: at }],
@@ -35,7 +35,7 @@ function fixture() {
     recent: [{ name: 'New launch', symbol: 'NEW', mintAddress: 'C'.repeat(32), chain: 'solana', marketCap: 1000, marketCapUpdatedAt: at, createdAt: at }],
   };
   sources['trix.fee.config'] = { ...base, feeBps: 100, feeWallet: 'fixture-provider', treasuryWallet: 'fixture-treasury' };
-  sources['trix.money'].fees.topCoins = [{ mint: 'verification', symbol: 'Verification', buySol: 0, sellSol: 0, count: 1 }, { mint: 'A'.repeat(32), symbol: 'SPOT', buySol: 1.234, sellSol: 0, count: 2 }];
+  sources['trix.money'].fees.topCoins = [{ mint: 'verification', symbol: 'Verification', buySol: 0, sellSol: 0, voidSol: 0, count: 1 }, { mint: 'A'.repeat(32), symbol: 'SPOT', buySol: 1.234, sellSol: 0, voidSol: 0.5, count: 2 }];
   Object.assign(sources['trix.market'].recentMints[0], { artworkType: 'digital', status: 'minted', currentMarketCap: 1234, marketCapUpdatedAt: at });
   sources['solana.tokens'].mintsCheckedAt = at;
   sources['solana.tokens'].mints = [{ symbol: 'PAPER', supplyUi: 14369.47, mint: 'fixture-paper' }];

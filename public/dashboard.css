@@ -84,6 +84,9 @@
 .activity-breakdown { border-top: 1px solid var(--line); color: var(--muted); font-size: .75rem; }
 .activity-breakdown > summary { padding: .75rem 0; cursor: pointer; }
 .activity-breakdown small { font-size: .6rem; margin-left: .4rem; }
+.activity-void-total { margin: .6rem 0 .2rem; color: var(--ink); font: .72rem var(--font-mono); }
+.activity-void-total strong { color: var(--accent); font-variant-numeric: tabular-nums; }
+.flow-caption { margin: .35rem 0 .6rem; color: var(--muted); font-size: .62rem; font-style: italic; }
 .box-type-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .7rem; margin: .6rem 0 .9rem; }
 .box-tile { border: 1px solid var(--line); border-radius: 8px; background: #17171a; padding: .85rem; min-width: 0; border-top: 3px solid var(--box-hex, #444); }
 .box-tile.in-round { border-color: #3a3a40; }
