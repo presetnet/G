@@ -87,6 +87,31 @@ const generation = {
   paidNetwork: "mainnet", txSignature: "fixture-signature", feeLamports: 10000000,
 };
 let recent = [generation];
+// TRIX terms/privacy SPA fixtures: shell -> entry -> router chunk -> terms chunk.
+const legalAssets = {
+  "e-fixture.js": `var __vite__mapDeps=function(i,m){return i.map(j=>m[j])};var f=["assets/m-fixture-shared.js","assets/m-fixture-main.js","assets/m-fixture-terms.js","assets/r-fixture.css"];import("./m-fixture-main.js");import("./m-fixture-shared.js");`,
+  "m-fixture-shared.js": `export const shared="shared module, not the router";`,
+  "m-fixture-main.js": `const y={lazy:(p)=>p},je=(a)=>a;var l={jsx:(t,a)=>a,jsxs:(t,a)=>a},re={};l.jsx(re,{path:"/terms",component:Ry}),l.jsx(re,{path:"/privacy",component:Ny});Ry=cC,cC=y.lazy(()=>je(()=>import("./m-fixture-terms.js"),__vite__mapDeps([2,0,1])));function Ny(){return l.jsxs("div",{children:[l.jsx("h1",{dataTestid:"text-privacy-title",children:"Privacy Policy"}),l.jsx("p",{className:"text-dim text-xs",children:"Last Updated: March 15, 2026"}),l.jsx("h2",{children:"1. Introduction"}),l.jsx("p",{children:'Trix ("Trix", "we", "our" or "us") is committed to protecting your privacy.'})]})}`,
+  "m-fixture-terms.js": `import{dg as e}from"./m-fixture-main.js";import"./m-fixture-shared.js";function r(){return e.jsxs("main",{children:[e.jsx("h1",{className:"text-3xl font-bold text-white",children:"Terms of Use"}),e.jsx("p",{className:"text-dim text-xs",children:"Last updated: September 11, 2026"}),e.jsx("h2",{className:"font-bold uppercase text-white",children:"1. Agreement"}),e.jsx("p",{children:"By accessing or using TRiX, you agree to these Terms of Use."})]})}export{r as default}`,
+};
+const legalAssetResponse = (text) => ({
+  ok: true, status: 200, url: "https://www.trix.market/", headers: new Map(),
+  text: async () => text, json: async () => null,
+});
+const legalShellResponse = () => legalAssetResponse('<!doctype html><html><head><script type="module" crossorigin src="/assets/e-fixture.js"></script></head><body></body></html>');
+// pond0x homepage fixture: escaped Next.js flight payload (statsData) + embedded Geoff rail.
+const pond0xStatsRecord = {
+  usd_sol_rewards: 6909850.890100285, usd_eth_rewards: 28315409,
+  usd_claims: 6698463.659491777, usd_ref_rewards: 1170515,
+  usd_swap_volume: 0, num_swaps: 52723518, usd_total: 43094238.54959206,
+};
+const pond0xHomepage = () => {
+  const payload = `1c:["$","$L3a",null,{"statsData":${JSON.stringify(pond0xStatsRecord)},"summary":{}}]`;
+  const statsPush = `self.__next_f.push([1,${JSON.stringify(payload)}])`;
+  return `<script>${statsPush}</script>\n<div><input placeholder="Search or ask Geoff"></div><div id="GeoffProvider"></div>`;
+};
+let pond0xPairStatus = 200;
+let pond0xPairPayload = { paired: false };
 const context = vm.createContext({
   Date: Clock, process: { env: {} }, Buffer, AbortController, URL,
   setTimeout: schedule, clearTimeout: (id) => timers.delete(id),
@@ -168,6 +193,20 @@ const context = vm.createContext({
       else if (url.pathname === "/network/summary") json = { network: { totalNodes: 2, availableNodes: 1 } };
       else if (url.pathname === "/v1/models") json = { data: [] };
       else json = {};
+    } else if (url.hostname === "www.trix.market" && url.pathname === "/terms") {
+      return legalShellResponse();
+    } else if (url.hostname === "www.trix.market" && url.pathname.startsWith("/assets/")) {
+      const fixture = legalAssets[url.pathname.slice("/assets/".length)];
+      if (!fixture) throw new Error(`Unexpected TRIX asset ${url.pathname}`);
+      return legalAssetResponse(fixture);
+    } else if (url.hostname === "www.pond0x.com" && url.pathname === "/") {
+      return legalAssetResponse(pond0xHomepage());
+    } else if (url.hostname === "www.pond0x.com" && url.pathname === "/api/geoff/pair") {
+      assert.equal(options.method || "GET", "GET");
+      if (pond0xPairStatus !== 200) {
+        return { ok: false, status: pond0xPairStatus, url: String(url), headers: new Map(), text: async () => JSON.stringify({ paired: false }), json: async () => ({ paired: false }) };
+      }
+      json = pond0xPairPayload;
     } else throw new Error(`Unexpected fixture URL ${url}`);
     if (failure === "invalid") json = { message: "not a valid response" };
     const status = typeof failure === "number" ? failure : url.pathname === "/api/mkt/leaderboard" ? boxesStatus : 200;
@@ -213,7 +252,7 @@ for (const [key, exports] of Object.entries(dependencies)) modules.set(key, new 
 ));
 const stubs = [...codes[0].matchAll(/(?:export )?async function (sniff\w+)\(/g)]
   .map((match) => match[1])
-  .filter((name) => !name.startsWith("sniffTrix") && ![
+  .filter((name) => !name.startsWith("sniffTrix") && !name.startsWith("sniffPond0x") && ![
     "sniffStacknetMinute", "sniffStacknetHealth", "sniffStacknetRoot", "sniffStacknetNetwork", "sniffStacknetNode", "sniffStacknetModels",
   ].includes(name))
   .map((name) => `${name} = async () => { throw new Error("unrelated collector fixture"); };`)
@@ -675,13 +714,20 @@ failures.clear();
 
 // Full/minute summaries use the same source contract, including coverage.
 const coldMinute = await api.runMinuteSniff();
-assert.equal(Object.keys(coldMinute.sources).length, 15);
-assert.equal(coldMinute.summary.totalSources, 15);
+assert.equal(Object.keys(coldMinute.sources).length, 19);
+assert.equal(coldMinute.summary.totalSources, 19);
 assert.equal(coldMinute.sources["trix.boxes"].status, 404);
 assert.equal(coldMinute.sources["trix.boxboard"].ok, true);
 assert.equal(coldMinute.sources["trix.boxchain"].ok, true);
+assert.equal(coldMinute.sources["pond0x.stats"].ok, true);
+assert.equal(coldMinute.sources["pond0x.stats"].usdTotal, 43094238.54959206);
+assert.equal(coldMinute.sources["pond0x.stats"].numSwaps, 52723518);
+assert.equal(coldMinute.sources["pond0x.geoff"].ok, true);
+assert.equal(coldMinute.sources["pond0x.geoff"].paired, false);
+assert.equal(coldMinute.sources["pond0x.geoff"].chatEmbedded, true);
+assert.equal(coldMinute.sources["pond0x.geoff"].providerEmbedded, true);
 const full = service.preserveTrixHistory(null, await api.runSniff());
-assert.equal(Object.keys(full.sources).length, 38);
+assert.equal(Object.keys(full.sources).length, 42);
 assert.equal(full.sources["trix.boxes"].status, 404);
 assert.equal(full.summary.trixBoxesOk, false);
 assert.equal(full.summary.trixBoxesStatus, 404);
@@ -691,6 +737,47 @@ assert.equal(full.summary.trixBoxBoardOk, true);
 assert.equal(full.summary.trixBoxBoardCollectorCount, 3);
 assert.equal(full.summary.trixBoxChainOk, true);
 assert.equal(full.summary.trixBoxChainEventsSinceLaunch, 12);
+assert.equal(full.sources["trix.terms"].ok, true);
+assert.equal(full.sources["trix.terms"].title, "Terms of Use");
+assert.equal(full.sources["trix.terms"].lastUpdated, "September 11, 2026");
+assert.deepEqual(plain(full.sources["trix.terms"].headings), ["1. Agreement"]);
+assert.equal(full.sources["trix.privacy"].ok, true);
+assert.equal(full.sources["trix.privacy"].lastUpdated, "March 15, 2026");
+assert.deepEqual(plain(full.sources["trix.privacy"].headings), ["1. Introduction"]);
+assert.ok(full.sources["trix.terms"].fingerprint);
+assert.notEqual(full.sources["trix.terms"].fingerprint, full.sources["trix.privacy"].fingerprint);
+assert.equal(full.sources["pond0x.stats"].ok, true);
+assert.equal(full.sources["pond0x.stats"].source, "pond0x.stats");
+assert.ok(full.sources["pond0x.stats"].fingerprint);
+assert.equal(full.sources["pond0x.geoff"].ok, true);
+assert.equal(full.sources["pond0x.geoff"].paired, false);
+assert.notEqual(full.sources["pond0x.geoff"].fingerprint, full.sources["pond0x.stats"].fingerprint);
+// Rewards block rounding: a few thousand dollars of swapping does not re-fire the fingerprint.
+const smallShift = await api.sniffPond0xStats();
+assert.equal(smallShift.fingerprint, full.sources["pond0x.stats"].fingerprint);
+pond0xStatsRecord.usd_total += 100000;
+now += 60001;
+const bigShift = await api.sniffPond0xStats();
+assert.notEqual(bigShift.fingerprint, full.sources["pond0x.stats"].fingerprint);
+pond0xStatsRecord.usd_total = 43094238.54959206;
+// Unpaired→paired flips the geoff fingerprint.
+now += 60001;
+const unpairedRound = await api.sniffPond0xGeoff();
+assert.equal(unpairedRound.fingerprint, full.sources["pond0x.geoff"].fingerprint);
+pond0xPairPayload = { paired: true };
+now += 60001;
+const pairedRound = await api.sniffPond0xGeoff();
+assert.notEqual(pairedRound.fingerprint, unpairedRound.fingerprint);
+assert.equal(pairedRound.paired, true);
+pond0xPairPayload = { paired: false };
+// A failing pair gateway is a failed source, never a silent absence.
+pond0xPairStatus = 500;
+const pairDown = await api.sniffPond0xGeoff({ previous: unpairedRound });
+assert.equal(pairDown.ok, false);
+assert.equal(pairDown.stale, true);
+assert.equal(pairDown.status, 500);
+assert.match(pairDown.reason, /500/);
+pond0xPairStatus = 200;
 const baseline = {
   ...plain(full),
   sources: { ...plain(full.sources), untouched: { source: "untouched", ok: true, checkedAt: oldAt } },
@@ -720,6 +807,9 @@ for (const source of ["trix.geoff", "trix.fee.config", "stacknet.health"]) {
   assert.ok(minute.sources[source].lastAttemptAt, source);
 }
 assert.equal(minute.sources["trix.money"].ok, true);
+assert.equal(minute.sources["trix.terms"].ok, true);
+assert.equal(minute.sources["trix.terms"].fromCache, true);
+assert.equal(minute.sources["trix.terms"].lastUpdated, "September 11, 2026");
 assert.notEqual(minute.sources["trix.money"].checkedAt, baseline.sources["trix.money"].checkedAt);
 assert.equal(minute.sources.untouched, baseline.sources.untouched);
 assert.equal(minute.summary.trixMemeMarketTotalMc, minute.sources["trix.meme.market"].totalMarketCap);
@@ -819,7 +909,7 @@ await pending;
 assert.ok(timed);
 assert.ok(now - timeoutStart <= 18000, `minute took ${now - timeoutStart}ms`);
 assert.ok(timed.durationMs < 60000);
-assert.ok(requests.length - timedRequestStart <= 25);
+assert.ok(requests.length - timedRequestStart <= 28);
 assert.ok(timeouts.every((timeout) => timeout <= 18000));
 for (const [name, source] of Object.entries(timed.sources)) {
   if (name.startsWith("trix.") || ["stacknet.health", "stacknet.root", "stacknet.network", "stacknet.node", "stacknet.models"].includes(name)) {

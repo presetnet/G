@@ -1330,6 +1330,180 @@ export function summarizePond0x(source) {
   };
 }
 
+const POND0X_HOME_BASE = "https://www.pond0x.com";
+const POND0X_HOME_TTL_MS = 60 * 1000;
+let pond0xHomeCache = { at: 0, text: null };
+
+/** Shared homepage read for pond0x.stats / pond0x.geoff: one fetch per pass. */
+async function fetchPond0xHome() {
+  if (pond0xHomeCache.text && Date.now() - pond0xHomeCache.at < POND0X_HOME_TTL_MS) {
+    return pond0xHomeCache.text;
+  }
+  const res = await fetchJson(`${POND0X_HOME_BASE}/`, { timeoutMs: DEFAULT_TIMEOUT_MS });
+  if (!res.ok || !res.text) throw new Error(`pond0x homepage HTTP ${res.status || 0}`);
+  pond0xHomeCache = { at: Date.now(), text: res.text };
+  return res.text;
+}
+
+/** Decode the statsData flight payload: unescape the `[1,"..."]` push, then read the RSC JSON. */
+export function extractPond0xStatsBlock(html) {
+  const flock = /self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*?statsData[\s\S]*?)"\]\)/.exec(html);
+  if (!flock) return null;
+  let decoded;
+  try {
+    decoded = JSON.parse('"' + flock[1] + '"');
+  } catch {
+    return null;
+  }
+  const keyIdx = decoded.indexOf('"statsData"');
+  if (keyIdx < 0) return null;
+  const open = decoded.indexOf("{", keyIdx);
+  if (open < 0) return null;
+  let depth = 0;
+  let quote = null;
+  let i = open;
+  for (; i < decoded.length; i++) {
+    const ch = decoded[i];
+    if (quote) {
+      if (ch === "\\") i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === "{") depth += 1;
+    else if (ch === "}") { depth -= 1; if (depth === 0) return JSON.parse(decoded.slice(open, i + 1)); }
+  }
+  return null;
+}
+
+function roundStep(value, step) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.round(value / step) * step
+    : null;
+}
+
+/** pond0x.stats — homepage "Total Rewards Distributed" block from the flight payload. */
+export async function sniffPond0xStats({ previous = null } = {}) {
+  const started = Date.now();
+  const base = {
+    source: "pond0x.stats",
+    ok: false,
+    status: 0,
+    ms: null,
+    checkedAt: new Date().toISOString(),
+    baseUrl: POND0X_HOME_BASE,
+    reason: null,
+  };
+  const retain = (reason, status) =>
+    previous?.ok && previous?.fingerprint != null
+      ? {
+          ...base,
+          ms: Date.now() - started,
+          status,
+          checkedAt: previous.checkedAt,
+          lastAttemptAt: new Date().toISOString(),
+          stale: true,
+          reason,
+          usdTotal: previous.usdTotal,
+          usdEthRewards: previous.usdEthRewards,
+          usdSolRewards: previous.usdSolRewards,
+          usdClaims: previous.usdClaims,
+          usdRefRewards: previous.usdRefRewards,
+          usdSwapVolume: previous.usdSwapVolume,
+          numSwaps: previous.numSwaps,
+          fingerprint: previous.fingerprint,
+        }
+      : { ...base, ms: Date.now() - started, status, reason };
+  try {
+    const html = await fetchPond0xHome();
+    const stats = extractPond0xStatsBlock(html);
+    if (!stats) throw new Error("pond0x statsData block not found");
+    const num = (key) => (typeof stats[key] === "number" ? stats[key] : null);
+    const usdTotal = num("usd_total");
+    if (usdTotal == null) throw new Error("pond0x statsData usd_total missing");
+    const fingerprint = simpleHash([
+      roundStep(usdTotal, 1000),
+      roundStep(num("num_swaps"), 10000),
+      roundStep(num("usd_swap_volume"), 1000),
+    ].map((v) => (v == null ? "n" : String(v))).join("|"));
+    return {
+      ...base,
+      ok: true,
+      status: 200,
+      ms: Date.now() - started,
+      usdTotal,
+      usdEthRewards: num("usd_eth_rewards"),
+      usdSolRewards: num("usd_sol_rewards"),
+      usdClaims: num("usd_claims"),
+      usdRefRewards: num("usd_ref_rewards"),
+      usdSwapVolume: num("usd_swap_volume"),
+      numSwaps: num("num_swaps"),
+      fingerprint,
+    };
+  } catch (error) {
+    return retain(error?.message || String(error), 0);
+  }
+}
+
+/** pond0x.geoff — live probe of the embedded Geoff search/chat pairing rail on pond0x.com. */
+export async function sniffPond0xGeoff({ previous = null } = {}) {
+  const started = Date.now();
+  const base = {
+    source: "pond0x.geoff",
+    ok: false,
+    status: 0,
+    ms: null,
+    checkedAt: new Date().toISOString(),
+    baseUrl: POND0X_HOME_BASE,
+    reason: null,
+  };
+  const retain = (reason, status) =>
+    previous?.ok && previous?.fingerprint != null
+      ? {
+          ...base,
+          ms: Date.now() - started,
+          status,
+          checkedAt: previous.checkedAt,
+          lastAttemptAt: new Date().toISOString(),
+          stale: true,
+          reason,
+          pairOk: previous.pairOk ?? null,
+          paired: previous.paired,
+          chatEmbedded: previous.chatEmbedded,
+          providerEmbedded: previous.providerEmbedded,
+          fingerprint: previous.fingerprint,
+        }
+      : { ...base, ms: Date.now() - started, status, reason };
+  let pair = null;
+  try {
+    const [pairRes, html] = await Promise.all([
+      fetchJson(`${POND0X_HOME_BASE}/api/geoff/pair`, { timeoutMs: DEFAULT_TIMEOUT_MS }),
+      fetchPond0xHome().catch(() => null),
+    ]);
+    pair = pairRes;
+    const paired = pair?.ok && pair.json && typeof pair.json.paired === "boolean"
+      ? pair.json.paired
+      : null;
+    const chatEmbedded = Boolean(html?.includes('placeholder="Search or ask Geoff"'));
+    const providerEmbedded = Boolean(html?.includes("GeoffProvider"));
+    const fingerprint = simpleHash(`${paired}|${chatEmbedded}|${providerEmbedded}`);
+    if (paired == null) throw new Error(`pond0x /api/geoff/pair did not answer (HTTP ${pair?.status || 0})`);
+    return {
+      ...base,
+      ok: true,
+      status: pair.status,
+      ms: Date.now() - started,
+      pairOk: true,
+      paired,
+      chatEmbedded,
+      providerEmbedded,
+      fingerprint,
+    };
+  } catch (error) {
+    return retain(error?.message || String(error), pair?.status ?? 0);
+  }
+}
+
 /** Node-key payout wallet on the public 9G SOL leaderboard. Sender identities are hashed, never kept in full. */
 const GEOF_KEYS_9G_WALLET = "9GjEVnpWiLe2uknUmtaH6DSfgcBvL66DtSKGREXDctZU";
 const GEOF_KEYS_9G_DECODE_LIMIT = 10;
@@ -3736,6 +3910,204 @@ async function observeSource(source, attempt, previous = null) {
   return retainFailedSource(source, observed, previous);
 }
 
+// TRIX Terms + Privacy pages (trix.market SPA). A bare GET returns only the Vite
+// boot shell; the visible text lives in a lazily-loaded hashed chunk (the privacy
+// policy is inline in the router chunk). Vite content-hashes every asset per
+// deploy, so the entry filename is the deploy key: unchanged entry => unchanged
+// page text. The multi-MB router chunk is fetched only when the entry name
+// changes; steady-state passes re-read just the 2KB shell to learn the entry name.
+const TRIX_LEGAL_BASE = "https://www.trix.market";
+let trixLegalCache = { entry: null, mainText: null, termsChunk: null, termsText: null, privacyText: null };
+let trixLegalInFlight = null;
+
+function escRegexLiteral(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractFunctionBody(text, fnName) {
+  const start = text.indexOf(`function ${fnName}(`);
+  if (start < 0) return null;
+  const open = text.indexOf("{", start);
+  if (open < 0) return null;
+  let depth = 0;
+  let quote = null;
+  let i = open;
+  for (; i < text.length; i++) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === "\\") i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === "{") depth += 1;
+    else if (ch === "}") { depth -= 1; if (depth === 0) break; }
+  }
+  return depth === 0 ? text.slice(start, i + 1) : null;
+}
+
+function collectLegalChunkCandidates(mainText, token, lazyVars) {
+  if (!token || !lazyVars.size) return [];
+  const found = [];
+  const seen = new Set([token]);
+  const visit = (name, depth) => {
+    if (depth > 6 || found.length >= 8) return;
+    if (lazyVars.has(name)) { found.push(lazyVars.get(name)); return; }
+    const pattern = new RegExp(`(?<![$.\\w"'])(?:${escRegexLiteral(name)})=([A-Za-z_$][\\w$]*)`, "g");
+    for (let i = 0; i < 40; i++) {
+      const match = pattern.exec(mainText);
+      if (!match) break;
+      if (!seen.has(match[1])) { seen.add(match[1]); visit(match[1], depth + 1); }
+      if (found.length >= 8) break;
+    }
+  };
+  visit(token, 0);
+  return [...new Set(found)];
+}
+
+function parseLegalPage(text) {
+  const literals = [];
+  for (const match of text.matchAll(/children:"((?:[^"\\]|\\.)*)"|children:'((?:[^'\\]|\\.)*)'/g)) {
+    literals.push(match[1] ?? match[2]);
+  }
+  const headings = [];
+  for (const match of text.matchAll(/jsx\("h2",\{[^}]*children:"((?:[^"\\]|\\.)*)"|jsx\("h2",\{[^}]*children:'((?:[^'\\]|\\.)*)'/g)) {
+    headings.push(match[1] ?? match[2]);
+  }
+  const stamped = text.match(/Last updated:\s*([^"']+)/i);
+  return {
+    literals,
+    headings,
+    lastUpdated: stamped?.[1]?.trim() || null,
+    fingerprint: simpleHash(literals.join("|")),
+  };
+}
+
+function resolveTrixLegalPages() {
+  if (!trixLegalInFlight) {
+    trixLegalInFlight = (async () => {
+      const cached = { ...trixLegalCache, fromCache: true };
+      const shell = await fetchJson(`${TRIX_LEGAL_BASE}/terms`, { timeoutMs: DEFAULT_TIMEOUT_MS });
+      if (!shell.ok || !shell.text) throw new Error(`TRIX legal shell HTTP ${shell.status || 0}`);
+      const entry = shell.text.match(/(?:src|href)="(\/assets\/e-[A-Za-z0-9_-]+\.js)"/)?.[1] || null;
+      if (!entry) throw new Error("TRIX legal shell entry not found");
+      if (trixLegalCache.entry === entry) return cached;
+      const entryRes = await fetchJson(`${TRIX_LEGAL_BASE}${entry}`, { timeoutMs: DEFAULT_TIMEOUT_MS });
+      if (!entryRes.ok || !entryRes.text) throw new Error(`TRIX legal entry HTTP ${entryRes.status || 0}`);
+      const candidates = [...new Set([
+        ...[...entryRes.text.matchAll(/assets\/(m-[A-Za-z0-9_-]+\.js)/g)].map((m) => m[1]),
+        ...[...entryRes.text.matchAll(/import\(\s*"\.\/\s*(m-[A-Za-z0-9_-]+\.js)\s*"/g)].map((m) => m[1]),
+      ])];
+      let mainText = null;
+      for (const name of candidates) {
+        const res = await fetchJson(`${TRIX_LEGAL_BASE}/assets/${name}`, { timeoutMs: DEFAULT_TIMEOUT_MS });
+        if (res.ok && res.text?.includes('path:"/terms"')) { mainText = res.text; break; }
+      }
+      if (!mainText) throw new Error("TRIX legal router chunk not found");
+      const termsRoute = mainText.match(/\{path:"\/terms",(?:component|element):([A-Za-z_$][\w$]*)\}/);
+      const privacyRoute = mainText.match(/\{path:"\/privacy",(?:component|element):([A-Za-z_$][\w$]*)\}/);
+      const lazyVars = new Map();
+      for (const match of mainText.matchAll(/([A-Za-z_$][\w$]*)=[A-Za-z_$][\w$]*\.lazy\(\(\s*\)=>\s*[A-Za-z_$][\w$]*\(\(\s*\)=>import\(\s*"\.\/\s*(m-[A-Za-z0-9_-]+\.js)\s*"/g)) {
+        lazyVars.set(match[1], match[2]);
+      }
+      let termsChunk = null;
+      let termsText = null;
+      for (const name of collectLegalChunkCandidates(mainText, termsRoute?.[1], lazyVars)) {
+        const res = await fetchJson(`${TRIX_LEGAL_BASE}/assets/${name}`, { timeoutMs: DEFAULT_TIMEOUT_MS });
+        if (res.ok && res.text && /Terms of Use/i.test(res.text) && /Last updated\s*:/i.test(res.text)) {
+          termsChunk = name;
+          termsText = res.text;
+          break;
+        }
+      }
+      if (!termsChunk || !termsText) throw new Error("TRIX terms page not resolvable");
+      let privacyText = null;
+      for (const name of collectLegalChunkCandidates(mainText, privacyRoute?.[1], lazyVars)) {
+        const res = await fetchJson(`${TRIX_LEGAL_BASE}/assets/${name}`, { timeoutMs: DEFAULT_TIMEOUT_MS });
+        if (res.ok && res.text && /Privacy Policy/i.test(res.text)) { privacyText = res.text; break; }
+      }
+      if (!privacyText && privacyRoute?.[1]) privacyText = extractFunctionBody(mainText, privacyRoute[1]);
+      trixLegalCache = { entry, mainText, termsChunk, termsText, privacyText };
+      return { ...trixLegalCache, fromCache: false };
+    })().finally(() => { trixLegalInFlight = null; });
+  }
+  return trixLegalInFlight;
+}
+
+export async function sniffTrixTerms() {
+  const started = Date.now();
+  try {
+    const pages = await resolveTrixLegalPages();
+    if (!pages.termsText) throw new Error("TRIX terms text unavailable");
+    const parsed = parseLegalPage(pages.termsText);
+    if (!parsed.lastUpdated) throw new Error("TRIX terms page could not be parsed");
+    return {
+      source: "trix.terms",
+      ok: true,
+      status: 200,
+      ms: Date.now() - started,
+      title: "Terms of Use",
+      lastUpdated: parsed.lastUpdated,
+      headings: parsed.headings,
+      fingerprint: parsed.fingerprint,
+      entry: pages.entry,
+      chunk: pages.termsChunk || null,
+      fromCache: Boolean(pages.fromCache),
+      sourceUrl: `${TRIX_LEGAL_BASE}/terms`,
+      checkedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    return {
+      source: "trix.terms",
+      ok: false,
+      status: 0,
+      ms: Date.now() - started,
+      lastUpdated: null,
+      headings: [],
+      fingerprint: null,
+      checkedAt: new Date().toISOString(),
+      reason: error?.message || String(error),
+    };
+  }
+}
+
+export async function sniffTrixPrivacy() {
+  const started = Date.now();
+  try {
+    const pages = await resolveTrixLegalPages();
+    if (!pages.privacyText) throw new Error("TRIX privacy text unavailable");
+    const parsed = parseLegalPage(pages.privacyText);
+    if (!parsed.lastUpdated) throw new Error("TRIX privacy page could not be parsed");
+    return {
+      source: "trix.privacy",
+      ok: true,
+      status: 200,
+      ms: Date.now() - started,
+      title: "Privacy Policy",
+      lastUpdated: parsed.lastUpdated,
+      headings: parsed.headings,
+      fingerprint: parsed.fingerprint,
+      entry: pages.entry,
+      chunk: null,
+      fromCache: Boolean(pages.fromCache),
+      sourceUrl: `${TRIX_LEGAL_BASE}/privacy`,
+      checkedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    return {
+      source: "trix.privacy",
+      ok: false,
+      status: 0,
+      ms: Date.now() - started,
+      lastUpdated: null,
+      headings: [],
+      fingerprint: null,
+      checkedAt: new Date().toISOString(),
+      reason: error?.message || String(error),
+    };
+  }
+}
+
 function trixAttempts(previous) {
   return [
     ["trix.geoff", sniffTrixGeoff({ previous: previous?.sources?.["trix.geoff"] || null })],
@@ -3748,6 +4120,8 @@ function trixAttempts(previous) {
     ["trix.frontpage", sniffTrixFrontpage()],
     ["trix.tiers", sniffTrixTiers()],
     ["trix.fee.config", sniffTrixFeeConfig()],
+    ["trix.terms", sniffTrixTerms()],
+    ["trix.privacy", sniffTrixPrivacy()],
   ];
 }
 
@@ -3781,6 +4155,8 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
     ["surface.mining", sniffMiningSurface(forceMiningSurface)],
     ["geoff.keys.9g", sniffNodeKeys9g()],
     ["opencode.zenerr", sniffZenErrorShape()],
+    ["pond0x.stats", sniffPond0xStats()],
+    ["pond0x.geoff", sniffPond0xGeoff()],
   ].map(([source, attempt]) => observeSource(source, attempt, previous?.sources?.[source])));
 
   const treasuryAddress =
@@ -4070,14 +4446,22 @@ export async function runMinuteSniff({ previous = null } = {}) {
   const trixRead = Promise.all(trixAttempts(previous).map(([source, attempt]) =>
     observeSource(source, attempt, previous?.sources?.[source]),
   ));
-  const [trix, stacknet] = await Promise.all([
+  const pond0xRead = Promise.all([
+    ["pond0x.stats", sniffPond0xStats()],
+    ["pond0x.geoff", sniffPond0xGeoff()],
+  ].map(([source, attempt]) =>
+    observeSource(source, attempt, previous?.sources?.[source]),
+  ));
+  const [trix, stacknet, pond0x] = await Promise.all([
     trixRead,
     sniffStacknetMinute({ previous, waitFor: trixRead }),
+    pond0xRead,
   ]);
   const sources = {
     ...(previous?.sources || {}),
     ...stacknet.sources,
     ...Object.fromEntries(trix.map((source) => [source.source, source])),
+    ...Object.fromEntries(pond0x.map((source) => [source.source, source])),
   };
   return {
     ...(previous || {}),

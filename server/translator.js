@@ -465,6 +465,72 @@ export function translate(previous, current) {
     );
   }
 
+  // TRIX Terms of Use / Privacy Policy — public page text on trix.market.
+  for (const [key, label] of [
+    ["trix.terms", "TRIX Terms of Use"],
+    ["trix.privacy", "TRIX Privacy Policy"],
+  ]) {
+    const prevLegalFp = prev[key]?.fingerprint;
+    const currLegalFp = curr[key]?.fingerprint;
+    if (prevLegalFp && currLegalFp && prevLegalFp !== currLegalFp) {
+      const updated = curr[key]?.lastUpdated || null;
+      events.push(
+        event({
+          kind: "legal",
+          rank: "move",
+          title: `${label} updated`,
+          summary: updated
+            ? `${label} on trix.market now reads "Last updated: ${updated}" and the page text moved.`
+            : `${label} text changed on trix.market.`,
+          details: {
+            from: { fingerprint: prevLegalFp, lastUpdated: prev[key]?.lastUpdated ?? null },
+            to: { fingerprint: currLegalFp, lastUpdated: updated },
+          },
+        }),
+      );
+    }
+  }
+
+  // Pond0x homepage rewards block — cumulative "Total Rewards Distributed" stats.
+  const prevStats = prev["pond0x.stats"];
+  const currStats = curr["pond0x.stats"];
+  if (prevStats?.fingerprint && currStats?.fingerprint && prevStats.fingerprint !== currStats.fingerprint) {
+    const money = (v) => (typeof v === "number" ? `$${Math.round(v).toLocaleString("en-US")}` : "unknown");
+    events.push(
+      event({
+        kind: "pond0x",
+        rank: "move",
+        title: "Pond0x rewards block moved",
+        summary: `Total Rewards Distributed now ${money(currStats.usdTotal)} (was ${money(prevStats.usdTotal)}) across ${currStats.numSwaps != null ? currStats.numSwaps.toLocaleString("en-US") : "?"} swaps. Pond0x.com homepage stats.`,
+        details: {
+          from: { fingerprint: prevStats.fingerprint, usdTotal: prevStats.usdTotal ?? null, numSwaps: prevStats.numSwaps ?? null },
+          to: { fingerprint: currStats.fingerprint, usdTotal: currStats.usdTotal ?? null, numSwaps: currStats.numSwaps ?? null },
+        },
+      }),
+    );
+  }
+
+  // Pond0x embeds Geoff now: search/chat header + geoff.ai pairing rail.
+  const prevGeoff = prev["pond0x.geoff"];
+  const currGeoff = curr["pond0x.geoff"];
+  if (prevGeoff?.fingerprint && currGeoff?.fingerprint && prevGeoff.fingerprint !== currGeoff.fingerprint) {
+    const state = (s) =>
+      s?.paired === true ? "an operator account is paired" : `pair rail ${s?.pairOk ? "answering (unpaired)" : "down"}`;
+    events.push(
+      event({
+        kind: "pond0x",
+        rank: "note",
+        title: "Pond0x–Geoff presence changed",
+        summary:
+          `${currGeoff.chatEmbedded || currGeoff.providerEmbedded
+            ? "Pond0x.com embeds the Geoff search/chat header and"
+            : "Pond0x.com no longer surfaces Geoff in its header;"} ` +
+          `the /api/geoff/pair gateway says ${state(currGeoff)} (was: ${state(prevGeoff)}).`,
+        details: { from: prevGeoff.fingerprint, to: currGeoff.fingerprint },
+      }),
+    );
+  }
+
   // Product lanes (HQ / Studio / Skills / Code / Claw / Max) — public connect-gate.
   const prevLanes = prev["geoff.product.lanes"];
   const currLanes = curr["geoff.product.lanes"];
