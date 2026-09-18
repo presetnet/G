@@ -3578,6 +3578,8 @@ export async function sniffTrixBoxBoard({ previous = null } = {}) {
     cards: [],
     chain: null,
     publicState: null,
+    kindTotals: {},
+    kindWallets: {},
   };
   try {
     const res = await fetchJson(TRIX_BOXBOARD_SOURCE_URL, { timeoutMs: TRIX_TIMEOUT_MS });
@@ -3646,6 +3648,16 @@ export async function sniffTrixBoxBoard({ previous = null } = {}) {
         snapshotAt: trixDate(j.public.snapshotAt),
         stale: Boolean(j.public.stale),
       } : null;
+      const rawCollectors = Array.isArray(j.collectors) ? j.collectors : [];
+      const normalizedCollectors = rawCollectors.map(collector).filter(Boolean);
+      const kindTotals = {};
+      const kindWallets = {};
+      for (const row of normalizedCollectors) {
+        for (const [kind, amount] of Object.entries(row.kinds || {})) {
+          kindTotals[kind] = (kindTotals[kind] || 0) + amount;
+          kindWallets[kind] = (kindWallets[kind] || 0) + 1;
+        }
+      }
       Object.assign(value, {
         ok: true,
         dataUpdatedAt: trixDate(j.updatedAt),
@@ -3655,11 +3667,13 @@ export async function sniffTrixBoxBoard({ previous = null } = {}) {
         mintedTotal: count(j.mintedTotal),
         boxesLeft: count(j.boxesLeft),
         boxes: Array.isArray(j.boxes) ? j.boxes.map(box).filter(Boolean) : [],
-        collectors: Array.isArray(j.collectors) ? j.collectors.slice(0, 100).map(collector).filter(Boolean) : [],
+        collectors: normalizedCollectors.slice(0, 100),
         rarities: Array.isArray(j.rarities) ? j.rarities.map(rarity).filter(Boolean) : [],
         cards: Array.isArray(j.cards) ? j.cards.map(card).filter(Boolean) : [],
         chain,
         publicState: state,
+        kindTotals,
+        kindWallets,
       });
     }
   } catch (error) {

@@ -151,9 +151,7 @@ function renderCoins(catalog, frontpage) {
 function renderBoxes(official, board, chain) {
   const fromBoard = good(board) && (board.collectors.length + board.boxes.length > 0);
   const src = fromBoard ? board : official;
-  const stickerCount = fromBoard
-    ? board.collectors.reduce((sum, collector) => sum + (number(collector?.kinds?.sticker) || 0), 0)
-    : null;
+  const stickerCount = fromBoard ? number(board.kindTotals?.sticker) : null;
   const hasData = fromBoard || [official?.topCoins, official?.biggestPulls, official?.topCollectors].some((list) => rows(list).length);
   const chainLive = good(chain) && number(chain.eventsSinceLaunch) !== null;
   status("boxes", src, hasData, fromBoard
@@ -168,7 +166,10 @@ function renderBoxes(official, board, chain) {
     const chainBit = board.chain?.walletsScanned != null
       ? `Aggregator scan · ${fmt(board.chain.walletsScanned, 0)} wallets · ${fmt(board.chain.boxEvents, 0)} events`
       : "";
-    const stickerBit = stickerCount !== null ? ` · ${fmt(stickerCount, 0)} stickers in wallet scan` : "";
+    const stickerWallets = number(board.kindWallets?.sticker);
+    const stickerBit = stickerCount !== null
+      ? ` · ${fmt(stickerCount, 0)} stickers in wallet scan${stickerWallets !== null ? ` · ${fmt(stickerWallets, 0)} wallet${stickerWallets === 1 ? "" : "s"}` : ""}`
+      : "";
     const stamp = `<p class="desk-context">${chainStamp} · ${snapshotStamp}${chainBit ? ` · ${chainBit}` : ""}${stickerBit}</p>`;
     const boxTiles = board.boxes.map((b) => `<section class="box-tile${b.inRound ? " in-round" : ""}" style="--box-hex:${esc(b.hex || "#444")}">
       <b>${esc(b.type)}</b><span class="box-color">${esc(b.color)}</span>
@@ -188,6 +189,7 @@ function renderBoxes(official, board, chain) {
       <div class="box-type-grid">${boxTiles}</div>
       <h4 class="board-subhead">Most boxes · on-chain wallet scan</h4>
       ${collectorBody ? table("Most boxes per public wallet", [["#", "desk-number"], ["User"], ["Boxes", "desk-number"], ["Kinds"], ["Wallet", "desk-secondary"]], collectorBody) : empty("No collector rows reported.")}
+      ${Object.keys(board.kindTotals || {}).length ? `<div class="rarity-strip"><small>Wallet scan inventory</small>${Object.entries(board.kindTotals).map(([kind, amount]) => `<span class="rarity-chip muted" title="${esc(`${kind} count across the reported wallet scan`)}">${esc(kind)} ${fmt(amount, 0)} · ${fmt(board.kindWallets?.[kind], 0)} wallet${board.kindWallets?.[kind] === 1 ? "" : "s"}</span>`).join("")}</div>` : ""}
       ${rarityChips ? `<div class="rarity-strip"><small>Rarity odds · snapshot</small>${rarityChips}</div>` : ""}
       ${cardChips ? `<div class="rarity-strip"><small>Shop card types</small>${cardChips}</div>` : ""}`);
     return;

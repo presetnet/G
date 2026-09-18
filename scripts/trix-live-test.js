@@ -410,6 +410,8 @@ assert.equal(board.boxes.length, 5);
 assert.deepEqual(plain(board.boxes[0]), { id: "base", type: "BASE BOX", color: "WHITE", hex: "#f4f4f4", minted: 3874, left: 4978, inRound: true, priceUsd: 35.1, priceSol: 0.34, artUrl: "https://trix.market/atomic/base.png" });
 assert.deepEqual(plain(board.collectors[0]), { rank: 1, username: "boxwhale", wallet: "A".repeat(32), boxes: 105, rips: 0, mythics: 0, earnedUsd: 0, verified: true, kinds: { base: 105 }, lastAt: "2026-09-07T00:00:00.000Z" });
 assert.deepEqual(plain(board.collectors[2].kinds), { base: 4, viral: 3, sticker: 2 });
+assert.deepEqual(plain(board.kindTotals), { base: 170, viral: 3, sticker: 2 });
+assert.deepEqual(plain(board.kindWallets), { base: 3, viral: 1, sticker: 1 });
 assert.equal(board.chain.treasury, "D8LYYH-treasury");
 assert.equal(board.chain.boxEvents, 3924);
 assert.equal(board.publicState.tcg, false);

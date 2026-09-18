@@ -20,6 +20,8 @@ function fixture() {
     'trix.boxboard': { ok: true, status: 200, checkedAt: at, sourceUrl: 'https://doswapz.com/api/trix-boxes', dataUpdatedAt: at, fallbackReason: 'Trix HTTP 404 https://trix.market/api/mkt/state', round: 1, roundStatus: 'warming', mintedTotal: 3874, boxesLeft: 4978,
       boxes: [{ id: 'base', type: 'BASE BOX', color: 'WHITE', hex: '#f4f4f4', minted: 3874, left: 4978, inRound: true, priceUsd: 35.1, priceSol: 0.34 }, { id: 'viral', type: 'VIRAL BOX', color: 'HOLO', hex: '#7ecbff', minted: 0, left: 4978, inRound: true, priceUsd: 175.51, priceSol: 1.7 }, { id: 'silver', type: 'SILVER BOX', minted: 0, left: 0, inRound: false, priceUsd: 0, priceSol: 0 }],
       collectors: Array.from({ length: 3 }, (_, i) => ({ rank: i + 1, username: `BoxWhale${i}`, wallet: String.fromCharCode(65 + i).repeat(32), boxes: 105 - i * 40, rips: 0, mythics: 0, earnedUsd: 0, verified: i === 0, kinds: { base: 105 - i * 40, ...(i === 0 ? { sticker: 46 } : {}) } })),
+      kindTotals: { base: 225, sticker: 46 },
+      kindWallets: { base: 3, sticker: 1 },
       rarities: [{ type: 'MYTHIC', oddsPct: 0.04 }, { type: 'COMMON', oddsPct: 45.61 }, { type: 'VOID', oddsPct: 43 }],
       cards: [{ type: 'GOLD', multiplier: 1.69, priceSol: 0.69, active: true }],
       chain: { treasury: 'D8LYYH' + 'x'.repeat(35), walletsScanned: 669, boxEvents: 3924 } },
@@ -165,6 +167,9 @@ async function main() {
     assert.match(await page.locator('#boxRows').textContent(), /BASE BOX/);
     assert.match(await page.locator('#boxRows').textContent(), /VIRAL BOX/);
     assert.match(await page.locator('#boxRows').textContent(), /BoxWhale0/);
+    assert.match(await page.locator('#boxRows').textContent(), /46 stickers in wallet scan/);
+    assert.match(await page.locator('#boxRows').textContent(), /Wallet scan inventory/);
+    assert.match(await page.locator('#boxRows').textContent(), /sticker 46/);
     assert.match(await page.locator('#boxRows').textContent(), /MYTHIC 0.04%/);
     assert.match(await page.locator('#deskSourceText').textContent(), /trix.boxboard/);
     assert.match(await page.locator('#deskSourceText').textContent(), /trix.boxchain/);
