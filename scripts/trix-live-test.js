@@ -44,7 +44,7 @@ let boxboardPayload = {
   collectors: [
     { rank: 1, username: "boxwhale", wallet: "A".repeat(32), boxes: 105, rips: 0, mythics: 0, earnedUsd: 0, verified: true, kinds: { base: 105 }, lastAt: Date.parse("2026-09-07T00:00:00Z") },
     { rank: 2, username: "collector2", wallet: "B".repeat(32), boxes: 61, rips: 0, mythics: 0, earnedUsd: 0, kinds: { base: 61 }, lastAt: null },
-    { rank: 3, wallet: "C".repeat(32), boxes: 7, kinds: { base: 4, viral: 3 } },
+    { rank: 3, wallet: "C".repeat(32), boxes: 7, kinds: { base: 4, viral: 3, sticker: 2 } },
   ],
   rarities: [
     { id: "mythic", type: "MYTHIC", oddsPct: 0.04, band: [200, 400] },
@@ -409,7 +409,7 @@ assert.equal(board.fallbackReason, "Trix HTTP 404 https://trix.market/api/mkt/st
 assert.equal(board.boxes.length, 5);
 assert.deepEqual(plain(board.boxes[0]), { id: "base", type: "BASE BOX", color: "WHITE", hex: "#f4f4f4", minted: 3874, left: 4978, inRound: true, priceUsd: 35.1, priceSol: 0.34, artUrl: "https://trix.market/atomic/base.png" });
 assert.deepEqual(plain(board.collectors[0]), { rank: 1, username: "boxwhale", wallet: "A".repeat(32), boxes: 105, rips: 0, mythics: 0, earnedUsd: 0, verified: true, kinds: { base: 105 }, lastAt: "2026-09-07T00:00:00.000Z" });
-assert.deepEqual(plain(board.collectors[2].kinds), { base: 4, viral: 3 });
+assert.deepEqual(plain(board.collectors[2].kinds), { base: 4, viral: 3, sticker: 2 });
 assert.equal(board.chain.treasury, "D8LYYH-treasury");
 assert.equal(board.chain.boxEvents, 3924);
 assert.equal(board.publicState.tcg, false);

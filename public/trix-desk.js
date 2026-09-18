@@ -151,6 +151,9 @@ function renderCoins(catalog, frontpage) {
 function renderBoxes(official, board, chain) {
   const fromBoard = good(board) && (board.collectors.length + board.boxes.length > 0);
   const src = fromBoard ? board : official;
+  const stickerCount = fromBoard
+    ? board.collectors.reduce((sum, collector) => sum + (number(collector?.kinds?.sticker) || 0), 0)
+    : null;
   const hasData = fromBoard || [official?.topCoins, official?.biggestPulls, official?.topCollectors].some((list) => rows(list).length);
   const chainLive = good(chain) && number(chain.eventsSinceLaunch) !== null;
   status("boxes", src, hasData, fromBoard
@@ -165,7 +168,8 @@ function renderBoxes(official, board, chain) {
     const chainBit = board.chain?.walletsScanned != null
       ? `Aggregator scan · ${fmt(board.chain.walletsScanned, 0)} wallets · ${fmt(board.chain.boxEvents, 0)} events`
       : "";
-    const stamp = `<p class="desk-context">${chainStamp} · ${snapshotStamp}${chainBit ? ` · ${chainBit}` : ""}</p>`;
+    const stickerBit = stickerCount !== null ? ` · ${fmt(stickerCount, 0)} stickers in wallet scan` : "";
+    const stamp = `<p class="desk-context">${chainStamp} · ${snapshotStamp}${chainBit ? ` · ${chainBit}` : ""}${stickerBit}</p>`;
     const boxTiles = board.boxes.map((b) => `<section class="box-tile${b.inRound ? " in-round" : ""}" style="--box-hex:${esc(b.hex || "#444")}">
       <b>${esc(b.type)}</b><span class="box-color">${esc(b.color)}</span>
       <dl><dt>Minted · snap</dt><dd>${fmt(b.minted, 0)}</dd><dt>Left · snap</dt><dd title="Last published by TRIX before the state API retired; not verifiable now">${fmt(b.left, 0)}</dd><dt>Price · snap</dt><dd>${usd(b.priceUsd)} · ${sol(b.priceSol)}</dd></dl>

@@ -19,7 +19,7 @@ function fixture() {
     'trix.boxes': { ok: false, status: 404, stale: true, checkedAt: at, sourceUrl: 'https://www.trix.market/api/mkt/leaderboard', topCoins: null, biggestPulls: null, topCollectors: null, reason: 'Not found' },
     'trix.boxboard': { ok: true, status: 200, checkedAt: at, sourceUrl: 'https://doswapz.com/api/trix-boxes', dataUpdatedAt: at, fallbackReason: 'Trix HTTP 404 https://trix.market/api/mkt/state', round: 1, roundStatus: 'warming', mintedTotal: 3874, boxesLeft: 4978,
       boxes: [{ id: 'base', type: 'BASE BOX', color: 'WHITE', hex: '#f4f4f4', minted: 3874, left: 4978, inRound: true, priceUsd: 35.1, priceSol: 0.34 }, { id: 'viral', type: 'VIRAL BOX', color: 'HOLO', hex: '#7ecbff', minted: 0, left: 4978, inRound: true, priceUsd: 175.51, priceSol: 1.7 }, { id: 'silver', type: 'SILVER BOX', minted: 0, left: 0, inRound: false, priceUsd: 0, priceSol: 0 }],
-      collectors: Array.from({ length: 3 }, (_, i) => ({ rank: i + 1, username: `BoxWhale${i}`, wallet: String.fromCharCode(65 + i).repeat(32), boxes: 105 - i * 40, rips: 0, mythics: 0, earnedUsd: 0, verified: i === 0, kinds: { base: 105 - i * 40 } })),
+      collectors: Array.from({ length: 3 }, (_, i) => ({ rank: i + 1, username: `BoxWhale${i}`, wallet: String.fromCharCode(65 + i).repeat(32), boxes: 105 - i * 40, rips: 0, mythics: 0, earnedUsd: 0, verified: i === 0, kinds: { base: 105 - i * 40, ...(i === 0 ? { sticker: 46 } : {}) } })),
       rarities: [{ type: 'MYTHIC', oddsPct: 0.04 }, { type: 'COMMON', oddsPct: 45.61 }, { type: 'VOID', oddsPct: 43 }],
       cards: [{ type: 'GOLD', multiplier: 1.69, priceSol: 0.69, active: true }],
       chain: { treasury: 'D8LYYH' + 'x'.repeat(35), walletsScanned: 669, boxEvents: 3924 } },
