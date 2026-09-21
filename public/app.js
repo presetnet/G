@@ -1289,28 +1289,33 @@ function renderKeySale(s) {
 function renderKey9g(s) {
   if (!els.keys9gValue) return;
   const src = lastLatest?.sources?.["geoff.keys.9g"];
-  if (!src?.ok || src?.solIn == null) {
+  const sol14d = Number(src?.sol14d);
+  const sampleSol = Number(src?.solIn);
+  const displayedSol = Number.isFinite(sol14d) ? sol14d : sampleSol;
+  if (!src?.ok || !Number.isFinite(displayedSol)) {
     els.keys9gValue.textContent = "—";
-    els.keys9gMeta.textContent = "RPC sample unavailable";
+    els.keys9gMeta.textContent = "14d ledger unavailable";
     els.keys9gMeta.title = src?.reason || "No sample received";
     return;
   }
-  const sol = Number(src.solIn);
-  els.keys9gValue.textContent = `${sol.toFixed(2)} SOL`;
+  els.keys9gValue.textContent = `${displayedSol.toFixed(2)} SOL`;
   const hits = Array.isArray(s.key9gFundingHits) ? s.key9gFundingHits : [];
   const bits = [];
   if (src.senders != null && src.decoded != null) bits.push(`${src.senders} senders · ${src.decoded} tx`);
   if (src.avgSolPerTx != null) bits.push(`${src.avgSolPerTx.toFixed(2)} avg/tx`);
   if (src.sol24h != null) bits.push(`${src.sol24h.toFixed(2)} / 24h`);
+  if (src.historyPending > 0) bits.push(`seeding · ${src.historyPending} pending`);
   if (hits.length) bits.push(`<span class="${hits.length ? "fund-flag" : ""}">⚠ ${hits.join(" + ")} bought</span>`);
-  els.keys9gMeta.textContent = `${src.decoded ?? "?"} sampled transfers`;
+  els.keys9gMeta.textContent = src.historyComplete === true
+    ? `${src.tx14d ?? "?"} inbound transfers · 14d rolling`
+    : `14d ledger seeding · ${src.tx14d ?? 0} decoded inflows`;
   const windowSpan = src.newestAt
     ? `decoded ${src.decoded}/${src.windowTx} txs · ${src.newestAt.slice(0, 10)} → ${(src.oldestAt || "").slice(0, 10)}`
     : `decoded ${src.decoded}/${src.windowTx} txs`;
   const cohort = Array.isArray(src.cohorts) && src.cohorts.length
     ? `top cohort ${src.cohorts[0]?.sol ?? "?"} SOL across ${src.cohorts[0]?.tx ?? 0} txs · ${src.cohorts.length} cohorts`
     : "no cohorts yet";
-  els.keys9gValue.title = `Verified on-chain SOL in to the node-key wallet · ${windowSpan} · ${cohort}`;
+  els.keys9gValue.title = `Verified on-chain SOL inflows retained in a rolling 14-day ledger · ${windowSpan} · ${cohort}`;
   els.keys9gMeta.title = hits.length
     ? `Recognized wallet(s) among senders: ${hits.join(", ")} — possible self-funded purchases (circular revenue).`
     : "Cross-checks StackNet's self-reported node-key sale counter against the 9G wallet's verified inbound. Sender addresses are hashed — no wallet identity is kept or displayed.";

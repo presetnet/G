@@ -1507,13 +1507,43 @@ export async function sniffPond0xGeoff({ previous = null } = {}) {
 /** Node-key payout wallet on the public 9G SOL leaderboard. Sender identities are hashed, never kept in full. */
 const GEOF_KEYS_9G_WALLET = "9GjEVnpWiLe2uknUmtaH6DSfgcBvL66DtSKGREXDctZU";
 const GEOF_KEYS_9G_DECODE_LIMIT = 10;
+const GEOF_KEYS_9G_HISTORY_DAYS = 14;
+const GEOF_KEYS_9G_HISTORY_MS = GEOF_KEYS_9G_HISTORY_DAYS * 24 * 60 * 60 * 1000;
+const GEOF_KEYS_9G_HISTORY_DECODE_LIMIT = 25;
+const GEOF_KEYS_9G_HISTORY_SEED_LIMIT = 25;
+const GEOF_KEYS_9G_HISTORY_SEEN_LIMIT = 1_200;
 const GEOF_KEYS_9G_CACHE_MS = 15 * 60 * 1000;
 let geof9gCache = { at: 0, value: null };
 
 const hash9gAddr = (addr) =>
   createHash("sha256").update(String(addr)).digest("hex").slice(0, 16);
 
-export async function sniffNodeKeys9g() {
+function decode9gInbound(row, tx) {
+  if (!tx?.meta?.preBalances || tx.meta.err || !Array.isArray(tx.meta.preBalances) || !Array.isArray(tx.meta.postBalances)) return null;
+  const keys = tx.transaction?.message?.accountKeys || [];
+  const index = keys.findIndex(
+    (key) => (typeof key === "string" ? key : key?.pubkey) === GEOF_KEYS_9G_WALLET,
+  );
+  if (index < 0) return null;
+  const lamports = tx.meta.postBalances[index] - tx.meta.preBalances[index];
+  if (lamports <= 0) return null;
+  const payer = keys[0] ? (typeof keys[0] === "string" ? keys[0] : keys[0]?.pubkey) : null;
+  return {
+    signature: row.signature,
+    at: row.blockTime * 1000,
+    sol: lamports / 1e9,
+    senderHash: payer ? hash9gAddr(payer) : null,
+  };
+}
+
+function prune9gLedger(entries, now) {
+  const cutoff = now - GEOF_KEYS_9G_HISTORY_MS;
+  return entries
+    .filter((entry) => entry?.signature && Number.isFinite(entry.at) && entry.at >= cutoff)
+    .sort((a, b) => b.at - a.at);
+}
+
+export async function sniffNodeKeys9g({ previous = null } = {}) {
   const startedAt = new Date().toISOString();
   const started = Date.now();
   const base = {
@@ -1537,65 +1567,70 @@ export async function sniffNodeKeys9g() {
     const rows = (Array.isArray(sigRes) ? sigRes : []).filter(
       (row) => !row.err && row.blockTime != null,
     );
-    if (!rows.length) {
-      const value = {
-        ...base,
-        ok: true,
-        status: 200,
-        ms: Date.now() - started,
-        windowTx: 0,
-        decoded: 0,
-        solIn: null,
-        senders: null,
-        reason: "No successful signatures in window",
-      };
-      geof9gCache = { at: Date.now(), value };
-      return value;
-    }
-
     const inbound = [];
     const decodeCount = Math.min(GEOF_KEYS_9G_DECODE_LIMIT, rows.length);
     for (let k = 0; k < decodeCount; k += 1) {
       const row = rows[k];
       const tx = await getTransactionWithRetry(row.signature);
-      if (!tx?.meta?.preBalances || tx.meta.err || !Array.isArray(tx.meta.preBalances) || !Array.isArray(tx.meta.postBalances)) continue;
-      const keys = tx.transaction?.message?.accountKeys || [];
-      const index = keys.findIndex(
-        (key) => (typeof key === "string" ? key : key?.pubkey) === GEOF_KEYS_9G_WALLET,
-      );
-      if (index < 0) continue;
-      const lamports = tx.meta.postBalances[index] - tx.meta.preBalances[index];
-      if (lamports <= 0) continue;
-      const payer = keys[0] ? (typeof keys[0] === "string" ? keys[0] : keys[0]?.pubkey) : null;
-      inbound.push({
-        at: row.blockTime * 1000,
-        sol: lamports / 1e9,
-        senderHash: payer ? hash9gAddr(payer) : null,
-      });
+      const decoded = decode9gInbound(row, tx);
+      if (decoded) inbound.push(decoded);
     }
     inbound.sort((a, b) => b.at - a.at);
-    if (!inbound.length) {
-      const value = {
-        ...base,
-        ok: true,
-        status: 200,
-        ms: Date.now() - started,
-        windowTx: rows.length,
-        decoded: 0,
-        solIn: null,
-        senders: null,
-        sol24h: null,
-        tx24h: 0,
-        reason: "No inbound SOL transfers decoded in recent window",
-      };
-      geof9gCache = { at: Date.now(), value };
-      return value;
-    }
-
     const now = Date.now();
     const dayAgo = now - 24 * 3600 * 1000;
     const recent24h = inbound.filter((r) => r.at >= dayAgo);
     const solIn = inbound.reduce((sum, r) => sum + r.sol, 0);
+
+    const previousLedger = Array.isArray(previous?.inflowLedger) ? previous.inflowLedger : [];
+    const previousSeen = new Set(Array.isArray(previous?.historySeen) ? previous.historySeen : []);
+    const previousQueue = Array.isArray(previous?.historyQueue) ? previous.historyQueue : [];
+    let historyRows = rows.map((row) => ({ signature: row.signature, blockTime: row.blockTime }));
+    let historyBefore = previous?.historyBefore || historyRows.at(-1)?.signature || null;
+    let historyScannedOldestAt = previous?.historyScannedOldestAt || (historyRows.at(-1)?.blockTime ? historyRows.at(-1).blockTime * 1000 : null);
+    if (!previousQueue.length && previous?.historyComplete !== true && previous?.historyBefore) {
+      const older = await solanaRpc("getSignaturesForAddress", [
+        GEOF_KEYS_9G_WALLET,
+        { limit: 1000, before: previous.historyBefore, commitment: "confirmed" },
+      ]);
+      const olderRows = (Array.isArray(older) ? older : [])
+        .filter((row) => !row.err && row.blockTime != null)
+        .map((row) => ({ signature: row.signature, blockTime: row.blockTime }));
+      if (olderRows.length) {
+        historyRows = [...historyRows, ...olderRows];
+        historyBefore = olderRows.at(-1).signature;
+        historyScannedOldestAt = olderRows.at(-1).blockTime * 1000;
+      } else {
+        historyScannedOldestAt = 0;
+      }
+    }
+    const currentRows = historyRows;
+    const queued = new Set(previousQueue.map((row) => row.signature));
+    const historyQueue = [...previousQueue];
+    for (const row of currentRows) {
+      if (!row.signature || previousSeen.has(row.signature) || queued.has(row.signature)) continue;
+      historyQueue.push(row);
+      queued.add(row.signature);
+    }
+    const historyDecodeLimit = previous?.historySeeded === true
+      ? GEOF_KEYS_9G_HISTORY_DECODE_LIMIT
+      : GEOF_KEYS_9G_HISTORY_SEED_LIMIT;
+    const historyBatch = historyQueue.splice(0, historyDecodeLimit);
+    const historyDecoded = [];
+    for (const row of historyBatch) {
+      const tx = await getTransactionWithRetry(row.signature);
+      const decoded = decode9gInbound(row, tx);
+      if (decoded) historyDecoded.push(decoded);
+    }
+    const ledgerBySignature = new Map(previousLedger.map((entry) => [entry.signature, entry]));
+    for (const entry of historyDecoded) ledgerBySignature.set(entry.signature, entry);
+    const inflowLedger = prune9gLedger([...ledgerBySignature.values()], now);
+    const historySeen = [...new Set([
+      ...currentRows.map((row) => row.signature).filter(Boolean),
+      ...(Array.isArray(previous?.historySeen) ? previous.historySeen : []),
+    ])].slice(0, GEOF_KEYS_9G_HISTORY_SEEN_LIMIT);
+    const historyOldestAt = inflowLedger.at(-1)?.at ?? null;
+    const historyComplete = historyQueue.length === 0 && historyScannedOldestAt !== null && historyScannedOldestAt <= now - GEOF_KEYS_9G_HISTORY_MS;
+    const sol14d = inflowLedger.reduce((sum, entry) => sum + entry.sol, 0);
     const bySender = new Map();
     for (const r of inbound) {
       const key = r.senderHash || "unknown";
@@ -1629,12 +1664,25 @@ export async function sniffNodeKeys9g() {
       solIn: Math.round(solIn * 1000) / 1000,
       senders: bySender.size,
       senderHashes,
-      avgSolPerTx: Math.round((solIn / inbound.length) * 1000) / 1000,
-      sol24h: Math.round(recent24h.reduce((sum, r) => sum + r.sol, 0) * 1000) / 1000,
+      avgSolPerTx: inbound.length ? Math.round((solIn / inbound.length) * 1000) / 1000 : null,
+      sol24h: inbound.length ? Math.round(recent24h.reduce((sum, r) => sum + r.sol, 0) * 1000) / 1000 : null,
       tx24h: recent24h.length,
+      sol14d: Math.round(sol14d * 1000) / 1000,
+      tx14d: inflowLedger.length,
+      historyDays: GEOF_KEYS_9G_HISTORY_DAYS,
+      historyDecoded: historyDecoded.length,
+      historyPending: historyQueue.length,
+      historySeeded: true,
+      historyComplete,
+      historyBefore,
+      historyScannedOldestAt,
+      historyOldestAt: historyOldestAt ? new Date(historyOldestAt).toISOString() : null,
+      historyQueue,
+      historySeen,
+      inflowLedger,
       cohorts,
-      newestAt: new Date(inbound[0].at).toISOString(),
-      oldestAt: new Date(inbound[inbound.length - 1].at).toISOString(),
+      newestAt: inbound[0] ? new Date(inbound[0].at).toISOString() : null,
+      oldestAt: inbound.at(-1) ? new Date(inbound.at(-1).at).toISOString() : null,
       cached: false,
       reason: null,
     };
@@ -1658,6 +1706,9 @@ export function summarizeKey9g(source) {
       key9gDecoded: null,
       key9gSol24h: null,
       key9gTx24h: null,
+      key9gSol14d: null,
+      key9gTx14d: null,
+      key9gHistoryComplete: false,
       key9gCohorts: [],
       key9gFundingHits: [],
       key9gNewestAt: null,
@@ -1687,6 +1738,9 @@ export function summarizeKey9g(source) {
     key9gDecoded: source.decoded ?? null,
     key9gSol24h: source.sol24h ?? null,
     key9gTx24h: source.tx24h ?? null,
+    key9gSol14d: source.sol14d ?? null,
+    key9gTx14d: source.tx14d ?? null,
+    key9gHistoryComplete: source.historyComplete === true,
     key9gCohorts: Array.isArray(source.cohorts) ? source.cohorts : [],
     key9gFundingHits: hits,
     key9gNewestAt: source.newestAt ?? null,
@@ -4332,7 +4386,7 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
     ["opencode.releases", sniffOpencodeReleases()],
     ["opencode.go", sniffOpencodeGo()],
     ["surface.mining", sniffMiningSurface(forceMiningSurface)],
-    ["geoff.keys.9g", sniffNodeKeys9g()],
+    ["geoff.keys.9g", sniffNodeKeys9g({ previous: previous?.sources?.["geoff.keys.9g"] || null })],
     ["opencode.zenerr", sniffZenErrorShape()],
     ["pond0x.stats", sniffPond0xStats()],
     ["pond0x.geoff", sniffPond0xGeoff()],

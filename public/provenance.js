@@ -29,7 +29,7 @@ const METRICS = [
   ["pileValue", "Reported", "Unredeemed earnings for node keys at least 10% utilized, per StackNet. No public time or per-key breakdown; not live earnings.", ["stacknet.pile"]],
   ["trixMemeMarketCount", "Reported", "Current TRIX /api/launches sample ranked by reported market cap, not a full-market census or independent valuation. Each row has its own marketCapUpdatedAt; dataUpdatedAt is only the newest row, not the whole ranking. Historical /api/meme-market snapshots are not current launch data.", ["trix.meme.market"]],
   ["trixMarketCount", "Reported", "Collectible counts from TRIX APIs, within endpoint windows. Listings are not sales; artwork counts are not a full-chain census.", ["trix.market"]],
-  ["keys9gValue", "On-chain", "Positive SOL balance changes in a small decoded window for the 9G wallet. Not lifetime sales or proof every inflow bought a key.", ["geoff.keys.9g"]],
+  ["keys9gValue", "On-chain", "Positive SOL balance changes retained in a rolling 14-day ledger for the 9G wallet. The ledger seeds incrementally and is not proof every inflow bought a key.", ["geoff.keys.9g"]],
   ["x402Downloads", "Reported", "npm downloads over its last-week reporting window and SDK version. Downloads are not users, payments or API usage.", ["stacknet.x402"]],
   ["subscriptionCount", "Reported", "Responding public billing/subscription routes / routes probed, including login gates. Not subscriber count or revenue.", ["geoff.subscription"]],
   ["miningMiners", "Estimate", "Distinct qualifying reward recipients in a sampled 60-minute payout window, excluding known house accounts. Not all active miners; facet/claims state is a separate website report.", ["surface.mining"]],
