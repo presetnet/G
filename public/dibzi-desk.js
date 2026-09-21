@@ -45,14 +45,14 @@ export function renderDibziDesk(latest) {
     cashtagRows.innerHTML = "";
   } else {
     summary.innerHTML = [
-      [fmt(src.activeNames, 0), "active names"],
-      [fmt(src.totalBids, 0), "reported bids"],
-      [fmt(src.uniqueWallets, 0), "bidder wallets"],
-      [sol(src.totalBidSol), "bid volume · not settled spend"],
-      [sol(src.highestBidSol), "highest current name bid"],
+      [fmt(src.activeNames, 0), "active auctions · current snapshot"],
+      [fmt(src.uniqueWallets, 0), "wallets · current snapshot"],
+      [sol(src.activeBoardSol), "current leading bids · snapshot"],
+      [fmt(src.totalBids, 0), "bid rows · current snapshot"],
+      [sol(src.highestBidSol), "highest current bid"],
     ].map(([value, label]) => `<span class="dibzi-stat"><b>${esc(value)}</b><small>${esc(label)}</small></span>`).join("");
     const walletBody = wallets.map((wallet) => `<tr><td class="desk-number">${fmt(wallet.rank, 0)}</td><td><b>${esc(wallet.username || short(wallet.wallet))}</b><small class="value-age">${wallet.username ? walletLink(wallet.wallet) : ""}</small></td><td class="desk-number">${sol(wallet.totalBidSol)}</td><td class="desk-number">${fmt(wallet.bids, 0)}</td><td>${fmt(wallet.leading, 0)} lead${wallet.leading === 1 ? "" : "s"}</td></tr>`).join("");
-    walletRows.innerHTML = walletBody ? table("DIBZI bidder wallets", [["#", "desk-number"], ["Wallet"], ["Bid volume", "desk-number"], ["Bids", "desk-number"], ["Leads"]], walletBody) : `<div class="desk-empty"><span>[ - ]</span><span>No bidder wallets reported.</span></div>`;
+    walletRows.innerHTML = walletBody ? table("DIBZI bidder wallets in current snapshot", [["#", "desk-number"], ["Wallet"], ["Reported bid rows", "desk-number"], ["Rows", "desk-number"], ["Leads"]], walletBody) : `<div class="desk-empty"><span>[ - ]</span><span>No bidder wallets reported.</span></div>`;
     const bidBody = bids.map((bid) => `<tr><td><b>${esc(bid.name)}</b><small class="value-age">${esc(bid.username || short(bid.wallet))}</small></td><td class="desk-number">${sol(bid.amountSol)}</td><td>${stamp(bid.at)}</td><td>${walletLink(bid.wallet)}</td><td>${txLink(bid.signature)}</td></tr>`).join("");
     bidRows.innerHTML = bidBody ? table("Recent DIBZI bids", [["Name"], ["Bid", "desk-number"], ["When"], ["Wallet"], ["Tx"]], bidBody) : `<div class="desk-empty"><span>[ - ]</span><span>No bids reported in the current public snapshot.</span></div>`;
     const cashtags = names

@@ -2446,9 +2446,10 @@ export async function sniffDibzi() {
     recentBids: [],
     topWallets: [],
     activeNames: 0,
-    totalBids: 0,
-    uniqueWallets: 0,
-    totalBidSol: 0,
+      totalBids: 0,
+      uniqueWallets: 0,
+      totalBidSol: 0,
+      activeBoardSol: 0,
     highestBidSol: null,
     checkedAt: null,
     reason: null,
@@ -2530,10 +2531,11 @@ export async function sniffDibzi() {
       totalBids: allBids.length,
       uniqueWallets: walletMap.size,
       totalBidSol: allBids.reduce((sum, bid) => sum + bid.amountSol, 0),
+      activeBoardSol: names.reduce((sum, name) => sum + (name.amountSol ?? 0), 0),
       highestBidSol,
       profiles: profiles.length,
       ms: Date.now() - started,
-      note: "Current DIBZI names and bid history from the public API; bid amounts are reported bids, not necessarily settled spend.",
+      note: "Current DIBZI names and bid rows from the public API. Snapshot values are not lifetime totals; bid amounts are reported bids, not necessarily settled spend.",
     });
   } catch (error) {
     value.reason = error?.message || String(error);
