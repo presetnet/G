@@ -4014,6 +4014,22 @@ function roundSol(value) {
 }
 
 function retainFailedSource(source, observed, previous = null) {
+  // A transient 200 with an empty DIBZI payload is not a fresher auction state.
+  // Keep the last non-empty board until a later read supplies real rows.
+  if (
+    source === "dibzi.names" &&
+    observed.ok === true &&
+    Array.isArray(previous?.names) &&
+    previous.names.length > 0 &&
+    (!Array.isArray(observed.names) || observed.names.length === 0)
+  ) {
+    observed = {
+      ...observed,
+      ok: false,
+      stale: true,
+      reason: "DIBZI returned an empty names payload; retaining the last non-empty board.",
+    };
+  }
   if (observed.ok !== false || observed.skipped) return observed;
   // Historical meme snapshots do not satisfy the current launch-row contract.
   if (source === "trix.meme.market" && previous?.sourceUrl !== TRIX_LAUNCH_SOURCE_URL) previous = null;
