@@ -31,8 +31,9 @@ export function renderDibziDesk(latest) {
   const summary = document.getElementById("dibziSummary");
   const walletRows = document.getElementById("dibziWalletRows");
   const bidRows = document.getElementById("dibziBidRows");
+  const cashtagRows = document.getElementById("dibziCashtagRows");
   const sourceText = document.getElementById("dibziSourceText");
-  if (!status || !summary || !walletRows || !bidRows) return;
+  if (!status || !summary || !walletRows || !bidRows || !cashtagRows) return;
   status.textContent = sourceState(src);
   const names = rows(src?.names);
   const wallets = rows(src?.topWallets);
@@ -41,6 +42,7 @@ export function renderDibziDesk(latest) {
     summary.innerHTML = `<span class="dibzi-stat"><b>--</b><small>${esc(src?.reason || "Waiting for public DIBZI data")}</small></span>`;
     walletRows.innerHTML = `<div class="desk-empty"><span>[ - ]</span><span>DIBZI wallet activity unavailable. The desk does not retain invented balances.</span></div>`;
     bidRows.innerHTML = "";
+    cashtagRows.innerHTML = "";
   } else {
     summary.innerHTML = [
       [fmt(src.activeNames, 0), "active names"],
@@ -53,6 +55,11 @@ export function renderDibziDesk(latest) {
     walletRows.innerHTML = walletBody ? table("DIBZI bidder wallets", [["#", "desk-number"], ["Wallet"], ["Bid volume", "desk-number"], ["Bids", "desk-number"], ["Leads"]], walletBody) : `<div class="desk-empty"><span>[ - ]</span><span>No bidder wallets reported.</span></div>`;
     const bidBody = bids.map((bid) => `<tr><td><b>${esc(bid.name)}</b><small class="value-age">${esc(bid.username || short(bid.wallet))}</small></td><td class="desk-number">${sol(bid.amountSol)}</td><td>${stamp(bid.at)}</td><td>${walletLink(bid.wallet)}</td><td>${txLink(bid.signature)}</td></tr>`).join("");
     bidRows.innerHTML = bidBody ? table("Recent DIBZI bids", [["Name"], ["Bid", "desk-number"], ["When"], ["Wallet"], ["Tx"]], bidBody) : `<div class="desk-empty"><span>[ - ]</span><span>No bids reported in the current public snapshot.</span></div>`;
+    const cashtags = names
+      .filter((name) => name.name.trim().startsWith("$"))
+      .sort((a, b) => (b.amountSol ?? -Infinity) - (a.amountSol ?? -Infinity) || (Date.parse(a.endsAt || 0) || Infinity) - (Date.parse(b.endsAt || 0) || Infinity));
+    const cashtagBody = cashtags.map((name) => `<tr><td><b>${esc(name.name)}</b><small class="value-age">${name.settled ? "settled" : "active auction"}</small></td><td class="desk-number">${sol(name.amountSol)}</td><td><b>${esc(name.leaderUsername || short(name.leader))}</b><small class="value-age">${walletLink(name.leader)}</small></td><td>${stamp(name.endsAt)}</td></tr>`).join("");
+    cashtagRows.innerHTML = cashtagBody ? table("DIBZI cashtag names", [["Cashtag"], ["Current bid", "desk-number"], ["Leader"], ["Ends"]], cashtagBody) : `<div class="desk-empty"><span>[ - ]</span><span>No dollar-prefixed names reported in the current snapshot.</span></div>`;
   }
   if (sourceText) sourceText.textContent = [
     `Names: ${src?.sourceUrl || "https://dibzi.ai/api/names"}`,
