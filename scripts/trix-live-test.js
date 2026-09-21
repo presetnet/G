@@ -716,8 +716,8 @@ failures.clear();
 
 // Full/minute summaries use the same source contract, including coverage.
 const coldMinute = await api.runMinuteSniff();
-assert.equal(Object.keys(coldMinute.sources).length, 19);
-assert.equal(coldMinute.summary.totalSources, 19);
+assert.equal(Object.keys(coldMinute.sources).length, 20);
+assert.equal(coldMinute.summary.totalSources, 20);
 assert.equal(coldMinute.sources["trix.boxes"].status, 404);
 assert.equal(coldMinute.sources["trix.boxboard"].ok, true);
 assert.equal(coldMinute.sources["trix.boxchain"].ok, true);
@@ -729,7 +729,7 @@ assert.equal(coldMinute.sources["pond0x.geoff"].paired, false);
 assert.equal(coldMinute.sources["pond0x.geoff"].chatEmbedded, true);
 assert.equal(coldMinute.sources["pond0x.geoff"].providerEmbedded, true);
 const full = service.preserveTrixHistory(null, await api.runSniff());
-assert.equal(Object.keys(full.sources).length, 42);
+assert.equal(Object.keys(full.sources).length, 43);
 assert.equal(full.sources["trix.boxes"].status, 404);
 assert.equal(full.summary.trixBoxesOk, false);
 assert.equal(full.summary.trixBoxesStatus, 404);

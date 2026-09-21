@@ -37,6 +37,7 @@ function fixture() {
     recent: [{ name: 'New launch', symbol: 'NEW', mintAddress: 'C'.repeat(32), chain: 'solana', marketCap: 1000, marketCapUpdatedAt: at, createdAt: at }],
   };
   sources['trix.fee.config'] = { ...base, feeBps: 100, feeWallet: 'fixture-provider', treasuryWallet: 'fixture-treasury' };
+  sources['dibzi.names'] = { ...base, source: 'dibzi.names', sourceUrl: 'https://dibzi.ai/api/names', configUrl: 'https://dibzi.ai/api/config', profileUrl: 'https://dibzi.ai/api/profiles', programId: 'fixture-dibzi-program', activeNames: 2, totalBids: 3, uniqueWallets: 2, totalBidSol: 1.234, highestBidSol: .8, names: [{ name: 'jimmy', amountSol: .8, leader: 'A'.repeat(32), bids: [] }, { name: 'trix', amountSol: .434, leader: 'B'.repeat(32), bids: [] }], topWallets: [{ rank: 1, username: 'jimmy', wallet: 'A'.repeat(32), totalBidSol: .8, bids: 2, leading: 1 }, { rank: 2, wallet: 'B'.repeat(32), totalBidSol: .434, bids: 1, leading: 1 }], recentBids: [{ name: 'jimmy', username: 'jimmy', wallet: 'A'.repeat(32), amountSol: .8, at, signature: 'dibzi-signature' }, { name: 'trix', wallet: 'B'.repeat(32), amountSol: .434, at, signature: 'dibzi-signature-2' }] };
   sources['trix.money'].fees.topCoins = [{ mint: 'verification', symbol: 'Verification', buySol: 0, sellSol: 0, voidSol: 0, count: 1 }, { mint: 'A'.repeat(32), symbol: 'SPOT', buySol: 1.234, sellSol: 0, voidSol: 0.5, count: 2 }];
   Object.assign(sources['trix.market'].recentMints[0], { artworkType: 'digital', status: 'minted', currentMarketCap: 1234, marketCapUpdatedAt: at });
   sources['solana.tokens'].mintsCheckedAt = at;
@@ -192,6 +193,14 @@ async function main() {
     await page.keyboard.press('ArrowRight');
     assert.equal(await page.locator('#tab-coins').getAttribute('aria-selected'), 'true');
     console.log('PASS: on-chain box leaderboard, box types, fallback to official rows, and keyboard tabs');
+
+    assert.match(await page.locator('#dibziDesk').textContent(), /DIBZI bid desk/);
+    assert.match(await page.locator('#dibziSummary').textContent(), /2active names/);
+    assert.match(await page.locator('#dibziWalletRows').textContent(), /jimmy/);
+    assert.match(await page.locator('#dibziBidRows').textContent(), /trix/);
+    assert.equal(await page.locator('#dibziBidRows a[href*="solscan.io/tx"]').count(), 2);
+    assert.match(await page.locator('#dibziSourceText').textContent(), /dibzi\.ai\/api\/names/);
+    console.log('PASS: DIBZI bid card, wallet board, recent bids and source disclosure');
 
     payload.latest.takenAt = new Date(Date.now() - 3600000).toISOString();
     await page.locator('#pollBtn').click();

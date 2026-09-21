@@ -59,6 +59,20 @@
 .vitals-provenance { padding: 0 .5rem; border: none; margin-bottom: .55rem; font-size: .7rem; }
 .vitals-provenance > details > summary { font: .68rem var(--font-mono); padding: .35rem 0; }
 .trix-desk.panel { padding: 0; margin-bottom: 1.25rem; min-width: 0; background: #121214; border: 1px solid #303035; border-radius: 12px; box-shadow: none; overflow: clip; }
+.dibzi-desk.panel { padding: 0; margin-bottom: 1.25rem; min-width: 0; background: #111518; border: 1px solid #304047; border-radius: 12px; box-shadow: none; overflow: clip; }
+.dibzi-desk .desk-header { border-bottom: 1px solid #26353a; }
+.dibzi-desk .eyebrow, .dibzi-desk .desk-status { color: #79d6c5; }
+.dibzi-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .6rem; padding: 1rem 1.25rem; border-bottom: 1px solid #26353a; }
+.dibzi-stat { display: grid; gap: .25rem; min-width: 0; padding: .7rem .75rem; border: 1px solid #26353a; border-radius: 7px; background: #151d20; }
+.dibzi-stat b { color: #d7fff5; font: 500 1rem var(--font-mono); overflow-wrap: anywhere; }
+.dibzi-stat small { color: #8da5a2; font: .6rem/1.4 var(--font-mono); }
+.dibzi-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 1.25rem; padding: 0 1.25rem .75rem; }
+.dibzi-grid > section { min-width: 0; }
+.dibzi-grid .desk-toolbar { padding-bottom: .55rem; }
+.dibzi-grid .desk-table-scroll { max-height: 380px; }
+.dibzi-desk .desk-table a { color: #79d6c5; }
+.dibzi-desk .desk-table td { font-size: .7rem; }
+.dibzi-desk .desk-table td small { display: block; }
 .desk-header { padding: 1.15rem 1.25rem .9rem; display: flex; gap: 1rem; justify-content: space-between; align-items: center; }
 .desk-header h2 { margin: 0; font: 600 1.45rem var(--font-ui); letter-spacing: -.035em; }
 .desk-status { font: .68rem var(--font-mono); color: var(--muted); text-align: right; }
@@ -165,6 +179,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   .box-board-grid { grid-template-columns: minmax(0,1fr); }
   .pack-type-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .desk-money-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .dibzi-grid { grid-template-columns: minmax(0,1fr); }
 }
 @media (max-width: 700px) {
   .shell { padding: 1rem .8rem 1.5rem; }
@@ -189,6 +204,8 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   .desk-toolbar #coinView { flex: 1; }
   .desk-toolbar #coinChain { width: 130px; }
   .desk-source { padding: 0 .8rem; }
+  .dibzi-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: .8rem; }
+  .dibzi-grid { padding: 0 .8rem .7rem; gap: .6rem; }
   .desk-secondary { display: none; }
   .desk-table { font-size: .72rem; }
   .desk-table th { font-size: .58rem; }
@@ -220,6 +237,9 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   .coin-copy small { max-width: 20ch; font-size: .6rem; }
   .desk-table td.desk-number { font-size: .72rem; }
   .desk-money-grid { grid-template-columns: 1fr; }
+  .dibzi-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem; }
+  .dibzi-stat { padding: .55rem; }
+  .dibzi-stat b { font-size: .85rem; }
   .pack-type-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .shop-types summary small { display: block; margin: .4rem 0 0; }
 }

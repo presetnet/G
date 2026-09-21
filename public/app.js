@@ -8,6 +8,7 @@ import { CLIENT_TOKEN_PLAN } from "./token-plan-fallback.js";
 import { initCompactView } from "./compact-view.js";
 import { renderProvenance, sourceDescription } from "./provenance.js";
 import { initTrixDesk, renderTrixDesk } from "./trix-desk.js";
+import { renderDibziDesk } from "./dibzi-desk.js";
 import {
   DEFAULT_HEATMAP_DAYS,
   buildHeatmapGrid,
@@ -1175,6 +1176,7 @@ if (s.treasuryRpcOk) {
     }
   }
   renderTrixDesk(latest);
+  renderDibziDesk(latest);
   renderSettlementStatus(s);
   renderKeySale(s);
   renderKey9g(s);
@@ -2390,6 +2392,7 @@ async function pollNow() {
     applyPayload(data);
   } catch (error) {
     renderTrixDesk(lastLatest);
+    renderDibziDesk(lastLatest);
     setConnection("error", "reconnecting");
     const status = document.getElementById("syncStatus");
     if (status) {
@@ -2471,6 +2474,7 @@ async function boot() {
   setInterval(() => {
     if (document.visibilityState === "visible") {
       renderTrixDesk(lastLatest);
+      renderDibziDesk(lastLatest);
       pollNow();
     }
   }, 15_000);

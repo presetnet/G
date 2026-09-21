@@ -2341,6 +2341,154 @@ const TRIX_BOX_LAUNCH_START_MS = Date.parse("2026-08-29T00:00:00Z");
 const TRIX_BOX_CHAIN_PAGES = 8;
 let trixBoxChainInFlight = null;
 
+const DIBZI_BASE_URL = "https://dibzi.ai";
+const DIBZI_PROGRAM_ID = "3VQDLcMiUrqLHXhkinwj9AW9h5BHdqYkv4AY2cyTv7gS";
+const DIBZI_TIMEOUT_MS = 6_000;
+const DIBZI_NAME_LIMIT = 500;
+const DIBZI_BIDS_PER_NAME_LIMIT = 250;
+const DIBZI_RECENT_BID_LIMIT = 60;
+const DIBZI_WALLET_LIMIT = 25;
+
+function dibziNumber(value) {
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  if (typeof value === "string" && !value.trim()) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function dibziDate(value) {
+  const number = dibziNumber(value);
+  const time = number !== null ? number : typeof value === "string" ? Date.parse(value) : NaN;
+  return Number.isFinite(time) ? new Date(time).toISOString() : null;
+}
+
+function normalizeDibziBid(bid, name, profileByWallet) {
+  const wallet = typeof bid?.wallet === "string" && bid.wallet ? bid.wallet : null;
+  const lamports = dibziNumber(bid?.amount);
+  if (!wallet || lamports === null) return null;
+  return {
+    name,
+    wallet,
+    username: profileByWallet.get(wallet)?.username || null,
+    amountLamports: lamports,
+    amountSol: lamports / 1e9,
+    at: dibziDate(bid?.at),
+    signature: typeof bid?.signature === "string" ? bid.signature : null,
+  };
+}
+
+export async function sniffDibzi() {
+  const started = Date.now();
+  const value = {
+    source: "dibzi.names",
+    ok: false,
+    status: 0,
+    stale: false,
+    sourceUrl: `${DIBZI_BASE_URL}/api/names`,
+    configUrl: `${DIBZI_BASE_URL}/api/config`,
+    profileUrl: `${DIBZI_BASE_URL}/api/profiles`,
+    programId: DIBZI_PROGRAM_ID,
+    names: [],
+    recentBids: [],
+    topWallets: [],
+    activeNames: 0,
+    totalBids: 0,
+    uniqueWallets: 0,
+    totalBidSol: 0,
+    highestBidSol: null,
+    checkedAt: null,
+    reason: null,
+  };
+  try {
+    const [configRes, namesRes, profilesRes] = await Promise.all([
+      fetchJson(`${DIBZI_BASE_URL}/api/config`, { timeoutMs: DIBZI_TIMEOUT_MS }),
+      fetchJson(`${DIBZI_BASE_URL}/api/names`, { timeoutMs: DIBZI_TIMEOUT_MS }),
+      fetchJson(`${DIBZI_BASE_URL}/api/profiles`, { timeoutMs: DIBZI_TIMEOUT_MS }),
+    ]);
+    if (!namesRes.ok || !Array.isArray(namesRes.json)) {
+      throw new Error(`DIBZI names HTTP ${namesRes.status}`);
+    }
+    const profiles = Array.isArray(profilesRes.json) ? profilesRes.json : [];
+    const profileByWallet = new Map(profiles.map((profile) => [profile?.wallet, profile]));
+    const allBids = [];
+    const names = namesRes.json.slice(0, DIBZI_NAME_LIMIT).map((row) => {
+      const amountLamports = dibziNumber(row?.amount);
+      const name = {
+        id: typeof row?.id === "string" ? row.id : null,
+        name: typeof row?.name === "string" ? row.name : null,
+        amountLamports,
+        amountSol: amountLamports === null ? null : amountLamports / 1e9,
+        leader: typeof row?.leader === "string" ? row.leader : null,
+        leaderUsername: profileByWallet.get(row?.leader)?.username || null,
+        endsAt: dibziDate(row?.endsAt),
+        settled: row?.settled === true,
+        bids: [],
+      };
+      if (!name.name) return null;
+      name.bids = (Array.isArray(row?.bids) ? row.bids : [])
+        .slice(0, DIBZI_BIDS_PER_NAME_LIMIT)
+        .map((bid) => normalizeDibziBid(bid, name.name, profileByWallet))
+        .filter(Boolean);
+      allBids.push(...name.bids);
+      return name;
+    }).filter(Boolean);
+    const walletMap = new Map();
+    for (const bid of allBids) {
+      const wallet = walletMap.get(bid.wallet) || {
+        wallet: bid.wallet,
+        username: bid.username,
+        bids: 0,
+        totalBidSol: 0,
+        highestBidSol: 0,
+        names: new Set(),
+        latestAt: null,
+        leading: 0,
+      };
+      wallet.username ||= bid.username;
+      wallet.bids += 1;
+      wallet.totalBidSol += bid.amountSol;
+      wallet.highestBidSol = Math.max(wallet.highestBidSol, bid.amountSol);
+      wallet.names.add(bid.name);
+      if (!wallet.latestAt || (bid.at && bid.at > wallet.latestAt)) wallet.latestAt = bid.at;
+      walletMap.set(bid.wallet, wallet);
+    }
+    for (const name of names) {
+      const wallet = walletMap.get(name.leader);
+      if (wallet) wallet.leading += 1;
+    }
+    const topWallets = [...walletMap.values()]
+      .map((wallet) => ({ ...wallet, names: [...wallet.names], nameCount: wallet.names.size }))
+      .sort((a, b) => b.totalBidSol - a.totalBidSol || b.bids - a.bids)
+      .slice(0, DIBZI_WALLET_LIMIT)
+      .map((wallet, index) => ({ rank: index + 1, ...wallet }));
+    const recentBids = allBids
+      .sort((a, b) => (Date.parse(b.at || 0) || 0) - (Date.parse(a.at || 0) || 0))
+      .slice(0, DIBZI_RECENT_BID_LIMIT);
+    const highestBidSol = names.reduce((max, name) => Math.max(max ?? 0, name.amountSol ?? 0), null);
+    Object.assign(value, {
+      ok: true,
+      status: 200,
+      config: configRes.ok && configRes.json ? configRes.json : { mode: "mainnet", programId: DIBZI_PROGRAM_ID },
+      names,
+      recentBids,
+      topWallets,
+      activeNames: names.length,
+      totalBids: allBids.length,
+      uniqueWallets: walletMap.size,
+      totalBidSol: allBids.reduce((sum, bid) => sum + bid.amountSol, 0),
+      highestBidSol,
+      profiles: profiles.length,
+      ms: Date.now() - started,
+      note: "Current DIBZI names and bid history from the public API; bid amounts are reported bids, not necessarily settled spend.",
+    });
+  } catch (error) {
+    value.reason = error?.message || String(error);
+    value.ms = Date.now() - started;
+  }
+  value.checkedAt = new Date().toISOString();
+  return value;
+}
+
 /** Live on-chain box event count: successful treasury signatures since box launch. */
 export async function sniffTrixBoxChain({ previous = null } = {}) {
   if (!trixBoxChainInFlight) {
@@ -4136,6 +4284,7 @@ function trixAttempts(previous) {
     ["trix.fee.config", sniffTrixFeeConfig()],
     ["trix.terms", sniffTrixTerms()],
     ["trix.privacy", sniffTrixPrivacy()],
+    ["dibzi.names", sniffDibzi()],
   ];
 }
 
