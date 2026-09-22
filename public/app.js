@@ -1923,12 +1923,17 @@ function initAudioLab() {
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     objectUrl = URL.createObjectURL(blob);
     els.audioLabPlayer.src = objectUrl;
+    els.audioLabPlayer.volume = 0.18;
     els.audioLabPlayer.hidden = false;
     els.audioLabDownload.href = objectUrl;
     els.audioLabDownload.hidden = false;
     els.audioLabStatus.textContent = "Generated · local browser audio · no API call";
     els.audioLabMeta.textContent = `peak ${metadata.peak.toFixed(3)} · normalization ${metadata.normalization.toFixed(3)} · ${metadata.harmonicCount} harmonics · ${metadata.suppressed} gated samples`;
-    els.audioLabPlayer.play().catch(() => {});
+    els.audioLabPlayer.play().then(() => {
+      els.audioLabStatus.textContent = "Playing · local browser audio · no API call";
+    }).catch(() => {
+      els.audioLabStatus.textContent = "Generated · press play on the audio control · no API call";
+    });
   });
 }
 
