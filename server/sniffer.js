@@ -2452,6 +2452,8 @@ export async function sniffDibzi() {
       activeBoardSol: 0,
       recentBidCount60m: 0,
       bidsPerMinute60m: 0,
+      namesReported: 0,
+      nameSampleTruncated: false,
     highestBidSol: null,
     checkedAt: null,
     reason: null,
@@ -2521,10 +2523,11 @@ export async function sniffDibzi() {
     const recentBids = allBids
       .sort((a, b) => (Date.parse(b.at || 0) || 0) - (Date.parse(a.at || 0) || 0))
       .slice(0, DIBZI_RECENT_BID_LIMIT);
-    const recentBidCount60m = allBids.filter((bid) => {
+    const recentBidSignatures = new Set(allBids.filter((bid) => {
       const at = Date.parse(bid.at || "");
-      return Number.isFinite(at) && at >= Date.now() - 60 * 60 * 1000;
-    }).length;
+      return Number.isFinite(at) && at >= Date.now() - 60 * 60 * 1000 && bid.signature;
+    }).map((bid) => bid.signature));
+    const recentBidCount60m = recentBidSignatures.size;
     const highestBidSol = names.reduce((max, name) => Math.max(max ?? 0, name.amountSol ?? 0), null);
     Object.assign(value, {
       ok: true,
@@ -2540,10 +2543,12 @@ export async function sniffDibzi() {
       activeBoardSol: names.reduce((sum, name) => sum + (name.amountSol ?? 0), 0),
       recentBidCount60m,
       bidsPerMinute60m: Math.round((recentBidCount60m / 60) * 1000) / 1000,
+      namesReported: namesRes.json.length,
+      nameSampleTruncated: namesRes.json.length > names.length,
       highestBidSol,
       profiles: profiles.length,
       ms: Date.now() - started,
-      note: "Current DIBZI names and bid rows from the public API. Snapshot values are not lifetime totals; bid amounts are reported bids, not necessarily settled spend.",
+      note: "Current DIBZI names and bid rows from the public API. Snapshot values are not lifetime totals; bid amounts are reported bids, not necessarily settled spend. Bid velocity deduplicates transaction signatures and is limited to the collected name sample.",
     });
   } catch (error) {
     value.reason = error?.message || String(error);
