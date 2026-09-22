@@ -46,6 +46,7 @@ export function renderDibziDesk(latest) {
   } else {
     summary.innerHTML = [
       [fmt(src.activeNames, 0), "active auctions · current snapshot"],
+      [fmt(src.soldNames, 0), "sold names · current snapshot"],
       [fmt(src.uniqueWallets, 0), "wallets · current snapshot"],
       [sol(src.activeBoardSol), `current leading bids · ${num(src.bidsPerMinute60m) === null ? "bid velocity unavailable · no event rows" : `${fmt(src.bidsPerMinute60m, 3)} reported bids/min · last 60m`} · ${src.nameSampleTruncated ? `${fmt(src.names?.length, 0)}-name sample` : "all reported names"}`],
       [fmt(src.totalBids, 0), "bid rows · current snapshot"],

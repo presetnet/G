@@ -2448,6 +2448,8 @@ export async function sniffDibzi() {
     recentBids: [],
     topWallets: [],
     activeNames: 0,
+    soldNames: 0,
+    namesTotal: 0,
       totalBids: 0,
       uniqueWallets: 0,
       totalBidSol: 0,
@@ -2530,7 +2532,8 @@ export async function sniffDibzi() {
       return Number.isFinite(at) && at >= Date.now() - 60 * 60 * 1000 && bid.signature;
     }).map((bid) => bid.signature));
     const recentBidCount60m = recentBidSignatures.size;
-    const highestBidSol = names.reduce((max, name) => Math.max(max ?? 0, name.amountSol ?? 0), null);
+    const liveNames = names.filter((name) => name.settled !== true);
+    const soldNames = names.filter((name) => name.settled === true);
     Object.assign(value, {
       ok: true,
       status: 200,
@@ -2538,16 +2541,18 @@ export async function sniffDibzi() {
       names,
       recentBids,
       topWallets,
-      activeNames: names.length,
+      activeNames: liveNames.length,
+      soldNames: soldNames.length,
+      namesTotal: names.length,
       totalBids: allBids.length,
       uniqueWallets: walletMap.size,
       totalBidSol: allBids.reduce((sum, bid) => sum + bid.amountSol, 0),
-      activeBoardSol: names.reduce((sum, name) => sum + (name.amountSol ?? 0), 0),
+      activeBoardSol: liveNames.reduce((sum, name) => sum + (name.amountSol ?? 0), 0),
       recentBidCount60m: allBids.length ? recentBidCount60m : null,
       bidsPerMinute60m: allBids.length ? Math.round((recentBidCount60m / 60) * 1000) / 1000 : null,
       namesReported: namesRes.json.length,
       nameSampleTruncated: namesRes.json.length > names.length,
-      highestBidSol,
+      highestBidSol: liveNames.reduce((max, name) => Math.max(max ?? 0, name.amountSol ?? 0), null),
       profiles: profiles.length,
       ms: Date.now() - started,
       note: "Current DIBZI names and bid rows from the public API. Snapshot values are not lifetime totals; bid amounts are reported bids, not necessarily settled spend. Bid velocity deduplicates transaction signatures and is limited to the collected name sample.",
