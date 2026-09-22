@@ -9,6 +9,7 @@ import { initCompactView } from "./compact-view.js";
 import { renderProvenance, sourceDescription } from "./provenance.js";
 import { initTrixDesk, renderTrixDesk } from "./trix-desk.js";
 import { renderDibziDesk } from "./dibzi-desk.js";
+import { createChebyshevTone } from "./chebyshev-audio.js";
 import {
   DEFAULT_HEATMAP_DAYS,
   buildHeatmapGrid,
@@ -283,6 +284,11 @@ const els = {
   hpBlocked: document.getElementById("hpBlocked"),
   skillsRolloutMeta: document.getElementById("skillsRolloutMeta"),
   skillsRolloutBody: document.getElementById("skillsRolloutBody"),
+  audioLabPlay: document.getElementById("audioLabPlay"),
+  audioLabDownload: document.getElementById("audioLabDownload"),
+  audioLabStatus: document.getElementById("audioLabStatus"),
+  audioLabPlayer: document.getElementById("audioLabPlayer"),
+  audioLabMeta: document.getElementById("audioLabMeta"),
   priceHeadline: document.getElementById("priceHeadline"),
   priceMeta: document.getElementById("priceMeta"),
   priceSentence: document.getElementById("priceSentence"),
@@ -1909,6 +1915,23 @@ function renderSkillsRollout(latest) {
     <span class="skill-rollout-note">${gated ? "Route exists; public skill inventory is not exposed by this probe." : "Route returned a public response; inventory still requires verification."}</span>`;
 }
 
+function initAudioLab() {
+  if (!els.audioLabPlay) return;
+  let objectUrl = null;
+  els.audioLabPlay.addEventListener("click", () => {
+    const { blob, metadata } = createChebyshevTone();
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrl = URL.createObjectURL(blob);
+    els.audioLabPlayer.src = objectUrl;
+    els.audioLabPlayer.hidden = false;
+    els.audioLabDownload.href = objectUrl;
+    els.audioLabDownload.hidden = false;
+    els.audioLabStatus.textContent = "Generated · local browser audio · no API call";
+    els.audioLabMeta.textContent = `peak ${metadata.peak.toFixed(3)} · normalization ${metadata.normalization.toFixed(3)} · ${metadata.harmonicCount} harmonics · ${metadata.suppressed} gated samples`;
+    els.audioLabPlayer.play().catch(() => {});
+  });
+}
+
 function cellMark(level) {
   return level === "yes"
     ? `<span class="mark yes" aria-label="Yes">✓</span>`
@@ -2486,6 +2509,7 @@ function startMatrix() {
 els.pollBtn.addEventListener("click", pollNow);
 initCompactView();
 initTrixDesk();
+initAudioLab();
 renderProvenance(memory.latest);
 hydrateIcons();
 startMatrix();

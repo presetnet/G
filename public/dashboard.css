@@ -83,6 +83,15 @@
 .dibzi-desk .desk-table a { color: #79d6c5; }
 .dibzi-desk .desk-table td { font-size: .7rem; }
 .dibzi-desk .desk-table td small { display: block; }
+.audio-lab { margin-top: 1rem; }
+.audio-lab-copy { max-width: 72rem; margin: .75rem 0 0; color: var(--muted); font: .76rem/1.55 var(--font-mono); }
+.audio-lab-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: 1rem; color: var(--muted); font: .68rem var(--font-mono); }
+.audio-lab-button { border: 1px solid #32785f; border-radius: 4px; padding: .55rem .7rem; color: #9be7d5; background: #15241f; font: inherit; cursor: pointer; }
+.audio-lab-button:hover, .audio-lab-button:focus-visible { border-color: #c9f5e9; background: #1b332b; }
+.audio-lab-player { width: min(100%, 34rem); margin-top: .85rem; }
+.audio-lab-meta { min-height: 1.2rem; margin-top: .65rem; color: #9be7d5; font: .68rem var(--font-mono); }
+.audio-lab-foot { margin: .75rem 0 0; color: var(--muted); font: .66rem/1.5 var(--font-mono); }
+.audio-lab-foot a { color: #9be7d5; }
 .desk-header { padding: 1.15rem 1.25rem .9rem; display: flex; gap: 1rem; justify-content: space-between; align-items: center; }
 .desk-header h2 { margin: 0; font: 600 1.45rem var(--font-ui); letter-spacing: -.035em; }
 .desk-status { font: .68rem var(--font-mono); color: var(--muted); text-align: right; }

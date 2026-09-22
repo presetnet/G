@@ -240,6 +240,15 @@
         <div id="skillsRolloutBody" class="skills-rollout-body"></div>
       </section>
 
+      <section class="panel audio-lab" aria-labelledby="audioLabTitle">
+        <header class="desk-header"><div><p class="eyebrow">04 / GEOFF-PIPE HYPOTHESIS</p><h2 id="audioLabTitle">Chebyshev audio signal</h2></div><span class="desk-status">GEOFF DOCS / LOCAL</span></header>
+        <p class="audio-lab-copy">A playable interpretation of the DSP hint: oscillator → Chebyshev harmonics → Nyquist fadeout. This is a local Geoff-pipe Skills POC, not Trix, Jimmy, or DIBZI data and not proof of an official feature.</p>
+        <div class="audio-lab-controls"><button id="audioLabPlay" class="audio-lab-button" type="button">Generate &amp; play tone</button><a id="audioLabDownload" class="desk-link" download="chebyshev-tone.wav" hidden>download WAV</a><span id="audioLabStatus">Ready · 220 Hz · 48 kHz · four harmonics</span></div>
+        <audio id="audioLabPlayer" class="audio-lab-player" controls preload="none" hidden></audio>
+        <div id="audioLabMeta" class="audio-lab-meta" aria-live="polite"></div>
+        <p class="audio-lab-foot">Related public surfaces: <a href="https://docs.geoff.ai/geoff-code/skills" target="_blank" rel="noopener noreferrer">Skills docs</a> · <a href="https://docs.geoff.ai/api-reference/music/generate" target="_blank" rel="noopener noreferrer">Music API docs</a></p>
+      </section>
+
       <details class="section-fold signal-details"><summary><span class="section-fold-num">05</span><span class="section-fold-title">Network detail</span><span class="section-fold-hint">open</span></summary><div class="fold-body">
       <section id="story" class="story tone-muted" aria-live="polite">
         <div class="story-icon" data-icon="pulse"></div>
