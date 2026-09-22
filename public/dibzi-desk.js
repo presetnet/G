@@ -47,6 +47,8 @@ export function renderDibziDesk(latest) {
     salesRows.innerHTML = "";
   } else {
     summary.innerHTML = [
+      [fmt(src.namesTotal, 0), "all names · current snapshot"],
+      [fmt(src.cashtagNames, 0), "cashtag names · current snapshot"],
       [fmt(src.activeNames, 0), "active auctions · current snapshot"],
       [fmt(src.soldNames, 0), "sold names · current snapshot"],
       [fmt(src.uniqueWallets, 0), "wallets · current snapshot"],

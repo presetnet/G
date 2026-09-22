@@ -2451,6 +2451,7 @@ export async function sniffDibzi() {
     activeNames: 0,
     soldNames: 0,
     namesTotal: 0,
+      cashtagNames: 0,
       totalBids: 0,
       uniqueWallets: 0,
       totalBidSol: 0,
@@ -2479,7 +2480,8 @@ export async function sniffDibzi() {
       const amountLamports = dibziNumber(row?.amount);
       const name = {
         id: typeof row?.id === "string" ? row.id : null,
-        name: typeof row?.name === "string" ? row.name : null,
+         name: typeof row?.name === "string" ? row.name : null,
+         owner: typeof row?.owner === "string" ? row.owner : null,
         amountLamports,
         amountSol: amountLamports === null ? null : amountLamports / 1e9,
         leader: typeof row?.leader === "string" ? row.leader : null,
@@ -2535,6 +2537,7 @@ export async function sniffDibzi() {
     const recentBidCount60m = recentBidSignatures.size;
     const liveNames = names.filter((name) => name.settled !== true);
     const soldNames = names.filter((name) => name.settled === true);
+    const cashtagNames = names.filter((name) => name.name.trim().startsWith("$")).length;
     const topSales = soldNames
       .map((name) => ({
         name: name.name,
@@ -2557,7 +2560,8 @@ export async function sniffDibzi() {
       topSales,
       activeNames: liveNames.length,
       soldNames: soldNames.length,
-      namesTotal: names.length,
+       namesTotal: names.length,
+       cashtagNames,
       totalBids: allBids.length,
       uniqueWallets: walletMap.size,
       totalBidSol: allBids.reduce((sum, bid) => sum + bid.amountSol, 0),
