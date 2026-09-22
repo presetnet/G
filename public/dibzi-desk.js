@@ -13,6 +13,7 @@ const stamp = (value) => {
 const link = (base, value, label) => value ? `<a href="${esc(base + encodeURIComponent(value))}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>` : "--";
 const walletLink = (wallet) => link("https://solscan.io/account/", wallet, short(wallet));
 const txLink = (signature) => link("https://solscan.io/tx/", signature, "receipt");
+const nameLink = (name, label = name) => name ? `<a href="https://dibzi.ai/name/${encodeURIComponent(name)}?utm_source=geoff-thermometer&utm_medium=dashboard&utm_campaign=dibzi-desk" target="_blank" rel="noopener noreferrer">${esc(label)}</a>` : "--";
 
 function table(label, headers, body) {
   return `<div class="desk-table-scroll" tabindex="0" role="region" aria-label="${esc(label)}"><table class="desk-table"><thead><tr>${headers.map(([text, cls = ""]) => `<th class="${cls}">${esc(text)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
@@ -54,19 +55,19 @@ export function renderDibziDesk(latest) {
       [fmt(src.uniqueWallets, 0), "wallets · current snapshot"],
       [sol(src.activeBoardSol), `current leading bids · ${num(src.bidsPerMinute60m) === null ? "bid velocity unavailable · no recent event rows" : `${fmt(src.bidsPerMinute60m, 3)} reported bids/min · last 60m`} · ${src.nameSampleTruncated ? `${fmt(src.names?.length, 0)}-name sample` : "all reported names"}`],
       [fmt(src.totalBids, 0), "bid rows · current snapshot"],
-      [sol(src.highestBidSol), "highest current bid"],
-    ].map(([value, label]) => `<span class="dibzi-stat"><b>${esc(value)}</b><small>${esc(label)}</small></span>`).join("");
+      [sol(src.highestBidSol), "highest current bid", src.highestBidName ? nameLink(src.highestBidName) : null],
+    ].map(([value, label, target]) => `<span class="dibzi-stat"><b>${target || esc(value)}</b><small>${esc(label)}</small></span>`).join("");
     const walletBody = wallets.map((wallet) => `<tr><td class="desk-number">${fmt(wallet.rank, 0)}</td><td><b>${esc(wallet.username || short(wallet.wallet))}</b><small class="value-age">${wallet.username ? walletLink(wallet.wallet) : ""}</small></td><td class="desk-number">${sol(wallet.totalBidSol)}</td><td class="desk-number">${fmt(wallet.bids, 0)}</td><td>${fmt(wallet.leading, 0)} lead${wallet.leading === 1 ? "" : "s"}</td></tr>`).join("");
     walletRows.innerHTML = walletBody ? table("DIBZI bidder wallets in current snapshot", [["#", "desk-number"], ["Wallet"], ["Reported bid rows", "desk-number"], ["Rows", "desk-number"], ["Leads"]], walletBody) : `<div class="desk-empty"><span>[ - ]</span><span>No bidder wallets reported.</span></div>`;
-    const bidBody = bids.map((bid) => `<tr><td><b>${esc(bid.name)}</b><small class="value-age">${esc(bid.username || short(bid.wallet))}</small></td><td class="desk-number">${sol(bid.amountSol)}</td><td>${stamp(bid.at)}</td><td>${walletLink(bid.wallet)}</td><td>${txLink(bid.signature)}</td></tr>`).join("");
+    const bidBody = bids.map((bid) => `<tr><td><b>${nameLink(bid.name)}</b><small class="value-age">${esc(bid.username || short(bid.wallet))}</small></td><td class="desk-number">${sol(bid.amountSol)}</td><td>${stamp(bid.at)}</td><td>${walletLink(bid.wallet)}</td><td>${txLink(bid.signature)}</td></tr>`).join("");
     bidRows.innerHTML = bidBody ? table("Recent DIBZI bids", [["Name"], ["Bid", "desk-number"], ["When"], ["Wallet"], ["Tx"]], bidBody) : `<div class="desk-empty"><span>[ - ]</span><span>No bids reported in the current public snapshot.</span></div>`;
     const cashtags = names
       .filter((name) => name.name.trim().startsWith("$"))
       .sort((a, b) => (b.amountSol ?? -Infinity) - (a.amountSol ?? -Infinity) || (Date.parse(a.endsAt || 0) || Infinity) - (Date.parse(b.endsAt || 0) || Infinity));
-    const cashtagBody = cashtags.map((name) => `<tr><td><b>${esc(name.name)}</b><small class="value-age">${name.settled ? "settled" : "active auction"}</small></td><td class="desk-number">${sol(name.amountSol)}</td><td><b>${esc(name.leaderUsername || short(name.leader))}</b><small class="value-age">${walletLink(name.leader)}</small></td><td>${stamp(name.endsAt)}</td></tr>`).join("");
+    const cashtagBody = cashtags.map((name) => `<tr><td><b>${nameLink(name.name)}</b><small class="value-age">${name.settled ? "settled" : "active auction"}</small></td><td class="desk-number">${sol(name.amountSol)}</td><td><b>${esc(name.leaderUsername || short(name.leader))}</b><small class="value-age">${walletLink(name.leader)}</small></td><td>${stamp(name.endsAt)}</td></tr>`).join("");
     cashtagRows.innerHTML = cashtagBody ? table("DIBZI cashtag names", [["Cashtag"], ["Current bid", "desk-number"], ["Leader"], ["Ends"]], cashtagBody) : `<div class="desk-empty"><span>[ - ]</span><span>No dollar-prefixed names reported in the current snapshot.</span></div>`;
     const sales = rows(src.topSales);
-    salesRows.innerHTML = sales.length ? `<div class="dibzi-sales-feed">${sales.map((sale, index) => `<article class="dibzi-sale"><strong>${esc(`${index + 1}. ${sale.name}`)}</strong><b>${sol(sale.amountSol)}</b><small>${sale.ownerUsername ? `${esc(sale.ownerUsername)} · ` : ""}${walletLink(sale.owner)}</small><small>${sale.settledAt ? stamp(sale.settledAt) : "settled time not reported"}</small></article>`).join("")}</div>` : `<div class="desk-empty"><span>[ - ]</span><span>No settled sales reported in the current snapshot.</span></div>`;
+    salesRows.innerHTML = sales.length ? `<div class="dibzi-sales-feed">${sales.map((sale, index) => `<article class="dibzi-sale"><strong>${nameLink(sale.name, `${index + 1}. ${sale.name}`)}</strong><b>${sol(sale.amountSol)}</b><small>${sale.ownerUsername ? `${esc(sale.ownerUsername)} · ` : ""}${walletLink(sale.owner)}</small><small>${sale.settledAt ? stamp(sale.settledAt) : "settled time not reported"}</small></article>`).join("")}</div>` : `<div class="desk-empty"><span>[ - ]</span><span>No settled sales reported in the current snapshot.</span></div>`;
   }
   if (sourceText) sourceText.textContent = [
     `Names: ${src?.sourceUrl || "https://dibzi.ai/api/names"}`,

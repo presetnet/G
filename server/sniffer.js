@@ -2461,6 +2461,7 @@ export async function sniffDibzi() {
       namesReported: 0,
       nameSampleTruncated: false,
     highestBidSol: null,
+    highestBidName: null,
     checkedAt: null,
     reason: null,
   };
@@ -2538,6 +2539,10 @@ export async function sniffDibzi() {
     const liveNames = names.filter((name) => name.settled !== true);
     const soldNames = names.filter((name) => name.settled === true);
     const cashtagNames = names.filter((name) => name.name.trim().startsWith("$")).length;
+    const highestCurrent = liveNames.reduce((best, name) => {
+      if (!best || (name.amountSol ?? -Infinity) > (best.amountSol ?? -Infinity)) return name;
+      return best;
+    }, null);
     const topSales = soldNames
       .map((name) => ({
         name: name.name,
@@ -2570,7 +2575,8 @@ export async function sniffDibzi() {
       bidsPerMinute60m: recentBidCount60m > 0 ? Math.round((recentBidCount60m / 60) * 1000) / 1000 : null,
       namesReported: namesRes.json.length,
       nameSampleTruncated: namesRes.json.length > names.length,
-      highestBidSol: liveNames.reduce((max, name) => Math.max(max ?? 0, name.amountSol ?? 0), null),
+       highestBidSol: highestCurrent?.amountSol ?? null,
+       highestBidName: highestCurrent?.name ?? null,
       profiles: profiles.length,
       ms: Date.now() - started,
       note: "Current DIBZI names and bid rows from the public API. Snapshot values are not lifetime totals; bid amounts are reported bids, not necessarily settled spend. Bid velocity deduplicates transaction signatures and is limited to the collected name sample.",
