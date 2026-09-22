@@ -2398,7 +2398,9 @@ let trixBoxChainInFlight = null;
 const DIBZI_BASE_URL = "https://dibzi.ai";
 const DIBZI_PROGRAM_ID = "3VQDLcMiUrqLHXhkinwj9AW9h5BHdqYkv4AY2cyTv7gS";
 const DIBZI_TIMEOUT_MS = 6_000;
-const DIBZI_NAME_LIMIT = 500;
+// Keep the read bounded, but above the current board size so the dashboard does
+// not present an artificial 500-row ceiling as if it were a site total.
+const DIBZI_NAME_LIMIT = 1_000;
 const DIBZI_BIDS_PER_NAME_LIMIT = 250;
 const DIBZI_RECENT_BID_LIMIT = 60;
 const DIBZI_WALLET_LIMIT = 25;
