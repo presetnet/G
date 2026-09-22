@@ -15,6 +15,7 @@ function fixture() {
   }));
   const sources = Object.fromEntries(['stacknet.health', 'stacknet.root', 'stacknet.network', 'stacknet.keysale', 'stacknet.pile', 'stacknet.x402', 'solana.tokens', 'solana.treasury', 'geoff.keys.9g', 'geoff.subscription', 'surface.mining'].map(k => [k, { ...base, source: k }]));
   Object.assign(sources, {
+    'geoff.product.lanes': { ...base, source: 'geoff.product.lanes', liveCount: 7, total: 7, routes: [{ id: 'skills', label: 'Skills', status: 307, live: true, toConnect: true }], checkedAt: at },
     'trix.meme.market': { ...base, source: 'trix.meme.market', sourceUrl: 'https://trix.market/api/launches?limit=500', coins, totalCoins: 45, catalogTotal: 45, totalMarketCap: 4398750, dataUpdatedAt: at },
     'trix.boxes': { ok: false, status: 404, stale: true, checkedAt: at, sourceUrl: 'https://www.trix.market/api/mkt/leaderboard', topCoins: null, biggestPulls: null, topCollectors: null, reason: 'Not found' },
     'trix.boxboard': { ok: true, status: 200, checkedAt: at, sourceUrl: 'https://doswapz.com/api/trix-boxes', dataUpdatedAt: at, fallbackReason: 'Trix HTTP 404 https://trix.market/api/mkt/state', round: 1, roundStatus: 'warming', mintedTotal: 3874, boxesLeft: 4978,
@@ -202,6 +203,8 @@ async function main() {
     assert.match(await page.locator('#dibziCashtagRows').textContent(), /\$hoe/);
     assert.equal(await page.locator('#dibziBidRows a[href*="solscan.io/tx"]').count(), 2);
     assert.match(await page.locator('#dibziSourceText').textContent(), /dibzi\.ai\/api\/names/);
+    assert.match(await page.locator('#skillsRolloutBody').textContent(), /LIVE LANE/);
+    assert.match(await page.locator('#skillsRolloutBody').textContent(), /CONNECT-GATED/);
     console.log('PASS: DIBZI bid card, wallet board, recent bids and source disclosure');
 
     payload.latest.takenAt = new Date(Date.now() - 3600000).toISOString();

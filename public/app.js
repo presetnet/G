@@ -281,6 +281,8 @@ const els = {
   hpBrains: document.getElementById("hpBrains"),
   hpTools: document.getElementById("hpTools"),
   hpBlocked: document.getElementById("hpBlocked"),
+  skillsRolloutMeta: document.getElementById("skillsRolloutMeta"),
+  skillsRolloutBody: document.getElementById("skillsRolloutBody"),
   priceHeadline: document.getElementById("priceHeadline"),
   priceMeta: document.getElementById("priceMeta"),
   priceSentence: document.getElementById("priceSentence"),
@@ -1889,6 +1891,24 @@ function renderHorsepower(hp) {
     : `<p class="empty soft">Nothing extra marked unavailable — public lanes above are the live map.</p>`;
 }
 
+function renderSkillsRollout(latest) {
+  if (!els.skillsRolloutBody) return;
+  const source = latest?.sources?.["geoff.product.lanes"];
+  const lane = source?.routes?.find((route) => route.id === "skills");
+  if (!lane) {
+    els.skillsRolloutMeta.textContent = "No public Skills lane observation";
+    els.skillsRolloutBody.innerHTML = `<span class="skill-rollout-pill warn">UNOBSERVED</span><span>Public catalog and rollout state are not independently available.</span>`;
+    return;
+  }
+  const live = lane.live === true;
+  const gated = lane.toConnect === true;
+  els.skillsRolloutMeta.textContent = `${lane.status ?? "—"} · checked ${source.checkedAt ? new Date(source.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}`;
+  els.skillsRolloutBody.innerHTML = `
+    <span class="skill-rollout-pill ${live ? "on" : "warn"}">${live ? "LIVE LANE" : "NOT CONFIRMED"}</span>
+    <span class="skill-rollout-pill ${gated ? "gated" : "warn"}">${gated ? "CONNECT-GATED" : "PUBLIC RESPONSE"}</span>
+    <span class="skill-rollout-note">${gated ? "Route exists; public skill inventory is not exposed by this probe." : "Route returned a public response; inventory still requires verification."}</span>`;
+}
+
 function cellMark(level) {
   return level === "yes"
     ? `<span class="mark yes" aria-label="Yes">✓</span>`
@@ -2361,6 +2381,7 @@ function applyPayload(payload) {
   renderStory(briefing, payload.temperature);
   renderCoverage(briefing?.coverage || null);
   renderHorsepower(briefing?.horsepower || null);
+  renderSkillsRollout(latest);
   renderTokenPlan(briefing?.tokenPlan || CLIENT_TOKEN_PLAN);
   renderDocsCue(briefing?.docsBoard || null, feedEvents);
   renderLanesCue(briefing?.lanesBoard || null, latest, feedEvents);

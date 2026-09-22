@@ -1418,6 +1418,17 @@ a.btn {
 
 /* ---- On-demand horsepower rack ---- */
 .hp-panel { overflow: hidden; }
+.skills-rollout { margin: 1rem 0 1.25rem; padding: .9rem; border: 1px solid #303840; border-radius: 8px; background: #15191d; }
+.skills-rollout-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.skills-rollout-head .hp-layer-label { display: block; }
+.skills-rollout-head p { margin: .3rem 0 0; color: var(--muted); font: .66rem var(--font-mono); }
+.skills-rollout-head a { color: #9be7d5; font: .68rem var(--font-mono); white-space: nowrap; }
+.skills-rollout-body { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin-top: .8rem; color: var(--muted); font: .68rem/1.5 var(--font-mono); }
+.skill-rollout-pill { padding: .22rem .42rem; border: 1px solid #3b444c; border-radius: 4px; color: var(--muted); }
+.skill-rollout-pill.on { border-color: #32785f; color: #9be7d5; }
+.skill-rollout-pill.gated { border-color: #78632e; color: #f3d88a; }
+.skill-rollout-pill.warn { border-color: #6d4141; color: #f0a2a2; }
+.skill-rollout-note { flex: 1 1 280px; }
 
 .price-panel { overflow: hidden; }
 
