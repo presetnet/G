@@ -32,8 +32,9 @@ export function renderDibziDesk(latest) {
   const walletRows = document.getElementById("dibziWalletRows");
   const bidRows = document.getElementById("dibziBidRows");
   const cashtagRows = document.getElementById("dibziCashtagRows");
+  const salesRows = document.getElementById("dibziSalesRows");
   const sourceText = document.getElementById("dibziSourceText");
-  if (!status || !summary || !walletRows || !bidRows || !cashtagRows) return;
+  if (!status || !summary || !walletRows || !bidRows || !cashtagRows || !salesRows) return;
   status.textContent = sourceState(src);
   const names = rows(src?.names);
   const wallets = rows(src?.topWallets);
@@ -43,6 +44,7 @@ export function renderDibziDesk(latest) {
     walletRows.innerHTML = `<div class="desk-empty"><span>[ - ]</span><span>DIBZI wallet activity unavailable. The desk does not retain invented balances.</span></div>`;
     bidRows.innerHTML = "";
     cashtagRows.innerHTML = "";
+    salesRows.innerHTML = "";
   } else {
     summary.innerHTML = [
       [fmt(src.activeNames, 0), "active auctions · current snapshot"],
@@ -61,6 +63,8 @@ export function renderDibziDesk(latest) {
       .sort((a, b) => (b.amountSol ?? -Infinity) - (a.amountSol ?? -Infinity) || (Date.parse(a.endsAt || 0) || Infinity) - (Date.parse(b.endsAt || 0) || Infinity));
     const cashtagBody = cashtags.map((name) => `<tr><td><b>${esc(name.name)}</b><small class="value-age">${name.settled ? "settled" : "active auction"}</small></td><td class="desk-number">${sol(name.amountSol)}</td><td><b>${esc(name.leaderUsername || short(name.leader))}</b><small class="value-age">${walletLink(name.leader)}</small></td><td>${stamp(name.endsAt)}</td></tr>`).join("");
     cashtagRows.innerHTML = cashtagBody ? table("DIBZI cashtag names", [["Cashtag"], ["Current bid", "desk-number"], ["Leader"], ["Ends"]], cashtagBody) : `<div class="desk-empty"><span>[ - ]</span><span>No dollar-prefixed names reported in the current snapshot.</span></div>`;
+    const sales = rows(src.topSales);
+    salesRows.innerHTML = sales.length ? `<div class="dibzi-sales-feed">${sales.map((sale, index) => `<article class="dibzi-sale"><strong>${esc(`${index + 1}. ${sale.name}`)}</strong><b>${sol(sale.amountSol)}</b><small>${sale.ownerUsername ? `${esc(sale.ownerUsername)} · ` : ""}${walletLink(sale.owner)}</small><small>${sale.settledAt ? stamp(sale.settledAt) : "settled time not reported"}</small></article>`).join("")}</div>` : `<div class="desk-empty"><span>[ - ]</span><span>No settled sales reported in the current snapshot.</span></div>`;
   }
   if (sourceText) sourceText.textContent = [
     `Names: ${src?.sourceUrl || "https://dibzi.ai/api/names"}`,

@@ -2447,6 +2447,7 @@ export async function sniffDibzi() {
     names: [],
     recentBids: [],
     topWallets: [],
+    topSales: [],
     activeNames: 0,
     soldNames: 0,
     namesTotal: 0,
@@ -2534,6 +2535,18 @@ export async function sniffDibzi() {
     const recentBidCount60m = recentBidSignatures.size;
     const liveNames = names.filter((name) => name.settled !== true);
     const soldNames = names.filter((name) => name.settled === true);
+    const topSales = soldNames
+      .map((name) => ({
+        name: name.name,
+        amountSol: name.amountSol,
+        owner: name.owner || name.leader,
+        ownerUsername: profileByWallet.get(name.owner || name.leader)?.username || null,
+        settledAt: Array.isArray(namesRes.json.find((row) => row?.name === name.name)?.activity)
+          ? namesRes.json.find((row) => row?.name === name.name).activity.find((event) => ["auction_won", "buy_now"].includes(event?.type))?.at ?? null
+          : null,
+      }))
+      .sort((a, b) => (b.amountSol ?? -Infinity) - (a.amountSol ?? -Infinity))
+      .slice(0, 12);
     Object.assign(value, {
       ok: true,
       status: 200,
@@ -2541,6 +2554,7 @@ export async function sniffDibzi() {
       names,
       recentBids,
       topWallets,
+      topSales,
       activeNames: liveNames.length,
       soldNames: soldNames.length,
       namesTotal: names.length,

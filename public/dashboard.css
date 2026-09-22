@@ -70,6 +70,13 @@
 .dibzi-cashtags { padding: 0 1.25rem .7rem; border-bottom: 1px solid #26353a; }
 .dibzi-cashtags .desk-toolbar { padding-bottom: .55rem; }
 .dibzi-cashtags .desk-table-scroll { max-height: 300px; }
+.dibzi-sales { padding: 0 1.25rem .8rem; border-bottom: 1px solid #26353a; }
+.dibzi-sales .desk-toolbar { padding-bottom: .55rem; }
+.dibzi-sales-feed { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .55rem; }
+.dibzi-sale { min-width: 0; padding: .65rem .7rem; border: 1px solid #36434a; border-radius: 7px; background: linear-gradient(135deg, #192328, #15191d); }
+.dibzi-sale strong { display: block; overflow: hidden; color: #d7fff5; font: 600 .84rem var(--font-ui); text-overflow: ellipsis; white-space: nowrap; }
+.dibzi-sale b { display: block; margin-top: .3rem; color: #f3d88a; font: 500 .78rem var(--font-mono); }
+.dibzi-sale small { display: block; margin-top: .28rem; overflow: hidden; color: #8da5a2; font: .58rem/1.4 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .dibzi-grid > section { min-width: 0; }
 .dibzi-grid .desk-toolbar { padding-bottom: .55rem; }
 .dibzi-grid .desk-table-scroll { max-height: 380px; }
@@ -184,6 +191,8 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   .desk-money-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .dibzi-grid { grid-template-columns: minmax(0,1fr); }
   .dibzi-cashtags { padding-left: .8rem; padding-right: .8rem; }
+  .dibzi-sales { padding-left: .8rem; padding-right: .8rem; }
+  .dibzi-sales-feed { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 700px) {
   .shell { padding: 1rem .8rem 1.5rem; }
