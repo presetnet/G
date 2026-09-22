@@ -47,7 +47,7 @@ export function renderDibziDesk(latest) {
     summary.innerHTML = [
       [fmt(src.activeNames, 0), "active auctions · current snapshot"],
       [fmt(src.uniqueWallets, 0), "wallets · current snapshot"],
-      [sol(src.activeBoardSol), "current leading bids · snapshot"],
+      [sol(src.activeBoardSol), `current leading bids · ${fmt(src.bidsPerMinute60m, 3)} reported bids/min · last 60m`],
       [fmt(src.totalBids, 0), "bid rows · current snapshot"],
       [sol(src.highestBidSol), "highest current bid"],
     ].map(([value, label]) => `<span class="dibzi-stat"><b>${esc(value)}</b><small>${esc(label)}</small></span>`).join("");

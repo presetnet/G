@@ -2450,6 +2450,8 @@ export async function sniffDibzi() {
       uniqueWallets: 0,
       totalBidSol: 0,
       activeBoardSol: 0,
+      recentBidCount60m: 0,
+      bidsPerMinute60m: 0,
     highestBidSol: null,
     checkedAt: null,
     reason: null,
@@ -2519,6 +2521,10 @@ export async function sniffDibzi() {
     const recentBids = allBids
       .sort((a, b) => (Date.parse(b.at || 0) || 0) - (Date.parse(a.at || 0) || 0))
       .slice(0, DIBZI_RECENT_BID_LIMIT);
+    const recentBidCount60m = allBids.filter((bid) => {
+      const at = Date.parse(bid.at || "");
+      return Number.isFinite(at) && at >= Date.now() - 60 * 60 * 1000;
+    }).length;
     const highestBidSol = names.reduce((max, name) => Math.max(max ?? 0, name.amountSol ?? 0), null);
     Object.assign(value, {
       ok: true,
@@ -2532,6 +2538,8 @@ export async function sniffDibzi() {
       uniqueWallets: walletMap.size,
       totalBidSol: allBids.reduce((sum, bid) => sum + bid.amountSol, 0),
       activeBoardSol: names.reduce((sum, name) => sum + (name.amountSol ?? 0), 0),
+      recentBidCount60m,
+      bidsPerMinute60m: Math.round((recentBidCount60m / 60) * 1000) / 1000,
       highestBidSol,
       profiles: profiles.length,
       ms: Date.now() - started,
