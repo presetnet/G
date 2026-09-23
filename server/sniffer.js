@@ -4517,7 +4517,12 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
     id: `snap_${Date.now().toString(36)}`,
     takenAt: startedAt,
     sources: bySource,
-    summary: {
+    summary: summarizeSnapshot(bySource, startedAt),
+  };
+}
+
+export function summarizeSnapshot(bySource, startedAt) {
+  return {
       geoffBuildId: bySource["geoff.version"]?.buildId ?? null,
       geoffDeployId: bySource["geoff.deploy"]?.deployId ?? null,
       chunkHash: bySource["geoff.deploy"]?.chunks?.hash ?? null,
@@ -4644,7 +4649,6 @@ miningArchiveGeneratedAt: bySource["surface.mining"]?.archiveGeneratedAt ?? null
       subscriptionPlans: Boolean(bySource["geoff.subscription"]?.plansLive),
       subscriptionRoute: Boolean(bySource["geoff.subscription"]?.subscriptionLive),
       ...summarizeCoverage(bySource),
-    },
   };
 }
 

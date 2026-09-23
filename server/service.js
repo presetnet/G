@@ -2,7 +2,8 @@ import { config } from "./config.js";
 import { compileBriefing } from "./briefing.js";
 import { upsertDailyActivity } from "./daily-activity.js";
 import { upsertPond0x } from "./pond0x.js";
-import { mergeTrixGeoffHistory, runSniff, summarizeTrix, summarizeCoverage } from "./sniffer.js";
+import { mergeTrixGeoffHistory, runSniff, summarizeTrix, summarizeCoverage, summarizeSnapshot } from "./sniffer.js";
+import { filterEvidence, EVIDENCE_WINDOW } from "../public/evidence.js";
 import {
   loadSharedBundle,
   pruneEvents,
@@ -51,6 +52,14 @@ export function publicConfig() {
 }
 
 function withBriefing(payload) {
+  const latest = filterEvidence(payload.latest);
+  if (latest) latest.summary = summarizeSnapshot(latest.sources, latest.takenAt);
+  const recent = (rows) => (rows || []).filter((row) => {
+    const age = Date.now() - Date.parse(row.at || "");
+    return age >= 0 && age <= EVIDENCE_WINDOW;
+  });
+  payload = { ...payload, latest, events: recent(payload.events), newEvents: recent(payload.newEvents) };
+  payload.temperature = computeTemperature(payload.events, latest);
   const agentDesk = inferAgentDesk(payload.latest, payload.newEvents || []);
   return {
     ...payload,

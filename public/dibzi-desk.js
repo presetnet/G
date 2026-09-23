@@ -42,7 +42,7 @@ export function renderDibziDesk(latest) {
   const names = rows(src?.names);
   const about = latest?.sources?.["dibzi.about"];
   if (aboutStatus && aboutBody) {
-    aboutStatus.textContent = about?.ok === true ? `Checked ${stamp(about.checkedAt)} · ${about.contentStatus || "public page"}` : `Unavailable · ${about?.reason || "waiting for public About page"}`;
+    aboutStatus.textContent = about?.ok === true ? `Editorial summary observed Sep 23, 2026 · page reachable ${stamp(about.checkedAt)} · copy not automatically reverified` : `Unavailable · ${about?.reason || "waiting for public About page"}`;
     aboutBody.innerHTML = about?.ok === true
       ? `<p class="dibzi-about-thesis">${esc(about.thesis)}</p><div class="dibzi-about-grid">${rows(about.sections).map((section) => `<article><strong>${esc(section.title)}</strong><span>${esc(section.text)}</span></article>`).join("")}</div><div class="dibzi-about-economics">${about.economics ? `<span><b>${esc(about.economics.openingBidSol)} SOL</b> opening bids</span><span><b>${esc(about.economics.buyItNowSol)} SOL</b> buy it now</span><span><b>${esc(about.economics.auctionHours)}h</b> auctions</span><span><b>${esc(about.economics.renewalSolPerYear)} SOL</b> yearly resolution</span>` : ""}</div>`
       : `<div class="desk-empty"><span>[ - ]</span><span>About claims are not displayed until the public page response is complete.</span></div>`;
@@ -64,7 +64,7 @@ export function renderDibziDesk(latest) {
       [fmt(src.uniqueWallets, 0), "wallets · current snapshot"],
       [sol(src.activeBoardSol), `current leading bids · ${num(src.bidsPerMinute60m) === null ? "bid velocity unavailable · no recent event rows" : `${fmt(src.bidsPerMinute60m, 3)} reported bids/min · last 60m`} · ${src.nameSampleTruncated ? `${fmt(src.names?.length, 0)}-name sample` : "all reported names"}`],
       [fmt(src.totalBids, 0), "bid rows · current snapshot"],
-      [sol(src.highestBidSol), "highest current bid", src.highestBidName ? nameLink(src.highestBidName) : null],
+      [sol(src.highestBidSol), "highest current bid", src.highestBidName ? nameLink(src.highestBidName, `${sol(src.highestBidSol)} · ${src.highestBidName}`) : null],
     ].map(([value, label, target]) => `<span class="dibzi-stat"><b>${target || esc(value)}</b><small>${esc(label)}</small></span>`).join("");
     const walletBody = wallets.map((wallet) => `<tr><td class="desk-number">${fmt(wallet.rank, 0)}</td><td><b>${esc(wallet.username || short(wallet.wallet))}</b><small class="value-age">${wallet.username ? walletLink(wallet.wallet) : ""}</small></td><td class="desk-number">${sol(wallet.totalBidSol)}</td><td class="desk-number">${fmt(wallet.bids, 0)}</td><td>${fmt(wallet.leading, 0)} lead${wallet.leading === 1 ? "" : "s"}</td></tr>`).join("");
     walletRows.innerHTML = walletBody ? table("DIBZI bidder wallets in current snapshot", [["#", "desk-number"], ["Wallet"], ["Reported bid rows", "desk-number"], ["Rows", "desk-number"], ["Leads"]], walletBody) : `<div class="desk-empty"><span>[ - ]</span><span>No bidder wallets reported.</span></div>`;

@@ -8,6 +8,7 @@ import { initCompactView } from "./compact-view.js";
 import { renderProvenance, sourceDescription } from "./provenance.js";
 import { initTrixDesk, renderTrixDesk } from "./trix-desk.js";
 import { renderDibziDesk } from "./dibzi-desk.js";
+import { initOverview, renderOverview } from "./overview.js";
 import { createChebyshevTone } from "./chebyshev-audio.js";
 import {
   buildHeatmapGrid,
@@ -16,7 +17,7 @@ import {
   upsertDailyActivity,
 } from "./daily-activity.js";
 
-const STORAGE_KEY = "geoff-thermometer-v7";
+const STORAGE_KEY = "geoff-thermometer-v8-evidence";
 const RANK_WEIGHT = { crazy: 5, spike: 4, move: 3, note: 2, whisper: 1 };
 const VIBE = { crazy: "Crazy", spike: "Spike", move: "Move", note: "Note", whisper: "Whisper" };
 const TRACK_HOURS = 24;
@@ -2380,7 +2381,7 @@ function applyPayload(payload) {
     memory.events = mergeEventsById(memory.events, incomingEvents);
     memory.dailyActivity = mergeDailyActivity(memory.dailyActivity || [], incomingDaily, HEATMAP_DAYS);
   }
-  memory.latest = payload.latest || memory.latest;
+  memory.latest = payload.latest || null;
   recordProbeSample(payload.latest);
   // Rebuild pump-tape queue dots from stored agent edges when browser samples were wiped.
   const derived = agentSamplesFromEvents(memory.events);
@@ -2391,9 +2392,10 @@ function applyPayload(payload) {
   saveMemory();
 
   const briefing = payload.briefing;
-  const latest = payload.latest || memory.latest;
+  const latest = payload.latest || null;
   const pollCount = payload.state?.pollCount ?? memory.pollCount ?? 0;
   const feedEvents = eventsInTrackWindow(memory.events || []);
+  renderOverview(latest, payload.events || []);
 
   recordTracking(latest, payload.temperature);
   renderMetrics(latest);
@@ -2436,8 +2438,8 @@ async function pollNow() {
     lastReadAt = Date.now();
     applyPayload(data);
   } catch (error) {
-    renderTrixDesk(lastLatest);
-    renderDibziDesk(lastLatest);
+    renderOverview(null, []);
+    renderMetrics(null);
     setConnection("error", "reconnecting");
     const status = document.getElementById("syncStatus");
     if (status) {
@@ -2445,7 +2447,7 @@ async function pollNow() {
       status.dataset.state = "delayed";
     }
     const meta = document.getElementById("syncMeta");
-    if (meta) meta.textContent = "Showing last received data · retry in 15s";
+    if (meta) meta.textContent = "Current values withheld · retry in 15s";
   } finally {
     refreshPending = false;
     els.pollBtn.disabled = false;
@@ -2505,6 +2507,7 @@ function startMatrix() {
 els.pollBtn.addEventListener("click", pollNow);
 initCompactView();
 initTrixDesk();
+initOverview();
 initAudioLab();
 renderProvenance(memory.latest);
 hydrateIcons();
@@ -2514,7 +2517,7 @@ renderTokenPlan(null);
 renderHeatmap(memory.dailyActivity || []);
 
 async function boot() {
-  if (memory.latest) renderMetrics(memory.latest);
+  renderMetrics(null);
   await pollNow();
   // Install retries even when the first request fails.
   setInterval(() => {

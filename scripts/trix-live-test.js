@@ -245,6 +245,7 @@ const dependencies = {
   "translator.js": { computeTemperature: () => ({ value: 0 }), inferAgentDesk: () => ({}), translate: () => [] },
 };
 const modules = new Map();
+modules.set("evidence.js", new vm.SourceTextModule(await readFile(new URL("../public/evidence.js", import.meta.url), "utf8"), { context }));
 for (const [key, exports] of Object.entries(dependencies)) modules.set(key, new vm.SyntheticModule(
   Object.keys(exports), function () {
     for (const [name, value] of Object.entries(exports)) this.setExport(name, value);
@@ -716,8 +717,8 @@ failures.clear();
 
 // Full/minute summaries use the same source contract, including coverage.
 const coldMinute = await api.runMinuteSniff();
-assert.equal(Object.keys(coldMinute.sources).length, 20);
-assert.equal(coldMinute.summary.totalSources, 20);
+assert.equal(Object.keys(coldMinute.sources).length, 21);
+assert.equal(coldMinute.summary.totalSources, 21);
 assert.equal(coldMinute.sources["trix.boxes"].status, 404);
 assert.equal(coldMinute.sources["trix.boxboard"].ok, true);
 assert.equal(coldMinute.sources["trix.boxchain"].ok, true);
@@ -729,7 +730,7 @@ assert.equal(coldMinute.sources["pond0x.geoff"].paired, false);
 assert.equal(coldMinute.sources["pond0x.geoff"].chatEmbedded, true);
 assert.equal(coldMinute.sources["pond0x.geoff"].providerEmbedded, true);
 const full = service.preserveTrixHistory(null, await api.runSniff());
-assert.equal(Object.keys(full.sources).length, 43);
+assert.equal(Object.keys(full.sources).length, 44);
 assert.equal(full.sources["trix.boxes"].status, 404);
 assert.equal(full.summary.trixBoxesOk, false);
 assert.equal(full.summary.trixBoxesStatus, 404);
