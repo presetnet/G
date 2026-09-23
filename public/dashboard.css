@@ -80,7 +80,8 @@
 .dibzi-grid > section { min-width: 0; }
 .dibzi-grid .desk-toolbar { padding-bottom: .55rem; }
 .dibzi-grid .desk-table-scroll { max-height: 380px; }
-.dibzi-desk .desk-table a { color: #79d6c5; }
+.dibzi-desk a { color: #b7ff5a; }
+.dibzi-desk a:hover, .dibzi-desk a:focus-visible { color: #e1ffad; }
 .dibzi-desk .desk-table td { font-size: .7rem; }
 .dibzi-desk .desk-table td small { display: block; }
 .audio-lab { margin-top: 1rem; }
