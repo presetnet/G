@@ -3,24 +3,20 @@ import { scrapeMarketIntel } from "./market-scrape.js";
 import { runSniff } from "./sniffer.js";
 import {
   buildPlanSheet,
-  FALLBACK_TOKEN_PLAN,
-  FEATURE_MATRIX,
   TOKEN_PLAN_URLS,
 } from "./token-plan.js";
 
 function pickTokenPlan(geoffSnap) {
   const src = geoffSnap?.sources?.["geoff.docs.pricing"];
-  const base = src?.plans?.length
+  const base = src?.ok === true && src?.plans?.length
     ? {
         scraped: Boolean(src.scraped),
-        model: src.model || FALLBACK_TOKEN_PLAN.model,
-        unfilteredNote: Object.hasOwn(src, "unfilteredNote")
-          ? src.unfilteredNote
-          : FALLBACK_TOKEN_PLAN.unfilteredNote,
+        model: src.model || "Public docs response",
+        unfilteredNote: src.unfilteredNote || null,
         plans: src.plans,
         estimates: null,
-        matrix: src.matrix || FEATURE_MATRIX,
-        wins: src.wins || FALLBACK_TOKEN_PLAN.wins,
+        matrix: src.matrix || [],
+        wins: src.wins || [],
         sourceUrls: src.sourceUrls || TOKEN_PLAN_URLS,
         reason: src.reason || null,
         fingerprint: src.fingerprint || null,
@@ -29,14 +25,14 @@ function pickTokenPlan(geoffSnap) {
       }
     : {
         scraped: false,
-        model: FALLBACK_TOKEN_PLAN.model,
-        unfilteredNote: FALLBACK_TOKEN_PLAN.unfilteredNote,
-        plans: FALLBACK_TOKEN_PLAN.plans.map((p) => ({ ...p })),
+        model: "Public docs response unavailable",
+        unfilteredNote: null,
+        plans: [],
         estimates: null,
-        matrix: FEATURE_MATRIX,
-        wins: FALLBACK_TOKEN_PLAN.wins,
+        matrix: [],
+        wins: [],
         sourceUrls: TOKEN_PLAN_URLS,
-        reason: "Using bundled Token Plan values pending a complete live docs parse",
+        reason: "Live Token Plan unavailable; values withheld",
         fingerprint: null,
         observed: { plans: false, limits: false },
         sections: null,

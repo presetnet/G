@@ -3,8 +3,6 @@ import { config } from "./config.js";
 import { loadMiningSurfaceCache, saveMiningSurfaceCache } from "./store.js";
 import {
   TOKEN_PLAN_URLS,
-  FALLBACK_TOKEN_PLAN,
-  FEATURE_MATRIX,
   parseTokenPlanHtml,
   fingerprintTokenPlan,
 } from "./token-plan.js";
@@ -2333,8 +2331,8 @@ async function sniffGeoffTokenPlan() {
       unfilteredNote: plan.unfilteredNote,
       plans: plan.plans,
       estimates: plan.estimates,
-      matrix: plan.matrix || FEATURE_MATRIX,
-      wins: plan.wins || FALLBACK_TOKEN_PLAN.wins,
+       matrix: plan.matrix || [],
+       wins: plan.wins || [],
       observed: plan.observed,
       sections: {
         plans: { live: plansLive, status: overview.status, sourceUrl: TOKEN_PLAN_URLS.overview },
@@ -2343,9 +2341,7 @@ async function sniffGeoffTokenPlan() {
         yields: { live: false, status: null, sourceUrl: null },
       },
       sourceUrls: TOKEN_PLAN_URLS,
-      reason: scrapedOk
-        ? null
-        : "Live Token Plan parse incomplete — showing bundled values for incomplete sections",
+       reason: scrapedOk ? null : "Live Token Plan parse incomplete — values withheld",
     };
   } catch (error) {
     return {
@@ -2355,13 +2351,13 @@ async function sniffGeoffTokenPlan() {
       status: 0,
       ms: Date.now() - started,
       scraped: false,
-      fingerprint: simpleHash(fingerprintTokenPlan(FALLBACK_TOKEN_PLAN)),
-      model: FALLBACK_TOKEN_PLAN.model,
-      unfilteredNote: FALLBACK_TOKEN_PLAN.unfilteredNote,
-      plans: FALLBACK_TOKEN_PLAN.plans.map((p) => ({ ...p })),
-      estimates: null,
-      matrix: FEATURE_MATRIX,
-      wins: FALLBACK_TOKEN_PLAN.wins,
+       fingerprint: null,
+       model: "Public docs response unavailable",
+       unfilteredNote: null,
+       plans: [],
+       estimates: null,
+       matrix: [],
+       wins: [],
       observed: { plans: false, limits: false },
       sections: {
         plans: { live: false, status: 0, sourceUrl: TOKEN_PLAN_URLS.overview },
@@ -2370,7 +2366,7 @@ async function sniffGeoffTokenPlan() {
         yields: { live: false, status: null, sourceUrl: null },
       },
       sourceUrls: TOKEN_PLAN_URLS,
-      reason: `Docs sniff failed (${error.message}); using bundled public Token Plan values`,
+       reason: `Docs sniff failed (${error.message}); values withheld`,
     };
   }
 }

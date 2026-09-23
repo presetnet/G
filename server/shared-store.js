@@ -67,8 +67,13 @@ function emptyBundle() {
   };
 }
 
-// Keep a fat queue tape for the 72h pump chart. Surface always reserved first.
+// Keep only the current-day queue tape. Surface always reserved first.
 const MAX_QUEUE_EVENTS = 1800;
+
+function freshLatest(latest) {
+  const takenAt = Date.parse(latest?.takenAt || "");
+  return latest && Number.isFinite(takenAt) && Date.now() - takenAt <= 24 * 60 * 60 * 1000 ? latest : null;
+}
 
 export function pruneEvents(events = []) {
   const cutoff = Date.now() - config.trackWindowHours * 60 * 60 * 1000;
@@ -95,7 +100,7 @@ export function normalizeBundle(raw) {
   if (!raw || typeof raw !== "object") return base;
   return {
     updatedAt: raw.updatedAt || null,
-    latest: raw.latest || null,
+    latest: freshLatest(raw.latest),
     events: pruneEvents(raw.events || []),
     dailyActivity: pruneDailyActivity(raw.dailyActivity || [], config.heatmapDays),
     pond0x: prunePond0x(raw.pond0x || null, config.heatmapDays),

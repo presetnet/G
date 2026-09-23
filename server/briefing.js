@@ -618,7 +618,7 @@ export function compileBriefing({ latest, temperature, events = [], agentDesk = 
 
 function buildTokenPlan(latest) {
   const src = latest?.sources?.["geoff.docs.pricing"];
-  if (!src?.plans?.length) return null;
+  if (src?.ok !== true || !src?.plans?.length) return null;
   const sheet = buildPlanSheet(src);
   return {
     ...sheet,
@@ -827,11 +827,11 @@ function glossary() {
     },
     {
       term: "Temperature",
-      meaning: "Derived score from ranked public diffs over 72h. Not a sensor. No padded floors.",
+      meaning: "Derived score from ranked public diffs over the current 24h window. Not a sensor. No padded floors.",
     },
     {
       term: "Pump tape",
-      meaning: "72h chart of real ranked updates + sampled in_flight. Heat = rank weights, not fake volume.",
+      meaning: "24h chart of real ranked updates + sampled in_flight. Heat = rank weights, not fake volume.",
     },
     {
       term: "Coverage",

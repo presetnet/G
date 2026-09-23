@@ -1929,7 +1929,7 @@ export function computeTemperature(events, latestSnapshot) {
   const decayed = meaningful.reduce((acc, e) => {
     const ageH = (now - Date.parse(e.at)) / 3_600_000;
     const rankBoost = e.rank === "crazy" ? 1.25 : e.rank === "spike" ? 1.05 : 1;
-    // Heat fades across the full 72h tape — recent still dominates
+    // Heat fades across the current 24h tape — recent still dominates
     return acc + (e.heat || 1) * rankBoost * Math.max(0.12, 1 - ageH / TRACK_WINDOW_HOURS);
   }, 0);
 

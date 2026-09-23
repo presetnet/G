@@ -4,14 +4,12 @@ window.onerror = function(msg, src, line, col, err) {
   console.error("GLOBAL:", msg, "line", line, err);
 };
 import { icon } from "./icons.js";
-import { CLIENT_TOKEN_PLAN } from "./token-plan-fallback.js";
 import { initCompactView } from "./compact-view.js";
 import { renderProvenance, sourceDescription } from "./provenance.js";
 import { initTrixDesk, renderTrixDesk } from "./trix-desk.js";
 import { renderDibziDesk } from "./dibzi-desk.js";
 import { createChebyshevTone } from "./chebyshev-audio.js";
 import {
-  DEFAULT_HEATMAP_DAYS,
   buildHeatmapGrid,
   mergeDailyActivity,
   pruneDailyActivity,
@@ -21,11 +19,11 @@ import {
 const STORAGE_KEY = "geoff-thermometer-v7";
 const RANK_WEIGHT = { crazy: 5, spike: 4, move: 3, note: 2, whisper: 1 };
 const VIBE = { crazy: "Crazy", spike: "Spike", move: "Move", note: "Note", whisper: "Whisper" };
-const TRACK_HOURS = 72;
+const TRACK_HOURS = 24;
 const TRACK_MS = TRACK_HOURS * 60 * 60 * 1000;
 const FEED_RECENT_LIMIT = 20;
 const MAX_MEMORY_EVENTS = 2000;
-const HEATMAP_DAYS = DEFAULT_HEATMAP_DAYS;
+const HEATMAP_DAYS = 1;
 const MAX_DAILY_INGEST_IDS = 800;
 const RECENT_MEME_LIMIT = 18;
 
@@ -361,7 +359,7 @@ const EVENT_ICONS = {
 
 let mode = "local";
 let memory = loadMemory();
-// Persist upgrade seed (72h events → day cubes) so a refresh keeps the map.
+  // Persist only current-day events so a refresh cannot resurrect old history.
 try {
   if (memory.dailyActivity?.length) saveMemory();
 } catch {
@@ -412,7 +410,7 @@ function loadMemory() {
         : [],
       probeSamples: Array.isArray(raw.probeSamples) ? raw.probeSamples.slice(0, 3) : [],
     };
-    // First visit after upgrade: seed cubes from whatever 72h events we still hold.
+    // First visit after upgrade: seed cubes from the current-day event window.
     if (!mem.dailyActivity.length && mem.events.length) {
       const seen = new Set(mem.dailyIngestedIds);
       mem.dailyActivity = upsertDailyActivity([], mem.events, {
@@ -457,8 +455,8 @@ function renderHeatmap(rows = []) {
 
   if (els.heatMeta) {
     els.heatMeta.textContent = totalMoves
-      ? `${activeDays} active days · ${totalMoves} moves · heat ${heatSum} · last ${HEATMAP_DAYS}d`
-      : `No cubes yet · history grows past 72h as sniffs land (kept ${HEATMAP_DAYS} days)`;
+      ? `${activeDays} active day · ${totalMoves} moves · heat ${heatSum} · current day`
+      : "No current-day activity recorded";
   }
 
   // Month labels aligned to week columns
@@ -931,7 +929,6 @@ function renderPaperworkSpark(box) {
     return;
   }
   const d24 = paperworkVelocity(pwHistoryCache.series, 24 * 3600e3);
-  const d72 = paperworkVelocity(pwHistoryCache.series, 72 * 3600e3);
   const fmtD = (n) =>
     n == null ? "—" : `${n >= 0 ? "▲" : "▼"} ${fmtCompactUsd(Math.abs(n))}`;
 
@@ -954,7 +951,6 @@ function renderPaperworkSpark(box) {
     <div class="spark-stats">
       <span><i>booked</i> ${fmtCompactUsd(vals[vals.length - 1])}</span>
       <span><i>24h</i> ${fmtD(d24)}</span>
-      <span><i>72h</i> ${fmtD(d72)}</span>
       <span><i>tape</i> ${pts.length} sniffs</span>
     </div>
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="paperwork build-up">
@@ -1338,12 +1334,10 @@ function renderTraffic(traffic) {
   els.trafficMini.textContent = Number.isFinite(total) ? `views ${fmtCompactNumber(total)}` : "views —";
   if (topPath) {
     els.trafficMini.title = Number.isFinite(topViews)
-      ? `Shared page views${traffic?.fallback ? " (local fallback)" : ""} · top ${topPath} (${fmtCompactNumber(topViews)})`
-      : `Shared page views${traffic?.fallback ? " (local fallback)" : ""} · top ${topPath}`;
+      ? `Shared page views · top ${topPath} (${fmtCompactNumber(topViews)})`
+      : `Shared page views · top ${topPath}`;
   } else {
-    els.trafficMini.title = traffic?.fallback
-      ? "Local browser fallback counter while the shared endpoint is unavailable."
-      : "Shared HTML page-view counter. Counts root and .html route loads.";
+    els.trafficMini.title = "Shared HTML page-view counter. Counts root and .html route loads.";
   }
 }
 
@@ -1353,10 +1347,7 @@ async function refreshTraffic() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     renderTraffic(await res.json());
   } catch {
-    const key = "gt.traffic.views";
-    const total = (Number(localStorage.getItem(key)) || 0) + 1;
-    localStorage.setItem(key, String(total));
-    renderTraffic({ totalViews: total, topPath: "this browser", topPathViews: total, fallback: true });
+    renderTraffic({});
   }
 }
 
@@ -2410,7 +2401,7 @@ function applyPayload(payload) {
   renderCoverage(briefing?.coverage || null);
   renderHorsepower(briefing?.horsepower || null);
   renderSkillsRollout(latest);
-  renderTokenPlan(briefing?.tokenPlan || CLIENT_TOKEN_PLAN);
+  renderTokenPlan(briefing?.tokenPlan || null);
   renderDocsCue(briefing?.docsBoard || null, feedEvents);
   renderLanesCue(briefing?.lanesBoard || null, latest, feedEvents);
   renderProbeLog();
@@ -2519,7 +2510,7 @@ renderProvenance(memory.latest);
 hydrateIcons();
 startMatrix();
 // Paint the value sheet immediately — don't wait on a cold sniff.
-renderTokenPlan(CLIENT_TOKEN_PLAN);
+renderTokenPlan(null);
 renderHeatmap(memory.dailyActivity || []);
 
 async function boot() {

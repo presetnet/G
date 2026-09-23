@@ -53,7 +53,7 @@ every claim should trace to an endpoint, a stored snapshot, or an event on the t
 
 ## Example Interactions
 
-**Good**: "What changed in the last 72h?" → filter `/api/events` to window, group by kind,
+**Good**: "What changed in the last 24h?" → filter `/api/events` to window, group by kind,
 lead with highest rank.
 **Good**: "Is the $692M real?" → explain booked-vs-paid distinction, cite
 `metaproofsPaperworkUsd` vs `treasuryRpcSigCount=0`, link hwonder.com/posts/metaproofs.
@@ -64,7 +64,7 @@ lead with highest rank.
 
 - Poll cadence ~30s local; shared store mirrors bundle to Redis + `goldennftplatform-svg/gt`
   branch `gt-live` (Contents API — private-safe).
-- Event tape prunes to 72h; heatmap keeps 60 days. History older than that lives nowhere.
+- Event tape, snapshots, and heatmap are hard-pruned to the current 24h window. Older history is not presented as live evidence.
 - Translator flap-guards suppress scrape jitter; don't bypass them to "get more events".
 - The desk investigates its own infrastructure too (the OpenCode/ghost-shelf watch tracked the same
   stack this repo runs on). Symmetry is intentional; keep it honest.

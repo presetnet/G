@@ -47,7 +47,7 @@ export const config = {
   dataDir: path.join(root, "data"),
   publicDir: path.join(root, "public"),
   maxEvents: 2000,
-  maxSnapshots: 216, // ~72h at 20m cadence
-  trackWindowHours: 72,
-  heatmapDays: 60, // ~2 months of GitHub-style daily cubes
+  maxSnapshots: 2880, // bounded local retention; load/save also enforce the 24h age limit
+  trackWindowHours: 24,
+  heatmapDays: 1,
 };

@@ -56,6 +56,14 @@ function pruneTrackWindow(events = []) {
   });
 }
 
+function pruneSnapshots(snapshots = []) {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  return snapshots.filter((snapshot) => {
+    const takenAt = Date.parse(snapshot?.takenAt || "");
+    return Number.isFinite(takenAt) && takenAt >= cutoff;
+  });
+}
+
 function needsLegacyCleanup(events = []) {
   return events.some(
     (e) =>
@@ -155,17 +163,22 @@ export async function clearMiningSurfaceCache() {
 }
 
 export async function loadSnapshots() {
-  return readJson(paths.snapshots(), []);
+  const raw = await readJson(paths.snapshots(), []);
+  const next = pruneSnapshots(raw);
+  if (next.length !== raw.length) await writeJson(paths.snapshots(), next);
+  return next;
 }
 
 export async function saveLatestSnapshot(snapshot) {
   await writeJson(paths.latest(), snapshot);
   const snaps = await loadSnapshots();
-  const next = [snapshot, ...snaps].slice(0, config.maxSnapshots);
+  const next = pruneSnapshots([snapshot, ...snaps]).slice(0, config.maxSnapshots);
   await writeJson(paths.snapshots(), next);
   return next;
 }
 
 export async function loadLatestSnapshot() {
-  return readJson(paths.latest(), null);
+  const latest = await readJson(paths.latest(), null);
+  if (!latest || !Number.isFinite(Date.parse(latest.takenAt || ""))) return null;
+  return Date.now() - Date.parse(latest.takenAt) <= 24 * 60 * 60 * 1000 ? latest : null;
 }
