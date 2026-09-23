@@ -30,6 +30,8 @@ export function renderDibziDesk(latest) {
   const src = latest?.sources?.["dibzi.names"];
   const status = document.getElementById("dibziDeskStatus");
   const summary = document.getElementById("dibziSummary");
+  const aboutStatus = document.getElementById("dibziAboutStatus");
+  const aboutBody = document.getElementById("dibziAboutBody");
   const walletRows = document.getElementById("dibziWalletRows");
   const bidRows = document.getElementById("dibziBidRows");
   const cashtagRows = document.getElementById("dibziCashtagRows");
@@ -38,6 +40,13 @@ export function renderDibziDesk(latest) {
   if (!status || !summary || !walletRows || !bidRows || !cashtagRows || !salesRows) return;
   status.textContent = sourceState(src);
   const names = rows(src?.names);
+  const about = latest?.sources?.["dibzi.about"];
+  if (aboutStatus && aboutBody) {
+    aboutStatus.textContent = about?.ok === true ? `Checked ${stamp(about.checkedAt)} · ${about.contentStatus || "public page"}` : `Unavailable · ${about?.reason || "waiting for public About page"}`;
+    aboutBody.innerHTML = about?.ok === true
+      ? `<p class="dibzi-about-thesis">${esc(about.thesis)}</p><div class="dibzi-about-grid">${rows(about.sections).map((section) => `<article><strong>${esc(section.title)}</strong><span>${esc(section.text)}</span></article>`).join("")}</div><div class="dibzi-about-economics">${about.economics ? `<span><b>${esc(about.economics.openingBidSol)} SOL</b> opening bids</span><span><b>${esc(about.economics.buyItNowSol)} SOL</b> buy it now</span><span><b>${esc(about.economics.auctionHours)}h</b> auctions</span><span><b>${esc(about.economics.renewalSolPerYear)} SOL</b> yearly resolution</span>` : ""}</div>`
+      : `<div class="desk-empty"><span>[ - ]</span><span>About claims are not displayed until the public page response is complete.</span></div>`;
+  }
   const wallets = rows(src?.topWallets);
   const bids = rows(src?.recentBids);
   if (src?.ok !== true) {

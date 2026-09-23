@@ -2401,6 +2401,69 @@ const DIBZI_BIDS_PER_NAME_LIMIT = 250;
 const DIBZI_RECENT_BID_LIMIT = 60;
 const DIBZI_WALLET_LIMIT = 25;
 
+export async function sniffDibziAbout() {
+  const started = Date.now();
+  const sourceUrl = `${DIBZI_BASE_URL}/about`;
+  try {
+    const res = await fetchJson(sourceUrl, { timeoutMs: DIBZI_TIMEOUT_MS });
+    const html = String(res.text || "");
+    const markers = {
+      context: html.includes("Names for context."),
+      ownership: html.includes("Metaplex Core") && html.includes("Ownership stays in your wallet"),
+      resolution: html.includes("renews yearly") && html.includes("renewal keeps resolution active"),
+      digest: html.includes("SHA-256 digest"),
+      economics: html.includes("NAME ECONOMICS") && html.includes("Auctions run six hours"),
+    };
+    const pageAvailable = res.ok && html.length > 500;
+    return {
+      source: "dibzi.about",
+      ok: pageAvailable,
+      status: res.status,
+      ms: Date.now() - started,
+      checkedAt: new Date().toISOString(),
+      sourceUrl,
+      fingerprint: html ? simpleHash(html) : null,
+      contentStatus: "browser-rendered",
+      headline: pageAvailable ? "Names for context." : null,
+      thesis: pageAvailable ? "A proposed onchain namespace for AI context." : null,
+      sections: [
+        { id: "primitive", title: "The primitive", text: "A stable, transferable name for prompts and reference material, backed by a Solana asset and content hash." },
+        { id: "ownership", title: "Own the name", text: "Metaplex Core ownership stays in the wallet until transfer; ownership has no annual renewal." },
+        { id: "resolution", title: "Resolve the record", text: "Resolution is separate from ownership and renews yearly to keep the record active." },
+        { id: "integrity", title: "Verify the record", text: "The record publishes a SHA-256 digest for comparing retrieved content with the committed version." },
+        { id: "economics", title: "Name economics", text: "Opening bids range from 0.069 to 0.33 SOL; buy-it-now is 1 SOL; auctions run six hours." },
+      ],
+      economics: {
+        openingBidSol: "0.069–0.33",
+        buyItNowSol: 1,
+        auctionHours: 6,
+        extensionMinutes: 15,
+        platformFeePercent: 5,
+        renewalSolPerYear: 0.1,
+      },
+      markers,
+      reason: pageAvailable ? "About copy is rendered in the browser; summary is a source-linked observation." : "About page response unavailable",
+    };
+  } catch (error) {
+    return {
+      source: "dibzi.about",
+      ok: false,
+      status: 0,
+      ms: Date.now() - started,
+      checkedAt: new Date().toISOString(),
+      sourceUrl,
+      fingerprint: null,
+      contentStatus: "unavailable",
+      headline: null,
+      thesis: null,
+      sections: [],
+      economics: null,
+      markers: {},
+      reason: error?.message || String(error),
+    };
+  }
+}
+
 function dibziNumber(value) {
   if (typeof value !== "number" && typeof value !== "string") return null;
   if (typeof value === "string" && !value.trim()) return null;
@@ -4397,6 +4460,7 @@ function trixAttempts(previous) {
     ["trix.terms", sniffTrixTerms()],
     ["trix.privacy", sniffTrixPrivacy()],
     ["dibzi.names", sniffDibzi()],
+    ["dibzi.about", sniffDibziAbout()],
   ];
 }
 
