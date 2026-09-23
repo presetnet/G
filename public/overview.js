@@ -26,7 +26,12 @@ export function renderOverview(latest, events = []) {
   const usable = d && ["CURRENT","DELAYED"].includes(evidenceState(d));
   const highest = usable ? (d.names || []).filter(n => !n.settled && Number.isFinite(n.amountSol)).sort((a,b) => b.amountSol-a.amountSol)[0] : null;
   document.getElementById("quickFacts").innerHTML = `<article><h3>DIBZI auctions</h3><p>${usable ? `${esc(d.activeNames)} active · ${esc(d.namesTotal)} total including ${esc(d.cashtagNames)} cashtags` : "Values unavailable"}</p><p>${highest ? link(`https://dibzi.ai/name/${encodeURIComponent(highest.name)}`, `${highest.amountSol} SOL · ${highest.name}`) : "Highest bid unavailable"}</p><small>Observed ${age(d?.checkedAt)} · not a 24h sales total</small></article><article><h3>TRIX activity</h3><p>${link("https://trix.market/","Inspect market")}</p><small>Market: ${evidenceState(sources["trix.market"])} · ${age(sources["trix.market"]?.checkedAt)}<br>Generations: ${evidenceState(sources["trix.geoff"])} · ${age(sources["trix.geoff"]?.checkedAt)}</small><p>Records and receipts in the full desk below.</p></article>`;
-  const changes = events.filter(e => { const delta=Date.now()-Date.parse(e.at); return delta>=0 && delta<=EVIDENCE_WINDOW && !["agent","baseline"].includes(e.kind); }).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)).slice(0,3);
+  const seen = new Set();
+  const changes = events.filter(e => { const delta=Date.now()-Date.parse(e.at); return delta>=0 && delta<=EVIDENCE_WINDOW && !["agent","baseline"].includes(e.kind); }).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)).filter(e => {
+    const key = `${e.kind}:${e.title}`;
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  }).slice(0,3);
   document.getElementById("quickChanges").innerHTML = changes.map(e => {
     return `<article><strong>${esc(e.title)}</strong><small>${age(e.at)} · recorded public change</small><p>${esc(e.summary)}</p><a href="#sourceStrip">Inspect source visibility ↑</a></article>`;
   }).join("") || '<p>No recent public changes recorded. This does not imply zero activity.</p>';

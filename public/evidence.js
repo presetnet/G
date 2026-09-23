@@ -6,7 +6,8 @@ export function evidenceState(source, now = Date.now()) {
   if (Number.isFinite(at) && age > EVIDENCE_WINDOW) return "EXPIRED";
   if ([401, 403].includes(source?.status) || source?.skipped) return "ACCESS REQUIRED";
   if (!source || source.ok !== true || source.stale || !Number.isFinite(at) || age < 0) return "UNAVAILABLE";
-  return age > 20 * 60 * 1000 ? "DELAYED" : "CURRENT";
+  const minuteSource = /^(trix\.|dibzi\.|pond0x\.)/.test(source.source || "") || ["stacknet.health", "stacknet.root", "stacknet.models"].includes(source.source);
+  return age > (minuteSource ? 3 : 20) * 60 * 1000 ? "DELAYED" : "CURRENT";
 }
 
 export function filterEvidence(snapshot, now = Date.now()) {
