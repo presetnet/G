@@ -30,6 +30,7 @@ const frontHtml = () => `<!doctype html><html><body>
 let siteStatus = 200;
 let destSigsMode = 1;
 let rpc429 = false;
+let v2Empty = false;
 
 const readOnlyStore = {
   loadMiningSurfaceCache: async () => null,
@@ -116,6 +117,16 @@ const context = vm.createContext({
       throw new Error(`Unexpected RPC ${rpc.method}`);
     }
     if (url.origin === "https://eth-sepolia.blockscout.com") {
+      if (url.searchParams.get("module") === "account") {
+        return respond(200, {
+          status: "1", message: "OK",
+          result: [
+            { hash: "0xaaa", from: "0x96c5161617323a56434753cbe43bad516adc7f48", to: "0xe18d3f89665ebf4ef885389b62a91ed910572af4", value: "3000000000000000", isError: "0", timeStamp: Math.floor(now / 1000) - 900 },
+            { hash: "0xbbb", from: "0x686bab3f162e72f903fa9da42d1726e5d01bb46a", to: "0xe18d3f89665ebf4ef885389b62a91ed910572af4", value: "100000000000000000", isError: "1", timeStamp: Math.floor(now / 1000) - 800 },
+          ],
+        });
+      }
+      if (v2Empty) return respond(200, { items: [], next_page_params: null });
       const items = [
         { hash: "0xaaa", result: "pending", value: "3000000000000000", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x96C5161617323A56434753Cbe43BAd516ADc7f48" }, timestamp: "2026-09-24T11:10:00.000Z" },
         { hash: "0xbbb", result: "ok", value: "100000000000000000", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x686bab3F162e72F903fA9DA42D1726e5D01BB46A" }, timestamp: "2026-09-24T11:14:12.000Z" },
@@ -253,6 +264,18 @@ assert.equal(eth.ethTopSenders[0].wallet, "0x686bab3F162e72F903fA9DA42D1726e5D01
 assert.ok(Math.abs(eth.ethTopSenders[0].share - (0.1 / 0.103)) < 1e-6);
 assert.ok(eth.ethFirstSeenAt);
 assert.ok(eth.fingerprint && eth.fingerprint.length >= 6);
+
+// 4b. When the v2 explorer page shells out empty, the v1 txlist fallback records deposits.
+v2Empty = true;
+const fallbackEth = await api.sniffSimEth();
+v2Empty = false;
+assert.equal(fallbackEth.ok, true, fallbackEth.reason || "fallback eth ok");
+assert.equal(fallbackEth.ethDepositCount, 1, "v1 txlist fallback counts real deposits");
+assert.ok(Math.abs(fallbackEth.ethDepositsEth - 0.003) < 1e-12);
+assert.equal(fallbackEth.ethLatestHash, "0xaaa");
+assert.equal(fallbackEth.ethUniqueSenders, 1);
+assert.equal(fallbackEth.ethLargestEth, 0.003);
+assert.ok(!fallbackEth.ethTopSenders.some((p) => p.wallet === "0x686bab3F162e72F903fA9DA42D1726e5D01BB46A"), "reverted (isError 1) v1 rows are excluded");
 
 // A second idle poll must not double-count anything (dedupe by tx hash).
 const ethRepeat = await api.sniffSimEth({ previous: eth });

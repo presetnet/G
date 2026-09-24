@@ -4894,6 +4894,7 @@ export async function sniffSimEth({ previous } = {}) {
     let cursor = null;
     let pages = 0;
     let caughtUp = false;
+    let ingested = 0;
     while (pages < 6 && !caughtUp) {
       const url = cursor
         ? `${SIM_ETH_SOURCE_URL}?${new URLSearchParams(cursor).toString()}`
@@ -4940,7 +4941,63 @@ export async function sniffSimEth({ previous } = {}) {
       if (knownHashes.length > 600) knownHashes.length = 600;
       cursor = res.json?.next_page_params || null;
       pages += 1;
+      ingested += added;
       if (added === 0) caughtUp = true;
+    }
+    if (ingested === 0) {
+      // v2 gave nothing new (Blockscout's edge shell returns empty pages to some
+      // egress IPs): fall back to the v1 txlist API for the same wallet.
+      let offset = 0;
+      let v1Pages = 0;
+      while (v1Pages < 6) {
+        const v1 = await fetchJson(
+          `${SIM_ETH_EXPLORER}/api?module=account&action=txlist&address=${SIM_ETH_ADDRESS}&startblock=0&endblock=99999999&page=${v1Pages + 1}&offset=50&sort=desc`,
+          { timeoutMs: 8_000 }
+        );
+        const list = v1.json && Array.isArray(v1.json.result) ? v1.json.result : null;
+        if (!v1.ok || !list || list.length === 0) break;
+        let added = 0;
+        for (const item of list) {
+          const hash = item?.hash;
+          if (!hash || knownHashes.includes(hash)) continue;
+          const targetOk = typeof item?.to === "string" && item.to.toLowerCase() === SIM_ETH_ADDRESS.toLowerCase();
+          const badState = typeof item?.isError === "string" && item.isError !== "0";
+          if (!targetOk || badState) {
+            knownHashes.unshift(hash);
+            continue;
+          }
+          const wei = Number(item?.value);
+          if (Number.isFinite(wei) && wei > 0) {
+            totalWei += wei;
+            count += 1;
+            const from = typeof item?.from === "string" ? item.from : null;
+            if (from && !senders.includes(from)) senders.push(from);
+            latestHash = hash;
+            const tSec = Number(item?.timeStamp) > 0 ? Number(item.timeStamp) : null;
+            if (Number.isFinite(tSec)) {
+              rows.push({ t: tSec, w: wei });
+              if (firstSeenSec === null || tSec < firstSeenSec) firstSeenSec = tSec;
+            }
+            if (from) {
+              const hit = senderTotals.find((s) => s.w === from);
+              if (hit) hit.v += wei;
+              else senderTotals.push({ w: from, v: wei });
+            }
+            if (wei > largestWei) {
+              largestWei = wei;
+              largestHash = hash;
+              largestAt = tSec !== null ? new Date(tSec * 1000).toISOString() : null;
+            }
+          }
+          knownHashes.unshift(hash);
+          added += 1;
+        }
+        if (knownHashes.length > 600) knownHashes.length = 600;
+        v1Pages += 1;
+        offset += added;
+        if (added === 0) break;
+      }
+      if (offset > 0) ingested = offset;
     }
     rows.sort((a, b) => a.t - b.t);
     if (rows.length > 300) rows = rows.slice(rows.length - 300);
