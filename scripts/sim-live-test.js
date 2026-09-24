@@ -72,7 +72,7 @@ const context = vm.createContext({
         assert.equal(rpc.params[0], "dest-sig");
         return respond(200, {
           result: {
-            slot: 460000000, blockTime: now / 1000 - 90 + 1000 * 60 * 8, err: null,
+            slot: 460000000, blockTime: Math.floor(now / 1000) - 1200, err: null,
             meta: {
               preBalances: [2000000000, 59445415452, 0, 1000000],
               postBalances: [1993200000, 59513415452, 0, 1000000],
@@ -85,9 +85,9 @@ const context = vm.createContext({
     }
     if (url.origin === "https://eth-sepolia.blockscout.com") {
       const items = [
-        { hash: "0xaaa", result: "ok", value: "3000000000000000", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x96C5161617323A56434753Cbe43BAd516ADc7f48" }, timestamp: "2026-09-24T20:50:00.000000Z" },
-        { hash: "0xbbb", result: "ok", value: "100000000000000000", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x686bab3F162e72F903fA9DA42D1726e5D01BB46A" }, timestamp: "2026-09-24T20:54:12.000000Z" },
-        { hash: "0xccc", result: "ok", value: "0", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x1111" }, timestamp: "2026-09-24T20:00:00.000000Z" },
+        { hash: "0xaaa", result: "ok", value: "3000000000000000", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x96C5161617323A56434753Cbe43BAd516ADc7f48" }, timestamp: "2026-09-24T11:10:00.000Z" },
+        { hash: "0xbbb", result: "ok", value: "100000000000000000", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x686bab3F162e72F903fA9DA42D1726e5D01BB46A" }, timestamp: "2026-09-24T11:14:12.000Z" },
+        { hash: "0xccc", result: "ok", value: "0", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x1111" }, timestamp: "2026-09-24T11:00:00.000Z" },
       ];
       return respond(200, { items, next_page_params: null });
     }
@@ -174,6 +174,16 @@ assert.equal(chain.solDepositsSol, 68000000 / 1e9); // post 59,513,415,452 - pre
 assert.ok(chain.knownSigs.includes("dest-sig"));
 assert.ok(chain.mintLatestAt && chain.destLatestAt);
 assert.ok(chain.fingerprint && chain.fingerprint.length >= 6);
+assert.equal(chain.solDepositCount, chain.solDepositRows.length);
+assert.equal(chain.solTodayCount, 1);
+assert.equal(chain.solHourCount, 1);
+assert.equal(chain.solDepositBars.length, 1);
+assert.equal(chain.solLargestSol, 0.068);
+assert.equal(chain.solTopPayers.length, 1);
+assert.equal(chain.solTopPayers[0].wallet, "6ix1dAxoqNP4VuEANSMmeiefJcJUxaxW9ShjjLnv5Hid");
+assert.equal(chain.solTopPayers[0].share, 1);
+assert.ok(chain.solFirstSeenAt);
+assert.equal(chain.solMedianGapSec, null, "a single deposit has no inter-payment gap");
 
 // 4. Sepolia ETH rail: wei values sum, zero-value and non-incoming items are skipped.
 const eth = await api.sniffSimEth();
@@ -185,6 +195,14 @@ assert.equal(eth.ethKnownHashes.length, 3); // 2 deposits + 1 zero-value skipped
 assert.equal(eth.ethUniqueSenders, 2);
 assert.ok(Math.abs(eth.ethDepositsEth - (0.003 + 0.1)) < 1e-12);
 assert.equal(eth.ethLatestHash, "0xbbb");
+assert.equal(eth.ethTodayCount, 2);
+assert.equal(eth.ethHourCount, 2);
+assert.equal(eth.ethDepositBars.length, 2);
+assert.equal(eth.ethLargestEth, 0.1);
+assert.equal(eth.ethTopSenders.length, 2);
+assert.equal(eth.ethTopSenders[0].wallet, "0x686bab3F162e72F903fA9DA42D1726e5D01BB46A");
+assert.ok(Math.abs(eth.ethTopSenders[0].share - (0.1 / 0.103)) < 1e-6);
+assert.ok(eth.ethFirstSeenAt);
 assert.ok(eth.fingerprint && eth.fingerprint.length >= 6);
 
 // A second idle poll must not double-count anything (dedupe by tx hash).

@@ -4600,6 +4600,35 @@ export async function sniffSimFront() {
   }
 }
 
+// Window stats over observed deposit rows [{t, s}] (t = epoch seconds, s = raw
+// amount). Counts/sums for the trailing hour and day, the median inter-payment
+// gap, and image-ready per-deposit rows trimmed to the trailing 48h for the desk.
+function simDepositWindows(rows, valueKey, nowSec) {
+  const byTime = rows.slice().sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
+  const near = (spanSec) =>
+    byTime.filter((r) => Number.isFinite(r.t) && r.t >= nowSec - spanSec && r.t <= nowSec + 120);
+  const day = near(86400);
+  const hour = near(3600);
+  const hourSum = hour.reduce((sum, r) => sum + r[valueKey], 0);
+  const daySum = day.reduce((sum, r) => sum + r[valueKey], 0);
+  const gaps = [];
+  for (let i = 1; i < byTime.length; i += 1) {
+    if (Number.isFinite(byTime[i - 1].t) && Number.isFinite(byTime[i].t)) {
+      gaps.push(byTime[i].t - byTime[i - 1].t);
+    }
+  }
+  gaps.sort((a, b) => a - b);
+  const medianGapSec = gaps.length ? gaps[Math.floor(gaps.length / 2)] : null;
+  const bars = byTime
+    .filter((r) => Number.isFinite(r.t) && r.t >= nowSec - 48 * 3600)
+    .map((r) => ({ t: r.t, s: r[valueKey] }));
+  return {
+    dayCount: day.length, daySum,
+    hourCount: hour.length, hourSum,
+    medianGapSec, bars,
+  };
+}
+
 // Bounded SOL deposit aggregation on the destination wallet's mainnet signatures.
 // Signatures are deduped against a carried ring (knownSigs) and each new tx's
 // pre/postBalances delta at the wallet's index is summed when positive. Totals
@@ -4608,8 +4637,16 @@ export async function sniffSimFront() {
 async function simSolDepositTotals(previous) {
   const knownSigs = Array.isArray(previous?.knownSigs) ? previous.knownSigs.slice(0, 700) : [];
   const payers = Array.isArray(previous?.payers) ? previous.payers.slice(0, 400) : [];
+  const payerTotals = Array.isArray(previous?.solPayerTotals)
+    ? previous.solPayerTotals.slice(0, 200)
+    : [];
+  let rows = Array.isArray(previous?.solDepositRows) ? previous.solDepositRows : [];
+  let firstSeenSec = Number.isFinite(previous?.solFirstSeenSec) ? previous.solFirstSeenSec : null;
   let totalLamports = Number.isFinite(previous?.solTotalLamports) ? previous.solTotalLamports : 0;
   let count = Number.isFinite(previous?.solDepositCount) ? previous.solDepositCount : 0;
+  let largestLamports = Number.isFinite(previous?.solLargestLamports) ? previous.solLargestLamports : 0;
+  let largestSig = typeof previous?.solLargestSig === "string" ? previous.solLargestSig : null;
+  let largestAt = typeof previous?.solLargestAt === "string" ? previous.solLargestAt : null;
   const sigs = await solanaRpc("getSignaturesForAddress", [
     SIM_SOL_DESTINATION,
     { limit: 250, commitment: "confirmed" },
@@ -4633,16 +4670,47 @@ async function simSolDepositTotals(previous) {
     if (delta < SIM_SOL_DEPOSIT_MIN_LAMPORTS) continue;
     totalLamports += delta;
     count += 1;
+    const tSec = Number.isInteger(tx?.blockTime) ? tx.blockTime : null;
     const payer = keys[0];
     if (payer && payer !== SIM_SOL_DESTINATION && !payers.includes(payer)) {
       payers.push(payer);
+    }
+    if (Number.isFinite(tSec)) {
+      rows.push({ t: tSec, s: delta });
+      if (firstSeenSec === null || tSec < firstSeenSec) firstSeenSec = tSec;
+    }
+    if (payer && payer !== SIM_SOL_DESTINATION) {
+      const hit = payerTotals.find((p) => p.w === payer);
+      if (hit) hit.s += delta;
+      else payerTotals.push({ w: payer, s: delta });
+    }
+    if (delta > largestLamports) {
+      largestLamports = delta;
+      largestSig = s.signature ?? null;
+      largestAt = tSec !== null ? new Date(tSec * 1000).toISOString() : null;
     }
   }
   for (const s of fresh) {
     if (s?.signature && !knownSigs.includes(s.signature)) knownSigs.unshift(s.signature);
   }
   if (knownSigs.length > 700) knownSigs.length = 700;
-  return { okAgg: true, totalLamports, count, payers, knownSigs };
+  rows.sort((a, b) => a.t - b.t);
+  if (rows.length > 300) rows = rows.slice(rows.length - 300);
+  payerTotals.sort((a, b) => b.s - a.s);
+  if (payerTotals.length > 200) payerTotals.length = 200;
+  return {
+    okAgg: true,
+    totalLamports,
+    count,
+    payers,
+    knownSigs,
+    rows,
+    firstSeenSec,
+    payerTotals,
+    largestLamports,
+    largestSig,
+    largestAt,
+  };
 }
 
 export async function sniffSimChain({ previous } = {}) {
@@ -4668,6 +4736,16 @@ export async function sniffSimChain({ previous } = {}) {
       : null;
     const solTotalLamports = Number.isFinite(solAgg.totalLamports) ? solAgg.totalLamports : 0;
     const solDepositCount = Number.isFinite(solAgg.count) ? solAgg.count : 0;
+    const depRows = Array.isArray(solAgg.rows) ? solAgg.rows : [];
+    const win = simDepositWindows(depRows, "s", Date.now() / 1000);
+    const firstSeenSec = Number.isFinite(solAgg.firstSeenSec) ? solAgg.firstSeenSec : null;
+    const topPayers = (Array.isArray(solAgg.payerTotals) ? solAgg.payerTotals.slice(0, 5) : [])
+      .map((p) => ({
+        wallet: p.w,
+        sol: p.s / 1_000_000_000,
+        share: solTotalLamports > 0 ? p.s / solTotalLamports : 0,
+      }));
+    const largestLamports = Number.isFinite(solAgg.largestLamports) ? solAgg.largestLamports : 0;
     return {
       source: "sim.chain",
       ok: usable,
@@ -4686,7 +4764,24 @@ export async function sniffSimChain({ previous } = {}) {
       solDepositsSol: solTotalLamports / 1_000_000_000,
       solDepositCount,
       solUniquePayers: Array.isArray(solAgg.payers) ? solAgg.payers.length : 0,
+      solTodayCount: win.dayCount,
+      solTodaySol: win.daySum / 1_000_000_000,
+      solHourCount: win.hourCount,
+      solHourSol: win.hourSum / 1_000_000_000,
+      solMedianGapSec: win.medianGapSec,
+      solTopPayers: topPayers,
+      solFirstSeenAt: firstSeenSec !== null ? new Date(firstSeenSec * 1000).toISOString() : null,
+      solLargestSol: largestLamports / 1_000_000_000,
+      solLargestAt: solAgg.largestAt ?? null,
+      solLargestSignature: solAgg.largestSig ?? null,
+      solDepositBars: win.bars,
       solTotalLamports,
+      solDepositRows: depRows,
+      solFirstSeenSec: firstSeenSec,
+      solPayerTotals: Array.isArray(solAgg.payerTotals) ? solAgg.payerTotals : [],
+      solLargestLamports: largestLamports,
+      solLargestSig: solAgg.largestSig ?? null,
+      solLargestAt: solAgg.largestAt ?? null,
       payers: Array.isArray(solAgg.payers) ? solAgg.payers : [],
       knownSigs: Array.isArray(solAgg.knownSigs) ? solAgg.knownSigs : [],
       fingerprint: usable
@@ -4703,6 +4798,11 @@ export async function sniffSimChain({ previous } = {}) {
         : "Solana RPC did not return supply or signature history",
     };
   } catch (error) {
+    const depRows = Array.isArray(previous?.solDepositRows) ? previous.solDepositRows : [];
+    const win = simDepositWindows(depRows, "s", Date.now() / 1000);
+    const prevLamports = Number.isFinite(previous?.solTotalLamports) ? previous.solTotalLamports : 0;
+    const firstSeenSec = Number.isFinite(previous?.solFirstSeenSec) ? previous.solFirstSeenSec : null;
+    const largestLamports = Number.isFinite(previous?.solLargestLamports) ? previous.solLargestLamports : 0;
     return {
       source: "sim.chain",
       ok: false,
@@ -4719,10 +4819,32 @@ export async function sniffSimChain({ previous } = {}) {
       destLatestSignature: null,
       destLatestAt: null,
       // Carry the last observed SOL totals forward; a read error must never zero them.
-      solDepositsSol: Number.isFinite(previous?.solTotalLamports) ? previous.solTotalLamports / 1_000_000_000 : null,
+      solDepositsSol: prevLamports > 0 ? prevLamports / 1_000_000_000 : null,
       solDepositCount: Number.isFinite(previous?.solDepositCount) ? previous.solDepositCount : null,
       solUniquePayers: Array.isArray(previous?.payers) ? previous.payers.length : null,
-      solTotalLamports: Number.isFinite(previous?.solTotalLamports) ? previous.solTotalLamports : null,
+      solTodayCount: win.dayCount,
+      solTodaySol: win.daySum / 1_000_000_000,
+      solHourCount: win.hourCount,
+      solHourSol: win.hourSum / 1_000_000_000,
+      solMedianGapSec: win.medianGapSec,
+      solTopPayers: (Array.isArray(previous?.solPayerTotals) ? previous.solPayerTotals.slice(0, 5) : [])
+        .map((p) => ({
+          wallet: p.w,
+          sol: p.s / 1_000_000_000,
+          share: prevLamports > 0 ? p.s / prevLamports : 0,
+        })),
+      solFirstSeenAt: firstSeenSec !== null ? new Date(firstSeenSec * 1000).toISOString() : null,
+      solLargestSol: largestLamports > 0 ? largestLamports / 1_000_000_000 : null,
+      solLargestAt: previous?.solLargestAt ?? null,
+      solLargestSignature: previous?.solLargestSig ?? null,
+      solDepositBars: win.bars,
+      solTotalLamports: prevLamports > 0 ? prevLamports : null,
+      solDepositRows: depRows,
+      solFirstSeenSec: firstSeenSec,
+      solPayerTotals: Array.isArray(previous?.solPayerTotals) ? previous.solPayerTotals : [],
+      solLargestLamports: previous?.solLargestLamports != null ? previous.solLargestLamports : 0,
+      solLargestSig: previous?.solLargestSig ?? null,
+      solLargestAt: previous?.solLargestAt ?? null,
       payers: Array.isArray(previous?.payers) ? previous.payers : [],
       knownSigs: Array.isArray(previous?.knownSigs) ? previous.knownSigs : [],
       fingerprint: null,
@@ -4740,9 +4862,17 @@ export async function sniffSimEth({ previous } = {}) {
   const started = Date.now();
   const knownHashes = Array.isArray(previous?.ethKnownHashes) ? previous.ethKnownHashes.slice(0, 600) : [];
   const senders = Array.isArray(previous?.ethSenders) ? previous.ethSenders.slice(0, 400) : [];
+  const senderTotals = Array.isArray(previous?.ethSenderTotals)
+    ? previous.ethSenderTotals.slice(0, 200)
+    : [];
+  let rows = Array.isArray(previous?.ethDepositRows) ? previous.ethDepositRows : [];
+  let firstSeenSec = Number.isFinite(previous?.ethFirstSeenSec) ? previous.ethFirstSeenSec : null;
   let totalWei = Number.isFinite(previous?.ethTotalWei) ? previous.ethTotalWei : 0;
   let count = Number.isFinite(previous?.ethDepositCount) ? previous.ethDepositCount : 0;
   let latestHash = typeof previous?.ethLatestHash === "string" ? previous.ethLatestHash : null;
+  let largestWei = Number.isFinite(previous?.ethLargestWei) ? previous.ethLargestWei : 0;
+  let largestHash = typeof previous?.ethLargestHash === "string" ? previous.ethLargestHash : null;
+  let largestAt = typeof previous?.ethLargestAt === "string" ? previous.ethLargestAt : null;
   try {
     let cursor = null;
     let pages = 0;
@@ -4769,6 +4899,23 @@ export async function sniffSimEth({ previous } = {}) {
           const from = item?.from?.hash;
           if (from && !senders.includes(from)) senders.push(from);
           latestHash = hash;
+          const tSec = Number.isFinite(Date.parse(item?.timestamp))
+            ? Math.round(Date.parse(item.timestamp) / 1000)
+            : null;
+          if (Number.isFinite(tSec)) {
+            rows.push({ t: tSec, w: wei });
+            if (firstSeenSec === null || tSec < firstSeenSec) firstSeenSec = tSec;
+          }
+          if (from) {
+            const hit = senderTotals.find((s) => s.w === from);
+            if (hit) hit.v += wei;
+            else senderTotals.push({ w: from, v: wei });
+          }
+          if (wei > largestWei) {
+            largestWei = wei;
+            largestHash = hash;
+            largestAt = tSec !== null ? new Date(tSec * 1000).toISOString() : null;
+          }
         }
         knownHashes.unshift(hash);
         added += 1;
@@ -4778,7 +4925,17 @@ export async function sniffSimEth({ previous } = {}) {
       pages += 1;
       if (added === 0) caughtUp = true;
     }
+    rows.sort((a, b) => a.t - b.t);
+    if (rows.length > 300) rows = rows.slice(rows.length - 300);
+    senderTotals.sort((a, b) => b.v - a.v);
+    if (senderTotals.length > 200) senderTotals.length = 200;
     const usable = pages > 0;
+    const win = simDepositWindows(rows, "w", Date.now() / 1000);
+    const topSenders = senderTotals.slice(0, 5).map((p) => ({
+      wallet: p.w,
+      eth: p.v / 1e18,
+      share: totalWei > 0 ? p.v / totalWei : 0,
+    }));
     return {
       source: "sim.eth",
       ok: usable,
@@ -4792,9 +4949,26 @@ export async function sniffSimEth({ previous } = {}) {
       ethDepositsEth: totalWei / 1e18,
       ethDepositCount: count,
       ethUniqueSenders: senders.length,
+      ethTodayCount: win.dayCount,
+      ethTodayEth: win.daySum / 1e18,
+      ethHourCount: win.hourCount,
+      ethHourEth: win.hourSum / 1e18,
+      ethMedianGapSec: win.medianGapSec,
+      ethTopSenders: topSenders,
+      ethFirstSeenAt: firstSeenSec !== null ? new Date(firstSeenSec * 1000).toISOString() : null,
+      ethLargestEth: largestWei / 1e18,
+      ethLargestAt: largestAt,
+      ethLargestHash: largestHash,
+      ethDepositBars: win.bars,
       ethLatestHash: latestHash,
       ethPages: pages,
       ethTotalWei: totalWei,
+      ethDepositRows: rows,
+      ethFirstSeenSec: firstSeenSec,
+      ethSenderTotals: senderTotals,
+      ethLargestWei: largestWei,
+      ethLargestHash: largestHash,
+      ethLargestAt: largestAt,
       ethKnownHashes: knownHashes,
       ethSenders: senders,
       fingerprint: usable
@@ -4803,6 +4977,11 @@ export async function sniffSimEth({ previous } = {}) {
       reason: usable ? null : "Sepolia explorer returned no transaction history",
     };
   } catch (error) {
+    rows.sort((a, b) => a.t - b.t);
+    const win = simDepositWindows(rows, "w", Date.now() / 1000);
+    const carriedWei = Number.isFinite(previous?.ethTotalWei) ? previous.ethTotalWei : 0;
+    const firstSeenSec = Number.isFinite(previous?.ethFirstSeenSec) ? previous.ethFirstSeenSec : null;
+    const largestWei = Number.isFinite(previous?.ethLargestWei) ? previous.ethLargestWei : 0;
     return {
       source: "sim.eth",
       ok: false,
@@ -4813,12 +4992,34 @@ export async function sniffSimEth({ previous } = {}) {
       ethName: SIM_ETH_DESTINATION,
       ethAddress: SIM_ETH_ADDRESS,
       ethChain: "sepolia (11155111)",
-      ethDepositsEth: previous?.ethTotalWei != null ? previous.ethTotalWei / 1e18 : null,
+      ethDepositsEth: carriedWei > 0 ? carriedWei / 1e18 : null,
       ethDepositCount: Number.isFinite(previous?.ethDepositCount) ? previous.ethDepositCount : null,
       ethUniqueSenders: Array.isArray(previous?.ethSenders) ? previous.ethSenders.length : null,
+      ethTodayCount: win.dayCount,
+      ethTodayEth: win.daySum / 1e18,
+      ethHourCount: win.hourCount,
+      ethHourEth: win.hourSum / 1e18,
+      ethMedianGapSec: win.medianGapSec,
+      ethTopSenders: (Array.isArray(previous?.ethSenderTotals) ? previous.ethSenderTotals.slice(0, 5) : [])
+        .map((p) => ({
+          wallet: p.w,
+          eth: p.v / 1e18,
+          share: carriedWei > 0 ? p.v / carriedWei : 0,
+        })),
+      ethFirstSeenAt: firstSeenSec !== null ? new Date(firstSeenSec * 1000).toISOString() : null,
+      ethLargestEth: largestWei > 0 ? largestWei / 1e18 : null,
+      ethLargestAt: previous?.ethLargestAt ?? null,
+      ethLargestHash: previous?.ethLargestHash ?? null,
+      ethDepositBars: win.bars,
       ethLatestHash: latestHash,
       ethPages: 0,
-      ethTotalWei: previous?.ethTotalWei != null ? previous.ethTotalWei : null,
+      ethTotalWei: carriedWei > 0 ? carriedWei : null,
+      ethDepositRows: rows,
+      ethFirstSeenSec: firstSeenSec,
+      ethSenderTotals: Array.isArray(previous?.ethSenderTotals) ? previous.ethSenderTotals : [],
+      ethLargestWei: largestWei,
+      ethLargestHash: previous?.ethLargestHash ?? null,
+      ethLargestAt: previous?.ethLargestAt ?? null,
       ethKnownHashes: knownHashes,
       ethSenders: senders,
       fingerprint: null,
