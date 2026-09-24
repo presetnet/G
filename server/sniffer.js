@@ -4654,13 +4654,23 @@ async function simSolDepositTotals(previous) {
   if (!Array.isArray(sigs) || sigs.length === 0) return { okAgg: false };
   const fresh = sigs.filter((s) => s?.signature && !knownSigs.includes(s.signature));
   let fetched = 0;
+  let rateLimited = false;
   for (const s of fresh) {
     if (fetched >= 60) break;
     fetched += 1;
-    const tx = await solanaRpc("getTransaction", [
-      s.signature,
-      { commitment: "confirmed", maxSupportedTransactionVersion: 0 },
-    ]);
+    let tx;
+    try {
+      tx = await solanaRpc("getTransaction", [
+        s.signature,
+        { commitment: "confirmed", maxSupportedTransactionVersion: 0 },
+      ]);
+    } catch (error) {
+      // A public RPC 429s under a burst of getTransaction calls. Stop polling this
+      // round rather than throwing: the carried totals must stay readable.
+      rateLimited = /429/.test(String(error?.message || error));
+      break;
+    }
+    if (!rateLimited) await sleep(60); // gentle pace for the free public RPC
     const meta = tx?.meta;
     const keys = tx?.transaction?.message?.accountKeys;
     if (!meta || !Array.isArray(keys) || meta.err != null) continue;
@@ -4690,16 +4700,19 @@ async function simSolDepositTotals(previous) {
       largestAt = tSec !== null ? new Date(tSec * 1000).toISOString() : null;
     }
   }
-  for (const s of fresh) {
-    if (s?.signature && !knownSigs.includes(s.signature)) knownSigs.unshift(s.signature);
+  if (!rateLimited) {
+    for (const s of fresh) {
+      if (s?.signature && !knownSigs.includes(s.signature)) knownSigs.unshift(s.signature);
+    }
+    if (knownSigs.length > 700) knownSigs.length = 700;
   }
-  if (knownSigs.length > 700) knownSigs.length = 700;
   rows.sort((a, b) => a.t - b.t);
   if (rows.length > 300) rows = rows.slice(rows.length - 300);
   payerTotals.sort((a, b) => b.s - a.s);
   if (payerTotals.length > 200) payerTotals.length = 200;
   return {
     okAgg: true,
+    rateLimited,
     totalLamports,
     count,
     payers,
@@ -4763,6 +4776,7 @@ export async function sniffSimChain({ previous } = {}) {
       destLatestAt,
       solDepositsSol: solTotalLamports / 1_000_000_000,
       solDepositCount,
+      solRateLimited: solAgg.rateLimited === true,
       solUniquePayers: Array.isArray(solAgg.payers) ? solAgg.payers.length : 0,
       solTodayCount: win.dayCount,
       solTodaySol: win.daySum / 1_000_000_000,

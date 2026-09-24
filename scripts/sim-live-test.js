@@ -28,6 +28,8 @@ const frontHtml = () => `<!doctype html><html><body>
   <strong class="sim-countdown" datetime="2026-09-25T20:00:00-04:00">deadline</strong>
   </body></html>`;
 let siteStatus = 200;
+let destSigsMode = 1;
+let rpc429 = false;
 
 const readOnlyStore = {
   loadMiningSurfaceCache: async () => null,
@@ -62,14 +64,30 @@ const context = vm.createContext({
         const address = rpc.params[0];
         assert.equal(rpc.params[1]?.commitment, "confirmed");
         if (address !== SIM_MINT && address !== SIM_SOL_DEST) return respond(200, { result: [] });
-        return respond(200, { result: [
-          { signature: address === SIM_MINT ? "mint-sig" : "dest-sig", err: null, blockTime: now / 1000 - 120 },
+        if (address === SIM_MINT) return respond(200, { result: [
+          { signature: "mint-sig", err: null, blockTime: now / 1000 - 120 },
         ] });
+        const destSigs = destSigsMode === 2
+          ? [{ signature: "dest-sig2", err: null, blockTime: now / 1000 - 600 }, { signature: "dest-sig", err: null, blockTime: now / 1000 - 120 }]
+          : [{ signature: "dest-sig", err: null, blockTime: now / 1000 - 120 }];
+        return respond(200, { result: destSigs });
       }
       if (rpc.method === "getTransaction") {
+        if (rpc429) return respond(429, { error: { message: "Solana RPC HTTP 429" } });
         assert.equal(rpc.params[1]?.commitment, "confirmed");
         assert.equal(rpc.params[1]?.maxSupportedTransactionVersion, 0);
-        assert.equal(rpc.params[0], "dest-sig");
+        if (rpc.params[0] === "dest-sig2") {
+          return respond(200, {
+            result: {
+              slot: 460000100, blockTime: Math.floor(now / 1000) - 600, err: null,
+              meta: {
+                preBalances: [2000000000, 59513415452, 0, 1000000],
+                postBalances: [1999000000, 59514415452, 0, 1000000],
+              },
+              transaction: { message: { accountKeys: ["6ix1dAxoqNP4VuEANSMmeiefJcJUxaxW9ShjjLnv5Hid", SIM_SOL_DEST, "11111111111111111111111111111111", "ComputeBudget111111111111111111111111111111"] } },
+            },
+          });
+        }
         return respond(200, {
           result: {
             slot: 460000000, blockTime: Math.floor(now / 1000) - 1200, err: null,
@@ -228,6 +246,26 @@ assert.equal(carriedChain.ok, true);
 assert.equal(carriedChain.solDepositsSol, chain.solDepositsSol);
 assert.equal(carriedChain.solDepositCount, chain.solDepositCount);
 assert.equal(carriedChain.solUniquePayers, chain.solUniquePayers);
+assert.equal(carriedChain.solRateLimited, false);
+
+// A mid-poll RPC 429 bails softly: totals stay readable, nothing is marked known,
+// and the next outburst recovers and counts the vote-paying poll.
+destSigsMode = 2;
+rpc429 = true;
+const paused = await api.sniffSimChain({ previous: carriedChain });
+assert.equal(paused.ok, true);
+assert.equal(paused.solRateLimited, true);
+assert.equal(paused.solDepositCount, 1, "429s leave the carried count intact");
+assert.equal(paused.solDepositsSol, chain.solDepositsSol, "429s never zero totals");
+assert.equal(paused.solDepositRows.length, 1);
+rpc429 = false;
+const recovered = await api.sniffSimChain({ previous: paused });
+assert.equal(recovered.ok, true);
+assert.equal(recovered.solRateLimited, false);
+assert.equal(recovered.solDepositCount, 2);
+assert.ok(Math.abs(recovered.solDepositsSol - (0.068 + 0.001)) < 1e-12);
+assert.ok(recovered.knownSigs.includes("dest-sig2"));
+destSigsMode = 1;
 
 // 6. runSniff wires all four sim sources into the full pass.
 const full = await api.runSniff({ previous: null });

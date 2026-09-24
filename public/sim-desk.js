@@ -227,12 +227,12 @@ function renderMovement(chain, eth, front) {
       <div class="sim-pot">
         <span class="sim-pot-label">Mainnet · SOL pot</span>
         <b class="sim-pot-total">${solTotal != null ? `${fmt(solTotal, 4)} SOL` : "--"}</b>
-        <span class="sim-pot-sub">${solUsd != null ? `≈ $${fmt(solUsd, 0)} at live price · ` : ""}${fmt(chain?.solDepositCount)} payments · ${fmt(chain?.solUniquePayers)} payer${chain?.solUniquePayers === 1 ? "" : "s"}${repeat ? ` · ${repeat}× repeat rate` : ""}</span>
+        <span class="sim-pot-sub">${chain?.solRateLimited === true ? "RPC rate-limit pause · showing last observed" : solUsd != null ? `≈ $${fmt(solUsd, 0)} at live price · ` : ""}${chain?.solDepositCount != null ? `${fmt(chain.solDepositCount)} payment${chain.solDepositCount === 1 ? "" : "s"} · ${fmt(chain.solUniquePayers)} payer${chain.solUniquePayers === 1 ? "" : "s"}${repeat ? ` · ${repeat}× repeat rate` : ""}` : "awaiting the first observed payment"}</span>
       </div>
       <div class="sim-pot sim-pot-eth">
         <span class="sim-pot-label">Testnet · ETH probe</span>
         <b class="sim-pot-total">${ethTotal != null ? `${fmt(ethTotal, 4)} test ETH` : "--"}</b>
-        <span class="sim-pot-sub">Sepolia 11155111 · ${fmt(eth?.ethDepositCount)} txs · ${fmt(eth?.ethUniqueSenders)} sender${eth?.ethUniqueSenders === 1 ? "" : "s"} · testnet, no market value</span>
+        <span class="sim-pot-sub">Sepolia 11155111 · ${eth?.ethDepositCount != null ? `${fmt(eth.ethDepositCount)} tx${eth.ethDepositCount === 1 ? "" : "s"} · ${fmt(eth.ethUniqueSenders)} sender${eth.ethUniqueSenders === 1 ? "" : "s"}` : "no receipts read yet"} · testnet, no market value</span>
       </div>
       <div class="sim-clock">
         <span class="sim-clock-label">deadline</span>
