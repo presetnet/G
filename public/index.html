@@ -88,7 +88,7 @@
 
     <main class="shell">
       <section class="desk-intro" aria-label="Dashboard overview">
-        <div><p class="eyebrow">GEOFF / STACKNET / TRIX / DIBZI</p><h2>Signals. Not noise.</h2></div>
+        <div><p class="eyebrow">GEOFF / STACKNET / TRIX / DIBZI / SIM</p><h2>Signals. Not noise.</h2></div>
         <div class="sync-readout" role="status" aria-live="polite"><span id="syncStatus">Connecting</span><small id="syncMeta">Checking the shared desk</small></div>
       </section>
       <details class="data-disclosure"><summary>Public data. Independently observed, not guaranteed.</summary><p>Source-reported values may include development or test activity. Collection time is not event time. Open a source to inspect its age and limitations; verify material conclusions against the source and current network.</p></details>
@@ -235,6 +235,16 @@
           <section><div class="desk-toolbar"><h3>Recent bids</h3><p id="dibziBidStatus">Current DIBZI name activity</p></div><div id="dibziBidRows"></div></section>
         </div>
         <details class="desk-source"><summary>Sources &amp; limits</summary><pre id="dibziSourceText"></pre></details>
+</section>
+
+      <section id="simDesk" class="panel sim-desk" aria-labelledby="simDeskTitle">
+        <header class="desk-header"><div><p class="eyebrow">04 / SIMULATION</p><h2 id="simDeskTitle">SIM · sim.tech</h2></div><span id="simDeskStatus" class="desk-status">Waiting for data</span></header>
+        <div class="sim-summary" id="simSummary"></div>
+        <div class="sim-grid">
+          <section class="sim-payment"><div class="desk-toolbar"><h3>Payment rail</h3><p id="simPaymentStatus">Public instructions on the sim.tech home page</p></div><div id="simPaymentRows"></div></section>
+          <section class="sim-chain"><div class="desk-toolbar"><h3>On-chain</h3><p id="simChainStatus">Public Solana RPC · SIMULATION token + SOL destination</p></div><div id="simChainRows"></div></section>
+        </div>
+        <details class="desk-source"><summary>Sources &amp; limits</summary><pre id="simSourceText"></pre></details>
       </section>
 
       <section class="skills-rollout" aria-label="Skills rollout status">

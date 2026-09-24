@@ -8,6 +8,7 @@ import { initCompactView } from "./compact-view.js";
 import { renderProvenance, sourceDescription } from "./provenance.js";
 import { initTrixDesk, renderTrixDesk } from "./trix-desk.js";
 import { renderDibziDesk } from "./dibzi-desk.js";
+import { renderSimDesk } from "./sim-desk.js";
 import { initOverview, renderOverview } from "./overview.js";
 import { createChebyshevTone } from "./chebyshev-audio.js";
 import {
@@ -1180,8 +1181,9 @@ if (s.treasuryRpcOk) {
         `Distinct wallets that received a mining reward in the last 60 minutes (TRIX surface + on-chain payout ledger). Not all miners are paid every hour and unpaid claims are invisible on-chain, so this is a floor, not an official census. ${mining?.miners60mAt ? `Estimated at ${mining.miners60mAt}.` : ""}${mining?.silentSince ? ` Last payout ${mining.silentSince}.` : ""}`;
     }
   }
-  renderTrixDesk(latest);
+renderTrixDesk(latest);
   renderDibziDesk(latest);
+  renderSimDesk(latest);
   renderSettlementStatus(s);
   renderKeySale(s);
   renderKey9g(s);
@@ -2522,8 +2524,9 @@ async function boot() {
   // Install retries even when the first request fails.
   setInterval(() => {
     if (document.visibilityState === "visible") {
-      renderTrixDesk(lastLatest);
+renderTrixDesk(lastLatest);
       renderDibziDesk(lastLatest);
+      renderSimDesk(lastLatest);
       pollNow();
     }
   }, 15_000);

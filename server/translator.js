@@ -133,6 +133,7 @@ export function inferRank(e = {}) {
     return "note";
   }
   if (e.kind === "version") return /mcp|plug-in|contract/i.test(blob) ? "note" : "spike";
+  if (e.kind === "sim") return /deadline|payrail|destination/i.test(blob) ? "move" : "note";
   if (e.kind === "health") {
     if (/unhealthy|degrad|down|fail/i.test(blob)) return "spike";
     return "note";
@@ -1652,6 +1653,10 @@ export function translate(previous, current) {
     );
   }
 
+  // SIM / sim.tech public surface + on-chain changes (site version, payment framing, token activity).
+  const simEvt = simEvent(previous, current);
+  if (simEvt) events.push(simEvt);
+
   // Measurable agent / queue activity (not invented identity)
   const agentEvt = agentActivityEvent(previous, current);
   if (agentEvt) events.push(agentEvt);
@@ -1661,6 +1666,52 @@ export function translate(previous, current) {
   if (clusterEvt) events.push(clusterEvt);
 
   return events;
+}
+
+function simEvent(previous, current) {
+  const prevSource = (key) => previous.sources?.[key] || {};
+  const currSource = (key) => current.sources?.[key] || {};
+  const site = currSource("sim.site");
+  const front = currSource("sim.front");
+  const chain = currSource("sim.chain");
+  const bits = [];
+  const prevVer = prevSource("sim.site").siteVersion;
+  const currVer = site.siteVersion;
+  if (isNumber(prevVer) && isNumber(currVer) && prevVer !== currVer) {
+    bits.push(`site version ${prevVer} → ${currVer}`);
+  }
+  const prevFrontFp = prevSource("sim.front").fingerprint;
+  const currFrontFp = front.fingerprint;
+  if (prevFrontFp && currFrontFp && prevFrontFp !== currFrontFp) {
+    const prevDeadline = prevSource("sim.front").deadline;
+    const currDeadline = front.deadline;
+    if (prevDeadline && currDeadline && prevDeadline !== currDeadline) {
+      bits.push(`payment deadline moved to ${String(currDeadline).slice(0, 10)}`);
+    } else {
+      bits.push("home payment framing changed");
+    }
+  }
+  const prevChainFp = prevSource("sim.chain").fingerprint;
+  const currChainFp = chain.fingerprint;
+  if (prevChainFp && currChainFp && prevChainFp !== currChainFp) {
+    bits.push("SIM mint or SOL rail saw a new signature");
+  }
+  if (!bits.length) return null;
+  const rank = /deadline|payrail|destination/i.test(bits.join(" ")) ? "move" : "note";
+  return event({
+    kind: "sim",
+    rank,
+    title: "SIMULATION surface moved",
+    summary: `Public sim.tech + Solana chain observations: ${bits.join(" · ")}. No scoreboard kept — the sim.tech leaderboard requires an X OAuth session.`,
+    details: {
+      siteVersion: currVer ?? null,
+      simSupply: chain.simSupply ?? null,
+      mintLatestAt: chain.mintLatestAt ?? null,
+      destLatestAt: chain.destLatestAt ?? null,
+      deadline: front.deadline ?? null,
+      bits,
+    },
+  });
 }
 
 function agentActivityEvent(previous, current) {

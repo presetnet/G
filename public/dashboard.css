@@ -106,6 +106,28 @@
 .dibzi-desk a:hover, .dibzi-desk a:focus-visible { color: #e1ffad; }
 .dibzi-desk .desk-table td { font-size: .7rem; }
 .dibzi-desk .desk-table td small { display: block; }
+.sim-desk.panel { padding: 0; margin-bottom: 1.25rem; min-width: 0; background: #111518; border: 1px solid #304047; border-radius: 12px; box-shadow: none; overflow: clip; }
+.sim-desk .desk-header { border-bottom: 1px solid #26353a; }
+.sim-desk .eyebrow, .sim-desk .desk-status { color: #c9a7ff; }
+.sim-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; padding: 1rem 1.25rem; border-bottom: 1px solid #26353a; }
+.sim-stat { display: grid; gap: .25rem; min-width: 0; padding: .7rem .75rem; border: 1px solid #26353a; border-radius: 7px; background: #151d20; }
+.sim-stat b { color: #e4d8ff; font: 500 .86rem var(--font-mono); overflow-wrap: anywhere; }
+.sim-stat small { color: #8da5a2; font: .6rem/1.4 var(--font-mono); }
+.sim-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.25rem; padding: 0 1.25rem .75rem; }
+.sim-grid > section { min-width: 0; }
+.sim-grid .desk-toolbar { padding-bottom: .55rem; }
+.sim-pay-rail { display: grid; gap: .5rem; }
+.sim-pay-rail span { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .6rem; padding: .6rem .7rem; border: 1px solid #26353a; border-radius: 7px; background: #151d20; color: #8da5a2; font: .62rem var(--font-mono); word-break: break-all; }
+.sim-pay-rail b { color: #f3d88a; }
+.sim-pay-rail a { color: #c9a7ff; }
+.sim-honesty { color: #7d8c98; font: .6rem/1.5 var(--font-mono); padding: .25rem 0 0; }
+.sim-chain-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .55rem; }
+.sim-chain-grid article { min-width: 0; padding: .65rem .7rem; border: 1px solid #36434a; border-radius: 7px; background: linear-gradient(135deg, #1a1c28, #15191d); }
+.sim-chain-grid strong { display: block; overflow: hidden; color: #e4d8ff; font: 600 .72rem var(--font-ui); text-overflow: ellipsis; white-space: nowrap; }
+.sim-chain-grid b { display: block; margin-top: .3rem; color: #f3d88a; font: 500 .72rem var(--font-mono); overflow-wrap: anywhere; }
+.sim-chain-grid small { display: block; margin-top: .28rem; overflow: hidden; color: #8da5a2; font: .58rem/1.4 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.sim-desk a { color: #c9a7ff; }
+.sim-desk a:hover, .sim-desk a:focus-visible { color: #e4d6ff; }
 .audio-lab { margin-top: 1rem; }
 .audio-lab-copy { max-width: 72rem; margin: .75rem 0 0; color: var(--muted); font: .76rem/1.55 var(--font-mono); }
 .audio-lab-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: 1rem; color: var(--muted); font: .68rem var(--font-mono); }
@@ -227,6 +249,8 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   .dibzi-about { padding-left: .8rem; padding-right: .8rem; }
   .dibzi-about-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dibzi-sales-feed { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sim-grid { grid-template-columns: minmax(0,1fr); }
+  .sim-chain-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 700px) {
   .shell { padding: 1rem .8rem 1.5rem; }
@@ -253,6 +277,8 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   .desk-source { padding: 0 .8rem; }
   .dibzi-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: .8rem; }
   .dibzi-grid { padding: 0 .8rem .7rem; gap: .6rem; }
+  .sim-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: .8rem; }
+  .sim-grid { padding: 0 .8rem .7rem; gap: .6rem; }
   .desk-secondary { display: none; }
   .desk-table { font-size: .72rem; }
   .desk-table th { font-size: .58rem; }
@@ -287,6 +313,10 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   .dibzi-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem; }
   .dibzi-stat { padding: .55rem; }
   .dibzi-stat b { font-size: .85rem; }
+  .sim-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem; }
+  .sim-stat { padding: .55rem; }
+  .sim-stat b { font-size: .78rem; }
+  .sim-chain-grid { grid-template-columns: 1fr; }
   .pack-type-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .shop-types summary small { display: block; margin: .4rem 0 0; }
 }

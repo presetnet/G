@@ -4445,6 +4445,227 @@ export async function sniffTrixPrivacy() {
   }
 }
 
+// SIM / sim.tech ("THE SIMULATION") — Jimmy Edgar's public pay-to-enter stunt.
+// Public surfaces only: site settings JSON, the home page's payment framing, and
+// mainnet Solana reads (SIM token supply + the SOL destination wallet). No
+// leaderboard — the score page requires an X OAuth session. The encrypted ETH
+// rail ("0.003 ETH to void.eth") is a SEPOLIA testnet instruction on chain
+// 11155111; the SOL rail is mainnet.
+const SIM_BASE_URL = "https://sim.tech";
+const SIM_TIMEOUT_MS = 6_000;
+const SIM_TOKEN_MINT = "CZNZLxbSB3VRTSZR5TH9FKozh2RGjrZGGUAANE8JTRiX";
+const SIM_SOL_DESTINATION = "BjLoeUtRq1QBLBWcTWgUFFfj75BsrcESZMu6F1DrMV9C";
+const SIM_ETH_DESTINATION = "void.eth";
+const SIM_HOME_SOURCE_URL = `${SIM_BASE_URL}/`;
+const SIM_SITE_SOURCE_URL = `${SIM_BASE_URL}/api/site`;
+const SIM_SESSION_SOURCE_URL = `${SIM_BASE_URL}/api/session`;
+const SIM_CHAIN_SOURCE_URL = `https://solscan.io/token/${SIM_TOKEN_MINT}`;
+const SIM_PAYMENT_DEADLINE_MS = Date.parse("2026-09-25T20:00:00-04:00");
+
+export async function sniffSimSite() {
+  const started = Date.now();
+  try {
+    const [site, session] = await Promise.all([
+      fetchJson(SIM_SITE_SOURCE_URL, { timeoutMs: SIM_TIMEOUT_MS }),
+      fetchJson(SIM_SESSION_SOURCE_URL, { timeoutMs: SIM_TIMEOUT_MS }),
+    ]);
+    const payload = site.json && typeof site.json === "object" ? site.json : {};
+    const version = typeof payload.version === "number" ? payload.version : null;
+    const sections = payload.sections && typeof payload.sections === "object"
+      ? payload.sections
+      : null;
+    const ratesRaw = payload.rates && typeof payload.rates === "object" ? payload.rates : null;
+    const sessionPayload = session.json && typeof session.json === "object" ? session.json : {};
+    const configured = sessionPayload.configured === true;
+    const usable = site.ok && version !== null;
+    const rates = ratesRaw
+      ? {
+          like: dibziNumber(ratesRaw.like),
+          reply: dibziNumber(ratesRaw.reply),
+          repost: dibziNumber(ratesRaw.repost),
+          mention: dibziNumber(ratesRaw.mention),
+          payment: dibziNumber(ratesRaw.payment),
+        }
+      : null;
+    return {
+      source: "sim.site",
+      ok: usable,
+      status: site.status,
+      ms: Date.now() - started,
+      checkedAt: new Date().toISOString(),
+      sourceUrl: SIM_SITE_SOURCE_URL,
+      siteVersion: version,
+      sections,
+      configured,
+      rates,
+      fingerprint: usable
+        ? simpleHash(JSON.stringify({ version, sections, configured, rates }))
+        : null,
+      reason: usable ? null : `HTTP ${site.status || 0}`,
+    };
+  } catch (error) {
+    return {
+      source: "sim.site",
+      ok: false,
+      status: 0,
+      ms: Date.now() - started,
+      checkedAt: new Date().toISOString(),
+      sourceUrl: SIM_SITE_SOURCE_URL,
+      siteVersion: null,
+      sections: null,
+      configured: false,
+      rates: null,
+      fingerprint: null,
+      reason: error?.message || String(error),
+    };
+  }
+}
+
+export async function sniffSimFront() {
+  const started = Date.now();
+  try {
+    const res = await fetchJson(SIM_HOME_SOURCE_URL, { timeoutMs: SIM_TIMEOUT_MS });
+    const html = String(res.text || "");
+    const pageAvailable = res.ok && html.length > 200;
+    const deadlineRaw = (html.match(/\bdatetime="([^"]+)"/) || [])[1] || null;
+    const deadlineAt = deadlineRaw ? Date.parse(deadlineRaw) : null;
+    const deadlineFromPage = Number.isFinite(deadlineAt)
+      ? new Date(deadlineAt).toISOString()
+      : null;
+    const markers = {
+      simulation: html.includes("THE SIMULATION"),
+      unreality: html.includes("UNREALITY"),
+      xmoney: html.includes("XMONEY"),
+      xmoneyPayrail: html.includes("$8") && html.includes("@XMONEY"),
+      ethVoidRail: html.includes(SIM_ETH_DESTINATION),
+      solDestination: html.includes(SIM_SOL_DESTINATION),
+      deadline: deadlineFromPage !== null && html.includes("deadline"),
+      hasCountdown: html.includes("sim-countdown") || /countdown/i.test(html),
+      ethRailSepolia: html.includes("11155111") || html.includes("sepolia"),
+    };
+    const brand = markers.simulation && markers.unreality
+      ? "THE SIMULATION / UNREALITY / XMONEY"
+      : pageAvailable ? "sim.tech home page (brand markers incomplete)" : null;
+    return {
+      source: "sim.front",
+      ok: pageAvailable,
+      status: res.status,
+      ms: Date.now() - started,
+      checkedAt: new Date().toISOString(),
+      sourceUrl: SIM_HOME_SOURCE_URL,
+      fingerprint: pageAvailable ? simpleHash(JSON.stringify(markers)) : null,
+      brand,
+      paymentRail: pageAvailable
+        ? {
+            sol: SIM_SOL_DESTINATION,
+            solAmountSol: markers.solDestination ? 0.068 : null,
+            eth: SIM_ETH_DESTINATION,
+            ethAmount: markers.ethVoidRail ? "0.003" : null,
+            xmoneyUsd: markers.xmoneyPayrail ? 8 : null,
+          }
+        : null,
+      deadline: deadlineFromPage || null,
+      deadlineSource: deadlineRaw || null,
+      deadlineFallbackAt: Number.isFinite(SIM_PAYMENT_DEADLINE_MS)
+        ? new Date(SIM_PAYMENT_DEADLINE_MS).toISOString()
+        : null,
+      markers,
+      reason: pageAvailable ? null : `Home page unavailable${res.status ? ` · HTTP ${res.status}` : ""}`,
+    };
+  } catch (error) {
+    return {
+      source: "sim.front",
+      ok: false,
+      status: 0,
+      ms: Date.now() - started,
+      checkedAt: new Date().toISOString(),
+      sourceUrl: SIM_HOME_SOURCE_URL,
+      fingerprint: null,
+      brand: null,
+      paymentRail: null,
+      deadline: null,
+      deadlineSource: null,
+      deadlineFallbackAt: Number.isFinite(SIM_PAYMENT_DEADLINE_MS)
+        ? new Date(SIM_PAYMENT_DEADLINE_MS).toISOString()
+        : null,
+      markers: {},
+      reason: error?.message || String(error),
+    };
+  }
+}
+
+export async function sniffSimChain() {
+  const started = Date.now();
+  try {
+    const [supply, mintSigs, destSigs] = await Promise.all([
+      solanaRpc("getTokenSupply", [SIM_TOKEN_MINT, { commitment: "confirmed" }]),
+      solanaRpc("getSignaturesForAddress", [SIM_TOKEN_MINT, { limit: 1, commitment: "confirmed" }]),
+      solanaRpc("getSignaturesForAddress", [SIM_SOL_DESTINATION, { limit: 1, commitment: "confirmed" }]),
+    ]);
+    const uiAmount = supply?.value?.uiAmount;
+    const decimals = supply?.value?.decimals;
+    const simSupply = Number.isFinite(uiAmount) ? uiAmount : null;
+    const mintLatest = Array.isArray(mintSigs) && mintSigs[0] ? mintSigs[0] : null;
+    const destLatest = Array.isArray(destSigs) && destSigs[0] ? destSigs[0] : null;
+    const usable = simSupply !== null && mintLatest != null && destLatest != null;
+    const mintLatestAt = mintLatest?.blockTime != null
+      ? new Date(mintLatest.blockTime * 1000).toISOString()
+      : null;
+    const destLatestAt = destLatest?.blockTime != null
+      ? new Date(destLatest.blockTime * 1000).toISOString()
+      : null;
+    return {
+      source: "sim.chain",
+      ok: usable,
+      status: usable ? 200 : 0,
+      ms: Date.now() - started,
+      checkedAt: new Date().toISOString(),
+      sourceUrl: SIM_CHAIN_SOURCE_URL,
+      tokenMint: SIM_TOKEN_MINT,
+      simSupply,
+      simDecimals: typeof decimals === "number" ? decimals : null,
+      mintLatestSignature: mintLatest?.signature ?? null,
+      mintLatestAt,
+      destWallet: SIM_SOL_DESTINATION,
+      destLatestSignature: destLatest?.signature ?? null,
+      destLatestAt,
+      fingerprint: usable
+        ? simpleHash(JSON.stringify({ simSupply, mintSig: mintLatest?.signature, destSig: destLatest?.signature }))
+        : null,
+      reason: usable
+        ? null
+        : "Solana RPC did not return supply or signature history",
+    };
+  } catch (error) {
+    return {
+      source: "sim.chain",
+      ok: false,
+      status: 0,
+      ms: Date.now() - started,
+      checkedAt: new Date().toISOString(),
+      sourceUrl: SIM_CHAIN_SOURCE_URL,
+      tokenMint: SIM_TOKEN_MINT,
+      simSupply: null,
+      simDecimals: null,
+      mintLatestSignature: null,
+      mintLatestAt: null,
+      destWallet: SIM_SOL_DESTINATION,
+      destLatestSignature: null,
+      destLatestAt: null,
+      fingerprint: null,
+      reason: error?.message || String(error),
+    };
+  }
+}
+
+function simAttempts() {
+  return [
+    ["sim.site", sniffSimSite()],
+    ["sim.front", sniffSimFront()],
+    ["sim.chain", sniffSimChain()],
+  ];
+}
+
 function trixAttempts(previous) {
   return [
     ["trix.geoff", sniffTrixGeoff({ previous: previous?.sources?.["trix.geoff"] || null })],
@@ -4478,6 +4699,7 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
     ["geoff.public.surfaces", sniffGeoffPublicSurfaces()],
     ["geoff.subscription", sniffGeoffSubscription()],
     ...trixAttempts(previous),
+    ...simAttempts(),
     ["stacknet.health", sniffStacknetHealth()],
     ["stacknet.root", sniffStacknetRoot()],
     ["stacknet.network", sniffStacknetNetwork()],
@@ -4786,7 +5008,7 @@ export async function runMinuteSniff({ previous = null } = {}) {
   const started = Date.now();
   // Reserve the shared slots for all TRIX stages, including follow-up histories.
   // Stacknet's 18s clocks start now and include this wait, not an extra 18s later.
-  const trixRead = Promise.all(trixAttempts(previous).map(([source, attempt]) =>
+  const trixRead = Promise.all([...trixAttempts(previous), ...simAttempts()].map(([source, attempt]) =>
     observeSource(source, attempt, previous?.sources?.[source]),
   ));
   const pond0xRead = Promise.all([
