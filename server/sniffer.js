@@ -4461,6 +4461,12 @@ const SIM_SITE_SOURCE_URL = `${SIM_BASE_URL}/api/site`;
 const SIM_SESSION_SOURCE_URL = `${SIM_BASE_URL}/api/session`;
 const SIM_CHAIN_SOURCE_URL = `https://solscan.io/token/${SIM_TOKEN_MINT}`;
 const SIM_PAYMENT_DEADLINE_MS = Date.parse("2026-09-25T20:00:00-04:00");
+// void.eth resolves on mainnet ENS to this address; the rail posts on SEPOLIA (11155111).
+const SIM_ETH_ADDRESS = "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4";
+const SIM_ETH_EXPLORER = "https://eth-sepolia.blockscout.com";
+const SIM_ETH_SOURCE_URL = `${SIM_ETH_EXPLORER}/api/v2/addresses/${SIM_ETH_ADDRESS}/transactions`;
+const SIM_SOL_DEPOSIT_MIN_LAMPORTS = 1_000_000; // 0.001 SOL floor — ignores balance dust/refunds.
+const SIM_SOL_WALLET_SOURCE_URL = `https://solscan.io/account/${SIM_SOL_DESTINATION}`;
 
 export async function sniffSimSite() {
   const started = Date.now();
@@ -4594,26 +4600,74 @@ export async function sniffSimFront() {
   }
 }
 
-export async function sniffSimChain() {
+// Bounded SOL deposit aggregation on the destination wallet's mainnet signatures.
+// Signatures are deduped against a carried ring (knownSigs) and each new tx's
+// pre/postBalances delta at the wallet's index is summed when positive. Totals
+// are carried across polls in the returned source, so a failed read never zeroes
+// the desk — it keeps the last observed totals and reports ok:false.
+async function simSolDepositTotals(previous) {
+  const knownSigs = Array.isArray(previous?.knownSigs) ? previous.knownSigs.slice(0, 700) : [];
+  const payers = Array.isArray(previous?.payers) ? previous.payers.slice(0, 400) : [];
+  let totalLamports = Number.isFinite(previous?.solTotalLamports) ? previous.solTotalLamports : 0;
+  let count = Number.isFinite(previous?.solDepositCount) ? previous.solDepositCount : 0;
+  const sigs = await solanaRpc("getSignaturesForAddress", [
+    SIM_SOL_DESTINATION,
+    { limit: 250, commitment: "confirmed" },
+  ]);
+  if (!Array.isArray(sigs) || sigs.length === 0) return { okAgg: false };
+  const fresh = sigs.filter((s) => s?.signature && !knownSigs.includes(s.signature));
+  let fetched = 0;
+  for (const s of fresh) {
+    if (fetched >= 60) break;
+    fetched += 1;
+    const tx = await solanaRpc("getTransaction", [
+      s.signature,
+      { commitment: "confirmed", maxSupportedTransactionVersion: 0 },
+    ]);
+    const meta = tx?.meta;
+    const keys = tx?.transaction?.message?.accountKeys;
+    if (!meta || !Array.isArray(keys) || meta.err != null) continue;
+    const index = keys.indexOf(SIM_SOL_DESTINATION);
+    if (index < 0) continue;
+    const delta = (meta.postBalances?.[index] || 0) - (meta.preBalances?.[index] || 0);
+    if (delta < SIM_SOL_DEPOSIT_MIN_LAMPORTS) continue;
+    totalLamports += delta;
+    count += 1;
+    const payer = keys[0];
+    if (payer && payer !== SIM_SOL_DESTINATION && !payers.includes(payer)) {
+      payers.push(payer);
+    }
+  }
+  for (const s of fresh) {
+    if (s?.signature && !knownSigs.includes(s.signature)) knownSigs.unshift(s.signature);
+  }
+  if (knownSigs.length > 700) knownSigs.length = 700;
+  return { okAgg: true, totalLamports, count, payers, knownSigs };
+}
+
+export async function sniffSimChain({ previous } = {}) {
   const started = Date.now();
   try {
-    const [supply, mintSigs, destSigs] = await Promise.all([
+    const [supply, mintSigs, destSigs, solAgg] = await Promise.all([
       solanaRpc("getTokenSupply", [SIM_TOKEN_MINT, { commitment: "confirmed" }]),
       solanaRpc("getSignaturesForAddress", [SIM_TOKEN_MINT, { limit: 1, commitment: "confirmed" }]),
       solanaRpc("getSignaturesForAddress", [SIM_SOL_DESTINATION, { limit: 1, commitment: "confirmed" }]),
+      simSolDepositTotals(previous),
     ]);
     const uiAmount = supply?.value?.uiAmount;
     const decimals = supply?.value?.decimals;
     const simSupply = Number.isFinite(uiAmount) ? uiAmount : null;
     const mintLatest = Array.isArray(mintSigs) && mintSigs[0] ? mintSigs[0] : null;
     const destLatest = Array.isArray(destSigs) && destSigs[0] ? destSigs[0] : null;
-    const usable = simSupply !== null && mintLatest != null && destLatest != null;
+    const usable = simSupply !== null && mintLatest != null && destLatest != null && solAgg.okAgg;
     const mintLatestAt = mintLatest?.blockTime != null
       ? new Date(mintLatest.blockTime * 1000).toISOString()
       : null;
     const destLatestAt = destLatest?.blockTime != null
       ? new Date(destLatest.blockTime * 1000).toISOString()
       : null;
+    const solTotalLamports = Number.isFinite(solAgg.totalLamports) ? solAgg.totalLamports : 0;
+    const solDepositCount = Number.isFinite(solAgg.count) ? solAgg.count : 0;
     return {
       source: "sim.chain",
       ok: usable,
@@ -4629,8 +4683,20 @@ export async function sniffSimChain() {
       destWallet: SIM_SOL_DESTINATION,
       destLatestSignature: destLatest?.signature ?? null,
       destLatestAt,
+      solDepositsSol: solTotalLamports / 1_000_000_000,
+      solDepositCount,
+      solUniquePayers: Array.isArray(solAgg.payers) ? solAgg.payers.length : 0,
+      solTotalLamports,
+      payers: Array.isArray(solAgg.payers) ? solAgg.payers : [],
+      knownSigs: Array.isArray(solAgg.knownSigs) ? solAgg.knownSigs : [],
       fingerprint: usable
-        ? simpleHash(JSON.stringify({ simSupply, mintSig: mintLatest?.signature, destSig: destLatest?.signature }))
+        ? simpleHash(JSON.stringify({
+            simSupply,
+            mintSig: mintLatest?.signature,
+            destSig: destLatest?.signature,
+            solLamports: solTotalLamports,
+            solCount: solDepositCount,
+          }))
         : null,
       reason: usable
         ? null
@@ -4652,17 +4718,129 @@ export async function sniffSimChain() {
       destWallet: SIM_SOL_DESTINATION,
       destLatestSignature: null,
       destLatestAt: null,
+      // Carry the last observed SOL totals forward; a read error must never zero them.
+      solDepositsSol: Number.isFinite(previous?.solTotalLamports) ? previous.solTotalLamports / 1_000_000_000 : null,
+      solDepositCount: Number.isFinite(previous?.solDepositCount) ? previous.solDepositCount : null,
+      solUniquePayers: Array.isArray(previous?.payers) ? previous.payers.length : null,
+      solTotalLamports: Number.isFinite(previous?.solTotalLamports) ? previous.solTotalLamports : null,
+      payers: Array.isArray(previous?.payers) ? previous.payers : [],
+      knownSigs: Array.isArray(previous?.knownSigs) ? previous.knownSigs : [],
       fingerprint: null,
       reason: error?.message || String(error),
     };
   }
 }
 
-function simAttempts() {
+// Sepolia ETH rail totals from the public Blockscout v2 API (keyless). Pages the
+// address's transaction list newest-first (no historic-sum endpoint; `limit` is
+// not a supported param here), dedupes by tx hash, sums `value` wei of incoming
+// `ok` coin transfers, and tracks unique senders. Stops as soon as a page adds
+// nothing new, so idle polls cost one request; increments ride carried state.
+export async function sniffSimEth({ previous } = {}) {
+  const started = Date.now();
+  const knownHashes = Array.isArray(previous?.ethKnownHashes) ? previous.ethKnownHashes.slice(0, 600) : [];
+  const senders = Array.isArray(previous?.ethSenders) ? previous.ethSenders.slice(0, 400) : [];
+  let totalWei = Number.isFinite(previous?.ethTotalWei) ? previous.ethTotalWei : 0;
+  let count = Number.isFinite(previous?.ethDepositCount) ? previous.ethDepositCount : 0;
+  let latestHash = typeof previous?.ethLatestHash === "string" ? previous.ethLatestHash : null;
+  try {
+    let cursor = null;
+    let pages = 0;
+    let caughtUp = false;
+    while (pages < 6 && !caughtUp) {
+      const url = cursor
+        ? `${SIM_ETH_SOURCE_URL}?${new URLSearchParams(cursor).toString()}`
+        : SIM_ETH_SOURCE_URL;
+      const res = await fetchJson(url, { timeoutMs: 8_000 });
+      const items = res.json && Array.isArray(res.json.items) ? res.json.items : null;
+      if (!res.ok || !items) break;
+      let added = 0;
+      for (const item of items) {
+        const hash = item?.hash;
+        if (!hash || knownHashes.includes(hash)) continue;
+        if (item?.result !== "ok" || item?.to?.hash !== SIM_ETH_ADDRESS) {
+          knownHashes.unshift(hash);
+          continue;
+        }
+        const wei = Number(item?.value);
+        if (Number.isFinite(wei) && wei > 0) {
+          totalWei += wei;
+          count += 1;
+          const from = item?.from?.hash;
+          if (from && !senders.includes(from)) senders.push(from);
+          latestHash = hash;
+        }
+        knownHashes.unshift(hash);
+        added += 1;
+      }
+      if (knownHashes.length > 600) knownHashes.length = 600;
+      cursor = res.json?.next_page_params || null;
+      pages += 1;
+      if (added === 0) caughtUp = true;
+    }
+    const usable = pages > 0;
+    return {
+      source: "sim.eth",
+      ok: usable,
+      status: usable ? 200 : 0,
+      ms: Date.now() - started,
+      checkedAt: new Date().toISOString(),
+      sourceUrl: SIM_ETH_SOURCE_URL,
+      ethName: SIM_ETH_DESTINATION,
+      ethAddress: SIM_ETH_ADDRESS,
+      ethChain: "sepolia (11155111)",
+      ethDepositsEth: totalWei / 1e18,
+      ethDepositCount: count,
+      ethUniqueSenders: senders.length,
+      ethLatestHash: latestHash,
+      ethPages: pages,
+      ethTotalWei: totalWei,
+      ethKnownHashes: knownHashes,
+      ethSenders: senders,
+      fingerprint: usable
+        ? simpleHash(JSON.stringify({ wei: totalWei, count, latestHash }))
+        : null,
+      reason: usable ? null : "Sepolia explorer returned no transaction history",
+    };
+  } catch (error) {
+    return {
+      source: "sim.eth",
+      ok: false,
+      status: 0,
+      ms: Date.now() - started,
+      checkedAt: new Date().toISOString(),
+      sourceUrl: SIM_ETH_SOURCE_URL,
+      ethName: SIM_ETH_DESTINATION,
+      ethAddress: SIM_ETH_ADDRESS,
+      ethChain: "sepolia (11155111)",
+      ethDepositsEth: previous?.ethTotalWei != null ? previous.ethTotalWei / 1e18 : null,
+      ethDepositCount: Number.isFinite(previous?.ethDepositCount) ? previous.ethDepositCount : null,
+      ethUniqueSenders: Array.isArray(previous?.ethSenders) ? previous.ethSenders.length : null,
+      ethLatestHash: latestHash,
+      ethPages: 0,
+      ethTotalWei: previous?.ethTotalWei != null ? previous.ethTotalWei : null,
+      ethKnownHashes: knownHashes,
+      ethSenders: senders,
+      fingerprint: null,
+      reason: error?.message || String(error),
+    };
+  }
+}
+
+function simAttempts(previous) {
   return [
     ["sim.site", sniffSimSite()],
     ["sim.front", sniffSimFront()],
-    ["sim.chain", sniffSimChain()],
+    ["sim.chain", sniffSimChain({ previous })],
+    ["sim.eth", sniffSimEth({ previous })],
+  ];
+}
+
+function simMinuteAttempts(previous) {
+  return [
+    ["sim.site", sniffSimSite()],
+    ["sim.front", sniffSimFront()],
+    ["sim.chain", sniffSimChain({ previous })],
   ];
 }
 
@@ -4699,7 +4877,7 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
     ["geoff.public.surfaces", sniffGeoffPublicSurfaces()],
     ["geoff.subscription", sniffGeoffSubscription()],
     ...trixAttempts(previous),
-    ...simAttempts(),
+    ...simAttempts(previous),
     ["stacknet.health", sniffStacknetHealth()],
     ["stacknet.root", sniffStacknetRoot()],
     ["stacknet.network", sniffStacknetNetwork()],
@@ -5008,7 +5186,7 @@ export async function runMinuteSniff({ previous = null } = {}) {
   const started = Date.now();
   // Reserve the shared slots for all TRIX stages, including follow-up histories.
   // Stacknet's 18s clocks start now and include this wait, not an extra 18s later.
-  const trixRead = Promise.all([...trixAttempts(previous), ...simAttempts()].map(([source, attempt]) =>
+  const trixRead = Promise.all([...trixAttempts(previous), ...simMinuteAttempts(previous)].map(([source, attempt]) =>
     observeSource(source, attempt, previous?.sources?.[source]),
   ));
   const pond0xRead = Promise.all([

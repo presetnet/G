@@ -50,6 +50,7 @@ export function renderSimDesk(latest) {
   const site = latest?.sources?.["sim.site"];
   const front = latest?.sources?.["sim.front"];
   const chain = latest?.sources?.["sim.chain"];
+  const eth = latest?.sources?.["sim.eth"];
   const status = document.getElementById("simDeskStatus");
   const summary = document.getElementById("simSummary");
   const paymentRows = document.getElementById("simPaymentRows");
@@ -60,7 +61,8 @@ export function renderSimDesk(latest) {
   const siteLive = site?.ok === true;
   const frontLive = front?.ok === true;
   const chainLive = chain?.ok === true;
-  status.textContent = [sourceState(site), sourceState(front), sourceState(chain)].join(" · ");
+  const ethLive = eth?.ok === true;
+  status.textContent = [sourceState(site), sourceState(front), sourceState(chain), sourceState(eth)].join(" · ");
 
   const rates = site?.rates || {};
   const ladder = [
@@ -88,11 +90,13 @@ export function renderSimDesk(latest) {
       ].join("") : ""}<div class="sim-honesty"><span>The scoreboard requires an X OAuth session — no public leaderboard is kept here. ETH receipts on chain 11155111 (Sepolia) are testnet; the SOL rail is mainnet.</span></div></div>`
     : `<div class="desk-empty"><span>[ - ]</span><span>${esc(front?.reason || "Waiting for the public sim.tech home page")}</span></div>`;
 
-  chainRows.innerHTML = chainLive
+  chainRows.innerHTML = (chainLive || ethLive || chain?.solDepositsSol != null || eth?.ethDepositsEth != null)
     ? `<div class="sim-chain-grid">
-        <article><strong>SIM supply</strong><b>${chain.simSupply != null ? fmt(chain.simSupply, 6) : "--"}</b><small>mint ${esc(short(chain.tokenMint))} · not linked (token surface)</small></article>
-        <article><strong>SIM mint activity</strong><b>${stamp(chain.mintLatestAt)}</b><small>${chain.mintLatestSignature ? txLink(chain.mintLatestSignature) : "no signature read"}</small></article>
-        <article><strong>SOL rail activity</strong><b>${stamp(chain.destLatestAt)}</b><small>${chain.destLatestSignature ? `${txLink(chain.destLatestSignature)} · ${walletLink(chain.destWallet)}` : "no signature read"}</small></article>
+        <article><strong>SIM supply</strong><b>${chain?.simSupply != null ? fmt(chain.simSupply, 6) : "--"}</b><small>mint ${esc(short(chain?.tokenMint))} · not linked (token surface)</small></article>
+        <article><strong>SIM mint activity</strong><b>${stamp(chain?.mintLatestAt)}</b><small>${chain?.mintLatestSignature ? txLink(chain.mintLatestSignature) : "no signature read"}</small></article>
+        <article><strong>SOL rail activity</strong><b>${stamp(chain?.destLatestAt)}</b><small>${chain?.destLatestSignature ? `${txLink(chain.destLatestSignature)} · ${walletLink(chain.destWallet)}` : "no signature read"}</small></article>
+        <article><strong>SOL received</strong><b>${chain?.solDepositsSol != null ? `${fmt(chain.solDepositsSol, 4)} SOL` : "--"}</b><small>${chain?.solDepositCount != null ? `${fmt(chain.solDepositCount)} payments · ${fmt(chain.solUniquePayers)} unique payers` : "mainnet balance deltas"}${chain?.ok !== true ? " · carried" : ""}</small><small>incoming ${walletLink(chain?.destWallet)} · ${esc(short(chain?.destWallet))}</small></article>
+        <article><strong>ETH received</strong><b>${eth?.ethDepositsEth != null ? `${fmt(eth.ethDepositsEth, 4)} test ETH` : "--"}</b><small>${eth?.ethDepositCount != null ? `${fmt(eth.ethDepositCount)} txs · ${eth.ethUniqueSenders} senders` : "Sepolia explorer count"}${eth?.ok !== true ? " · carried" : ""}</small><small>void.eth → ${esc(short(SIM_ETH_ADDR))} · Sepolia ${eth?.ethPages ? `(paged ×${eth.ethPages})` : "11155111"}</small></article>
       </div>`
     : `<div class="desk-empty"><span>[ - ]</span><span>${esc(chain?.reason || "Waiting for the public Solana RPC")}</span></div>`;
 
@@ -104,11 +108,14 @@ export function renderSimDesk(latest) {
     `Home page: ${front?.sourceUrl || "https://sim.tech/"}`,
     `Chain: ${chain?.sourceUrl || "https://solscan.io/token/CZNZLxbSB3VRTSZR5TH9FKozh2RGjrZGGUAANE8JTRiX"}`,
     `SOL destination: ${chain?.destWallet || "BjLoeUtRq1QBLBWcTWgUFFfj75BsrcESZMu6F1DrMV9C"}`,
+    `ETH rail: ${eth?.sourceUrl || `https://eth-sepolia.blockscout.com/api/v2/addresses/${SIM_ETH_ADDR}/transactions`}`,
     `Deadline: ${front?.deadline ?? (front?.deadlineFallbackAt || "2026-09-25T20:00:00-04:00")}`,
     `Checked: ${site?.checkedAt || "unknown"}`,
     `No leaderboard kept: the sim.tech score page requires X OAuth.`,
+    `Deposit totals: SOL rail sums mainnet balance deltas (unique payer wallets, not people); ETH sums Sepolia testnet receipts. Both are explorer/RPC observations, not sim.tech's own books.`,
   ].filter(Boolean).join("\n");
 }
 
 const SIM_SOL_DEST = "BjLoeUtRq1QBLBWcTWgUFFfj75BsrcESZMu6F1DrMV9C";
 const SIM_ETH_DEST = "void.eth";
+const SIM_ETH_ADDR = "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4";

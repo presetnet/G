@@ -1696,6 +1696,18 @@ function simEvent(previous, current) {
   if (prevChainFp && currChainFp && prevChainFp !== currChainFp) {
     bits.push("SIM mint or SOL rail saw a new signature");
   }
+  const prevEthFp = prevSource("sim.eth").fingerprint;
+  const currEthFp = currSource("sim.eth").fingerprint;
+  if (prevEthFp && currEthFp && prevEthFp !== currEthFp) {
+    const currEthCount = currSource("sim.eth").ethDepositCount;
+    const currEthTotal = currSource("sim.eth").ethDepositsEth;
+    const ethTotal = Number.isFinite(currEthTotal) ? Math.round(currEthTotal * 1000) / 1000 : null;
+    bits.push(
+      ethTotal !== null
+        ? `Sepolia ETH rail grew to ${ethTotal} test ETH (${currEthCount} deposits)`
+        : "Sepolia ETH rail changed",
+    );
+  }
   if (!bits.length) return null;
   const rank = /deadline|payrail|destination/i.test(bits.join(" ")) ? "move" : "note";
   return event({
