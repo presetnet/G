@@ -69,13 +69,27 @@ const context = vm.createContext({
         ] });
         const destSigs = destSigsMode === 2
           ? [{ signature: "dest-sig2", err: null, blockTime: now / 1000 - 600 }, { signature: "dest-sig", err: null, blockTime: now / 1000 - 120 }]
-          : [{ signature: "dest-sig", err: null, blockTime: now / 1000 - 120 }];
+          : destSigsMode === 3
+            ? [{ signature: "seed-sig", err: null, blockTime: now / 1000 - 60 }, { signature: "dest-sig", err: null, blockTime: now / 1000 - 120 }]
+            : [{ signature: "dest-sig", err: null, blockTime: now / 1000 - 120 }];
         return respond(200, { result: destSigs });
       }
       if (rpc.method === "getTransaction") {
         if (rpc429) return respond(429, { error: { message: "Solana RPC HTTP 429" } });
         assert.equal(rpc.params[1]?.commitment, "confirmed");
         assert.equal(rpc.params[1]?.maxSupportedTransactionVersion, 0);
+        if (rpc.params[0] === "seed-sig") {
+          return respond(200, {
+            result: {
+              slot: 460000300, blockTime: Math.floor(now / 1000) - 60, err: null,
+              meta: {
+                preBalances: [2000000000, 59513415452, 0, 1000000],
+                postBalances: [2000000000, 139513415452, 0, 1000000],
+              },
+              transaction: { message: { accountKeys: ["9GjEVnpWiLe2uknUmtaH6DSfgcBvL66DtSKGREXDctZU", SIM_SOL_DEST, "11111111111111111111111111111111", "ComputeBudget111111111111111111111111111111"] } },
+            },
+          });
+        }
         if (rpc.params[0] === "dest-sig2") {
           return respond(200, {
             result: {
@@ -103,9 +117,10 @@ const context = vm.createContext({
     }
     if (url.origin === "https://eth-sepolia.blockscout.com") {
       const items = [
-        { hash: "0xaaa", result: "ok", value: "3000000000000000", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x96C5161617323A56434753Cbe43BAd516ADc7f48" }, timestamp: "2026-09-24T11:10:00.000Z" },
+        { hash: "0xaaa", result: "pending", value: "3000000000000000", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x96C5161617323A56434753Cbe43BAd516ADc7f48" }, timestamp: "2026-09-24T11:10:00.000Z" },
         { hash: "0xbbb", result: "ok", value: "100000000000000000", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x686bab3F162e72F903fA9DA42D1726e5D01BB46A" }, timestamp: "2026-09-24T11:14:12.000Z" },
         { hash: "0xccc", result: "ok", value: "0", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x1111" }, timestamp: "2026-09-24T11:00:00.000Z" },
+        { hash: "0xddd", result: "reverted", value: "3000000000000000", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x3333" }, timestamp: "2026-09-24T11:20:00.000Z" },
       ];
       return respond(200, { items, next_page_params: null });
     }
@@ -203,13 +218,29 @@ assert.equal(chain.solTopPayers[0].share, 1);
 assert.ok(chain.solFirstSeenAt);
 assert.equal(chain.solMedianGapSec, null, "a single deposit has no inter-payment gap");
 
+// 3b. Owner/seed wallet (9G) money never surfaces on the SOL payment board.
+destSigsMode = 3;
+const seedChain = await api.sniffSimChain();
+assert.equal(seedChain.ok, true, seedChain.reason || "seed chain ok");
+assert.equal(seedChain.solDepositCount, 1, "seed transfer is not a payment");
+assert.equal(seedChain.solDepositsSol, 68000000 / 1e9, "80 SOL seed stays out of the pot");
+assert.equal(seedChain.solLargestSol, 0.068, "seed transfer is not the largest payment");
+assert.equal(seedChain.solUniquePayers, 1);
+assert.ok(!seedChain.solTopPayers.some((p) => p.wallet === "9GjEVnpWiLe2uknUmtaH6DSfgcBvL66DtSKGREXDctZU"), "9G never on the leaderboard");
+assert.equal(seedChain.solTopPayers.length, 1);
+assert.equal(seedChain.solTopPayers[0].wallet, "6ix1dAxoqNP4VuEANSMmeiefJcJUxaxW9ShjjLnv5Hid");
+assert.ok(!seedChain.solPayerTotals.some((p) => p.w === "9GjEVnpWiLe2uknUmtaH6DSfgcBvL66DtSKGREXDctZU"));
+assert.ok(seedChain.knownSigs.includes("seed-sig"), "excluded sig is still deduped as known");
+destSigsMode = 1;
+
 // 4. Sepolia ETH rail: wei values sum, zero-value and non-incoming items are skipped.
 const eth = await api.sniffSimEth();
 assert.equal(eth.ok, true, eth.reason || "eth ok");
 assert.equal(eth.source, "sim.eth");
 assert.equal(eth.ethAddress, "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4");
 assert.equal(eth.ethDepositCount, 2);
-assert.equal(eth.ethKnownHashes.length, 3); // 2 deposits + 1 zero-value skipped
+assert.equal(eth.ethDepositRows.length, 2, "reverted txs are excluded");
+assert.equal(eth.ethKnownHashes.length, 4); // 2 deposits + 1 zero-value + 1 reverted skipped
 assert.equal(eth.ethUniqueSenders, 2);
 assert.ok(Math.abs(eth.ethDepositsEth - (0.003 + 0.1)) < 1e-12);
 assert.equal(eth.ethLatestHash, "0xbbb");

@@ -4466,6 +4466,8 @@ const SIM_ETH_ADDRESS = "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4";
 const SIM_ETH_EXPLORER = "https://eth-sepolia.blockscout.com";
 const SIM_ETH_SOURCE_URL = `${SIM_ETH_EXPLORER}/api/v2/addresses/${SIM_ETH_ADDRESS}/transactions`;
 const SIM_SOL_DEPOSIT_MIN_LAMPORTS = 1_000_000; // 0.001 SOL floor — ignores balance dust/refunds.
+// Owner/seed wallets that must never appear on the SIM payment leaderboard.
+const SIM_EXCLUDED_PAYERS = new Set(["9GjEVnpWiLe2uknUmtaH6DSfgcBvL66DtSKGREXDctZU"]);
 const SIM_SOL_WALLET_SOURCE_URL = `https://solscan.io/account/${SIM_SOL_DESTINATION}`;
 
 export async function sniffSimSite() {
@@ -4676,12 +4678,13 @@ async function simSolDepositTotals(previous) {
     if (!meta || !Array.isArray(keys) || meta.err != null) continue;
     const index = keys.indexOf(SIM_SOL_DESTINATION);
     if (index < 0) continue;
+    const payer = keys[0];
+    if (payer && SIM_EXCLUDED_PAYERS.has(payer)) continue; // seed/owner money, never on the payment board
     const delta = (meta.postBalances?.[index] || 0) - (meta.preBalances?.[index] || 0);
     if (delta < SIM_SOL_DEPOSIT_MIN_LAMPORTS) continue;
     totalLamports += delta;
     count += 1;
     const tSec = Number.isInteger(tx?.blockTime) ? tx.blockTime : null;
-    const payer = keys[0];
     if (payer && payer !== SIM_SOL_DESTINATION && !payers.includes(payer)) {
       payers.push(payer);
     }
@@ -4902,7 +4905,7 @@ export async function sniffSimEth({ previous } = {}) {
       for (const item of items) {
         const hash = item?.hash;
         if (!hash || knownHashes.includes(hash)) continue;
-        if (item?.result !== "ok" || item?.to?.hash !== SIM_ETH_ADDRESS) {
+        if (["error", "reverted", "dropped", "failed"].includes(item?.result) || item?.to?.hash !== SIM_ETH_ADDRESS) {
           knownHashes.unshift(hash);
           continue;
         }
