@@ -4891,6 +4891,7 @@ export async function sniffSimEth({ previous } = {}) {
   let largestHash = typeof previous?.ethLargestHash === "string" ? previous.ethLargestHash : null;
   let largestAt = typeof previous?.ethLargestAt === "string" ? previous.ethLargestAt : null;
   try {
+    let explorerFallback = null;
     let cursor = null;
     let pages = 0;
     let caughtUp = false;
@@ -4998,6 +4999,7 @@ export async function sniffSimEth({ previous } = {}) {
         if (added === 0) break;
       }
       if (offset > 0) ingested = offset;
+      explorerFallback = offset > 0 ? "v1" : "v1-empty";
     }
     rows.sort((a, b) => a.t - b.t);
     if (rows.length > 300) rows = rows.slice(rows.length - 300);
@@ -5036,6 +5038,7 @@ export async function sniffSimEth({ previous } = {}) {
       ethDepositBars: win.bars,
       ethLatestHash: latestHash,
       ethPages: pages,
+      ethExplorerFallback: explorerFallback,
       ethTotalWei: totalWei,
       ethDepositRows: rows,
       ethFirstSeenSec: firstSeenSec,
@@ -5087,6 +5090,7 @@ export async function sniffSimEth({ previous } = {}) {
       ethDepositBars: win.bars,
       ethLatestHash: latestHash,
       ethPages: 0,
+      ethExplorerFallback: explorerFallback ?? null,
       ethTotalWei: carriedWei > 0 ? carriedWei : null,
       ethDepositRows: rows,
       ethFirstSeenSec: firstSeenSec,

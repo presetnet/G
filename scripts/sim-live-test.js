@@ -263,6 +263,7 @@ assert.equal(eth.ethTopSenders.length, 2);
 assert.equal(eth.ethTopSenders[0].wallet, "0x686bab3F162e72F903fA9DA42D1726e5D01BB46A");
 assert.ok(Math.abs(eth.ethTopSenders[0].share - (0.1 / 0.103)) < 1e-6);
 assert.ok(eth.ethFirstSeenAt);
+assert.equal(eth.ethExplorerFallback, null, "v2 path alone needs no fallback");
 assert.ok(eth.fingerprint && eth.fingerprint.length >= 6);
 
 // 4b. When the v2 explorer page shells out empty, the v1 txlist fallback records deposits.
@@ -271,6 +272,7 @@ const fallbackEth = await api.sniffSimEth();
 v2Empty = false;
 assert.equal(fallbackEth.ok, true, fallbackEth.reason || "fallback eth ok");
 assert.equal(fallbackEth.ethDepositCount, 1, "v1 txlist fallback counts real deposits");
+assert.equal(fallbackEth.ethExplorerFallback, "v1", "fallback marked in the source row");
 assert.ok(Math.abs(fallbackEth.ethDepositsEth - 0.003) < 1e-12);
 assert.equal(fallbackEth.ethLatestHash, "0xaaa");
 assert.equal(fallbackEth.ethUniqueSenders, 1);
