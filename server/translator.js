@@ -1704,8 +1704,8 @@ function simEvent(previous, current) {
     const ethTotal = Number.isFinite(currEthTotal) ? Math.round(currEthTotal * 1000) / 1000 : null;
     bits.push(
       ethTotal !== null
-        ? `Sepolia ETH rail grew to ${ethTotal} test ETH (${currEthCount} deposits)`
-        : "Sepolia ETH rail changed",
+        ? `ETH rail grew to ${ethTotal} ETH (${currEthCount} deposits)`
+        : "ETH rail changed",
     );
   }
   if (!bits.length) return null;

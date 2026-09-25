@@ -1,0 +1,141 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e8]:
+      - heading "Geoff Meter" [level=1] [ref=e9]
+      - paragraph [ref=e10]: independent signal desk
+    - generic [ref=e11]:
+      - navigation "Tracking target" [ref=e12]:
+        - link "Geoff" [ref=e13] [cursor=pointer]:
+          - /url: /
+        - link "Miners" [ref=e14] [cursor=pointer]:
+          - /url: https://mining.aisp.live
+      - generic "Data trust mode" [ref=e15]: desk…
+      - link "Market" [ref=e16] [cursor=pointer]:
+        - /url: /market.html
+      - button "Refresh" [disabled] [ref=e20]
+  - main [ref=e24]:
+    - region "Dashboard overview" [ref=e25]:
+      - generic [ref=e26]:
+        - paragraph [ref=e27]: GEOFF / STACKNET / TRIX / DIBZI / SIM
+        - heading "Signals. Not noise." [level=2] [ref=e28]
+      - status [ref=e29]:
+        - generic [ref=e30]: Connecting
+        - generic [ref=e31]: Checking the shared desk
+    - region "Public visibility overview" [ref=e32]:
+      - generic [ref=e33]:
+        - article [ref=e34]:
+          - heading [level=3] [ref=e35]:
+            - link "Geoff ↗" [ref=e36] [cursor=pointer]:
+              - /url: https://www.geoff.ai/
+          - text: UNAVAILABLE
+          - generic [ref=e37]: 0/0 checks current · not service guarantees
+          - group [ref=e38]:
+            - generic "Source status" [ref=e39]
+            - text: No observations
+        - article [ref=e40]:
+          - heading [level=3] [ref=e41]:
+            - link "StackNet ↗" [ref=e42] [cursor=pointer]:
+              - /url: https://stacknet.magma-rpc.com/health
+          - text: UNAVAILABLE
+          - generic [ref=e43]: 0/0 checks current · not service guarantees
+          - group [ref=e44]:
+            - generic "Source status" [ref=e45]
+            - text: No observations
+        - article [ref=e46]:
+          - heading [level=3] [ref=e47]:
+            - link "TRIX ↗" [ref=e48] [cursor=pointer]:
+              - /url: https://trix.market/
+          - text: UNAVAILABLE
+          - generic [ref=e49]: 0/0 checks current · not service guarantees
+          - group [ref=e50]:
+            - generic "Source status" [ref=e51]
+            - text: No observations
+        - article [ref=e52]:
+          - heading [level=3] [ref=e53]:
+            - link "DIBZI ↗" [ref=e54] [cursor=pointer]:
+              - /url: https://dibzi.ai/
+          - text: UNAVAILABLE
+          - generic [ref=e55]: 0/0 checks current · not service guarantees
+          - group [ref=e56]:
+            - generic "Source status" [ref=e57]
+            - text: No observations
+        - article [ref=e58]:
+          - heading [level=3] [ref=e59]:
+            - link "SIM ↗" [ref=e60] [cursor=pointer]:
+              - /url: https://sim.tech/
+          - text: UNAVAILABLE
+          - generic [ref=e61]: 0/0 checks current · not service guarantees
+          - group [ref=e62]:
+            - generic "Source status" [ref=e63]
+            - text: No observations
+      - generic [ref=e64]:
+        - article [ref=e65]:
+          - heading "DIBZI auctions" [level=3] [ref=e66]
+          - paragraph [ref=e67]: Values unavailable
+          - paragraph [ref=e68]: Highest bid unavailable
+          - generic [ref=e69]: Observed age unknown · not a 24h sales total
+        - article [ref=e70]:
+          - heading "TRIX activity" [level=3] [ref=e71]
+          - paragraph [ref=e72]:
+            - link "Inspect market ↗" [ref=e73] [cursor=pointer]:
+              - /url: https://trix.market/
+          - generic [ref=e74]: "Market: UNAVAILABLE · age unknownGenerations: UNAVAILABLE · age unknown"
+          - paragraph [ref=e75]: Records and receipts in the full desk below.
+        - article [ref=e76]:
+          - heading "SIM · sim.tech" [level=3] [ref=e77]
+          - paragraph [ref=e78]:
+            - link "Inspect sim.tech ↗" [ref=e79] [cursor=pointer]:
+              - /url: https://sim.tech/
+          - generic [ref=e80]: Site v? · no X sessionSIM supply unread · age unknownSOL received unread · ETH (Sepolia) received unreadDeadline not published
+          - paragraph [ref=e81]: Payment rail, on-chain activity, deposit totals, and the countdown in the desk below.
+      - heading "What changed · last 24 hours" [level=3] [ref=e82]
+      - paragraph [ref=e84]: No recent public changes recorded. This does not imply zero activity.
+    - group [ref=e85]:
+      - generic "Public data. Independently observed, not guaranteed." [ref=e86] [cursor=pointer]
+    - generic [ref=e87]:
+      - paragraph [ref=e88]:
+        - generic [ref=e89]: "01"
+        - text: Vitals
+      - button "Compact" [pressed] [ref=e92] [cursor=pointer]
+    - group [ref=e93]:
+      - generic "Public network measurements ＋ expand" [ref=e94] [cursor=pointer]
+    - group [ref=e95]:
+      - generic "TRIX · open full market desk ＋ expand" [ref=e96] [cursor=pointer]
+    - group [ref=e97]:
+      - generic "DIBZI · open full auction desk ＋ expand" [ref=e98] [cursor=pointer]
+      - text: ＋ expand ＋ expand
+    - group [ref=e99]:
+      - generic "SIM · open the simulation desk ＋ expand" [ref=e100] [cursor=pointer]
+    - region "Skills rollout status" [ref=e101]:
+      - generic [ref=e102]:
+        - generic [ref=e103]:
+          - generic [ref=e104]:
+            - generic [ref=e105]: "04"
+            - text: Skills rollout
+          - paragraph [ref=e106]: Watching the public Skills lane
+        - link "open Skills ↗" [ref=e107] [cursor=pointer]:
+          - /url: https://www.geoff.ai/skills
+    - group [ref=e108]:
+      - generic "Experiments · local audio synthesizer ＋ expand" [ref=e109] [cursor=pointer]
+    - group [ref=e110]:
+      - generic "05 Network detail open ＋ expand" [ref=e111] [cursor=pointer]:
+        - generic [ref=e112]: "05"
+        - generic [ref=e113]: Network detail
+        - generic [ref=e114]: open
+        - text: ＋ expand
+      - text: +
+    - group "Value · Token Plan vs field" [ref=e115]:
+      - generic "06 Token plans open ＋ expand" [ref=e116] [cursor=pointer]:
+        - generic [ref=e117]: "06"
+        - generic [ref=e118]: Token plans
+        - generic [ref=e119]: open
+        - text: ＋ expand
+    - group "Feed · ranked diffs only" [ref=e120]:
+      - generic "07 Change log open ＋ expand" [ref=e121] [cursor=pointer]:
+        - generic [ref=e122]: "07"
+        - generic [ref=e123]: Change log
+        - generic [ref=e124]: open
+        - text: ＋ expand
+      - text: +
+    - group [ref=e125]:
+      - generic [ref=e126] [cursor=pointer]

@@ -4449,8 +4449,8 @@ export async function sniffTrixPrivacy() {
 // Public surfaces only: site settings JSON, the home page's payment framing, and
 // mainnet Solana reads (SIM token supply + the SOL destination wallet). No
 // leaderboard — the score page requires an X OAuth session. The encrypted ETH
-// rail ("0.003 ETH to void.eth") is a SEPOLIA testnet instruction on chain
-// 11155111; the SOL rail is mainnet.
+// rail ("0.003 ETH to void.eth") is an Ethereum MAINNET instruction; this desk
+// reads the wallet's mainnet deposits from Blockscout.
 const SIM_BASE_URL = "https://sim.tech";
 const SIM_TIMEOUT_MS = 6_000;
 const SIM_TOKEN_MINT = "CZNZLxbSB3VRTSZR5TH9FKozh2RGjrZGGUAANE8JTRiX";
@@ -4461,9 +4461,9 @@ const SIM_SITE_SOURCE_URL = `${SIM_BASE_URL}/api/site`;
 const SIM_SESSION_SOURCE_URL = `${SIM_BASE_URL}/api/session`;
 const SIM_CHAIN_SOURCE_URL = `https://solscan.io/token/${SIM_TOKEN_MINT}`;
 const SIM_PAYMENT_DEADLINE_MS = Date.parse("2026-09-25T20:00:00-04:00");
-// void.eth resolves on mainnet ENS to this address; the rail posts on SEPOLIA (11155111).
+// void.eth resolves on mainnet ENS to this address; the rail posts on mainnet ETH (chain 1).
 const SIM_ETH_ADDRESS = "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4";
-const SIM_ETH_EXPLORER = "https://eth-sepolia.blockscout.com";
+const SIM_ETH_EXPLORER = "https://eth.blockscout.com";
 const SIM_ETH_SOURCE_URL = `${SIM_ETH_EXPLORER}/api/v2/addresses/${SIM_ETH_ADDRESS}/transactions`;
 const SIM_SOL_DEPOSIT_MIN_LAMPORTS = 1_000_000; // 0.001 SOL floor — ignores balance dust/refunds.
 // Owner/seed wallets that must never appear on the SIM payment leaderboard.
@@ -4870,7 +4870,7 @@ export async function sniffSimChain({ previous } = {}) {
   }
 }
 
-// Sepolia ETH rail totals from the public Blockscout v2 API (keyless). Pages the
+// ETH mainnet rail totals from the public Blockscout v2 API (keyless). Pages the
 // address's transaction list newest-first (no historic-sum endpoint; `limit` is
 // not a supported param here), dedupes by tx hash, sums `value` wei of incoming
 // `ok` coin transfers, and tracks unique senders. Stops as soon as a page adds
@@ -5021,7 +5021,7 @@ export async function sniffSimEth({ previous } = {}) {
       sourceUrl: SIM_ETH_SOURCE_URL,
       ethName: SIM_ETH_DESTINATION,
       ethAddress: SIM_ETH_ADDRESS,
-      ethChain: "sepolia (11155111)",
+      ethChain: "ethereum (1)",
       ethDepositsEth: totalWei / 1e18,
       ethDepositCount: count,
       ethUniqueSenders: senders.length,
@@ -5051,7 +5051,7 @@ export async function sniffSimEth({ previous } = {}) {
       fingerprint: usable
         ? simpleHash(JSON.stringify({ wei: totalWei, count, latestHash }))
         : null,
-      reason: usable ? null : "Sepolia explorer returned no transaction history",
+      reason: usable ? null : "Ethereum explorer returned no transaction history",
     };
   } catch (error) {
     rows.sort((a, b) => a.t - b.t);
@@ -5068,7 +5068,7 @@ export async function sniffSimEth({ previous } = {}) {
       sourceUrl: SIM_ETH_SOURCE_URL,
       ethName: SIM_ETH_DESTINATION,
       ethAddress: SIM_ETH_ADDRESS,
-      ethChain: "sepolia (11155111)",
+      ethChain: "ethereum (1)",
       ethDepositsEth: carriedWei > 0 ? carriedWei / 1e18 : null,
       ethDepositCount: Number.isFinite(previous?.ethDepositCount) ? previous.ethDepositCount : null,
       ethUniqueSenders: Array.isArray(previous?.ethSenders) ? previous.ethSenders.length : null,

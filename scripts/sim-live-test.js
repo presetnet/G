@@ -116,7 +116,7 @@ const context = vm.createContext({
       }
       throw new Error(`Unexpected RPC ${rpc.method}`);
     }
-    if (url.origin === "https://eth-sepolia.blockscout.com") {
+    if (url.origin === "https://eth.blockscout.com") {
       if (url.searchParams.get("module") === "account") {
         return respond(200, {
           status: "1", message: "OK",
@@ -244,7 +244,7 @@ assert.ok(!seedChain.solPayerTotals.some((p) => p.w === "9GjEVnpWiLe2uknUmtaH6DS
 assert.ok(seedChain.knownSigs.includes("seed-sig"), "excluded sig is still deduped as known");
 destSigsMode = 1;
 
-// 4. Sepolia ETH rail: wei values sum, zero-value and non-incoming items are skipped.
+// 4. Ethereum mainnet rail: wei values sum, zero-value and non-incoming items are skipped.
 const eth = await api.sniffSimEth();
 assert.equal(eth.ok, true, eth.reason || "eth ok");
 assert.equal(eth.source, "sim.eth");
@@ -357,7 +357,7 @@ assert.equal(simMovers[0].rank, "move");
 assert.equal(simMovers[0].title, "SIMULATION surface moved");
 assert.ok(/site version 0 → 1/.test(simMovers[0].summary), simMovers[0].summary);
 assert.ok(/deadline moved/.test(simMovers[0].summary), simMovers[0].summary);
-assert.ok(/Sepolia ETH rail grew to 0\.123 test ETH \(3 deposits\)/.test(simMovers[0].summary), simMovers[0].summary);
+assert.ok(/ETH rail grew to 0\.123 ETH \(3 deposits\)/.test(simMovers[0].summary), simMovers[0].summary);
 assert.equal(simMovers[0].details.deadline, "2026-09-25T20:00:00-04:00");
 
 // 8. Identical SIM surface produces no new sim event.

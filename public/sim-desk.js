@@ -26,7 +26,7 @@ const stamp = (value) => {
 const link = (base, value, label) => value ? `<a href="${esc(base + encodeURIComponent(value))}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>` : "--";
 const walletLink = (wallet) => link("https://solscan.io/account/", wallet, short(wallet));
 const txLink = (signature) => link("https://solscan.io/tx/", signature, "receipt");
-const ethAddressLink = (address) => link("https://app.blockscout.com/eth/sepolia/address/", address, "sepolia explorer");
+const ethAddressLink = (address) => link("https://app.blockscout.com/eth/mainnet/address/", address, "ethereum explorer");
 
 function sourceState(src) {
   if (!src) return "Unavailable";
@@ -139,9 +139,9 @@ export function renderSimDesk(latest) {
   paymentRows.innerHTML = frontLive
     ? `<div class="sim-pay-rail">${pay ? [
         `<span><b>${esc(pay.solAmountSol ?? "--")} SOL</b>${walletLink(pay.sol || SIM_SOL_DEST)}<small>mainnet SOL destination · ${chain?.destWallet ? walletLink(chain.destWallet) : ""}</small></span>`,
-        `<span><b>${esc(pay.ethAmount ?? "--")} ETH</b>${esc(pay.eth || SIM_ETH_DEST)}${ethAddressLink(SIM_ETH_ADDR)}<small>${front.markers?.ethRailSepolia ? "Sepolia testnet rail (chain 11155111) detected on page" : "encrypted ETH rail"}</small></span>`,
+        `<span><b>${esc(pay.ethAmount ?? "--")} ETH</b>${esc(pay.eth || SIM_ETH_DEST)}${ethAddressLink(SIM_ETH_ADDR)}<small>${front.markers?.ethRailSepolia ? "site still instructs Sepolia testnet (11155111); the desk reads Ethereum mainnet" : "Ethereum mainnet rail"}</small></span>`,
         `<span><b>${pay.xmoneyUsd ? `$${pay.xmoneyUsd}` : "--"}</b>@XMONEY<small>X payment instruction</small></span>`,
-      ].join("") : ""}<div class="sim-honesty"><span>The scoreboard requires an X OAuth session — no public leaderboard is kept here. ETH receipts on chain 11155111 (Sepolia) are testnet; the SOL rail is mainnet.</span></div></div>`
+      ].join("") : ""}<div class="sim-honesty"><span>The scoreboard requires an X OAuth session — no public leaderboard is kept here. ETH receipts on Ethereum mainnet; the SOL rail is mainnet.</span></div></div>`
     : `<div class="desk-empty"><span>[ - ]</span><span>${esc(front?.reason || "Waiting for the public sim.tech home page")}</span></div>`;
 
   chainRows.innerHTML = renderMovement(chain, eth, front);
@@ -155,18 +155,18 @@ export function renderSimDesk(latest) {
     `Home page: ${front?.sourceUrl || "https://sim.tech/"}`,
     `Chain: ${chain?.sourceUrl || "https://solscan.io/token/CZNZLxbSB3VRTSZR5TH9FKozh2RGjrZGGUAANE8JTRiX"}`,
     `SOL destination: ${chain?.destWallet || "BjLoeUtRq1QBLBWcTWgUFFfj75BsrcESZMu6F1DrMV9C"}`,
-    `ETH rail: ${eth?.sourceUrl || `https://eth-sepolia.blockscout.com/api/v2/addresses/${SIM_ETH_ADDR}/transactions`}`,
+    `ETH rail: ${eth?.sourceUrl || `https://eth.blockscout.com/api/v2/addresses/${SIM_ETH_ADDR}/transactions`}`,
     `Deadline: ${front?.deadline ?? (front?.deadlineFallbackAt || "2026-09-25T20:00:00-04:00")}`,
     `Checked: ${site?.checkedAt || "unknown"}`,
     `No leaderboard kept: the sim.tech score page requires X OAuth.`,
-    `Deposit totals: SOL rail sums mainnet balance deltas (unique payer wallets, not people); ETH sums Sepolia testnet receipts. Both are explorer/RPC observations, not sim.tech's own books. Live SOL/ETH prices are a public CoinGecko feed — testnet ETH carries no market value.`,
+    `Deposit totals: SOL rail sums mainnet balance deltas (unique payer wallets, not people); ETH sums Ethereum mainnet receipts. Both are explorer/RPC observations, not sim.tech's own books. Live SOL/ETH prices are a public CoinGecko feed.`,
   ].filter(Boolean).join("\n");
 }
 
 function renderMovement(chain, eth, front) {
   const hasData = chain?.solDepositsSol != null || chain?.ok === true || eth?.ok === true || eth?.ethDepositsEth != null;
   if (!hasData) {
-    return `<div class="desk-empty"><span>[ - ]</span><span>${esc(chain?.reason || "Waiting for the public Solana RPC + Sepolia explorer")}</span></div>`;
+    return `<div class="desk-empty"><span>[ - ]</span><span>${esc(chain?.reason || "Waiting for the public Solana RPC + Ethereum explorer")}</span></div>`;
   }
 
   const solTotal = num(chain?.solDepositsSol);
@@ -207,7 +207,7 @@ function renderMovement(chain, eth, front) {
   };
   const ethRow = (entry, index) => {
     const place = index === 0 ? "1st" : index === 1 ? "2nd" : index === 2 ? "3rd" : `${index + 1}th`;
-    return `<li><span>${place}</span><span>${link("https://app.blockscout.com/eth/sepolia/address/", entry.wallet, short(entry.wallet))}</span><b>${fmt(entry.eth, 4)}</b><span>${pct(entry.share)}</span></li>`;
+    return `<li><span>${place}</span><span>${link("https://app.blockscout.com/eth/mainnet/address/", entry.wallet, short(entry.wallet))}</span><b>${fmt(entry.eth, 4)}</b><span>${pct(entry.share)}</span></li>`;
   };
   const solLeaders = (chain?.solTopPayers || []).slice(0, 5);
   const ethLeaders = (eth?.ethTopSenders || []).slice(0, 5);
@@ -232,7 +232,7 @@ function renderMovement(chain, eth, front) {
       <div class="sim-pot sim-pot-eth">
         <span class="sim-pot-label">Testnet · ETH probe</span>
         <b class="sim-pot-total">${ethTotal != null ? `${fmt(ethTotal, 4)} test ETH` : "--"}</b>
-        <span class="sim-pot-sub">Sepolia 11155111 · ${eth?.ethDepositCount != null ? `${fmt(eth.ethDepositCount)} tx${eth.ethDepositCount === 1 ? "" : "s"} · ${fmt(eth.ethUniqueSenders)} sender${eth.ethUniqueSenders === 1 ? "" : "s"}` : "no receipts read yet"} · testnet, no market value</span>
+        <span class="sim-pot-sub">Ethereum mainnet · ${eth?.ethDepositCount != null ? `${fmt(eth.ethDepositCount)} tx${eth.ethDepositCount === 1 ? "" : "s"} · ${fmt(eth.ethUniqueSenders)} sender${eth.ethUniqueSenders === 1 ? "" : "s"}` : "no receipts read yet"}</span>
       </div>
       <div class="sim-clock">
         <span class="sim-clock-label">deadline</span>
@@ -250,7 +250,7 @@ function renderMovement(chain, eth, front) {
       <div class="sim-leader"><h4>Top payers · SOL rail</h4><ol>${solLeaders.length ? solLeaders.map(topRow).join("") : `<li><span>&mdash;</span><span>no payers observed</span></li>`}</ol></div>
       <div class="sim-leader"><h4>Top senders · ETH testnet</h4><ol>${ethLeaders.length ? ethLeaders.map(ethRow).join("") : `<li><span>&mdash;</span><span>no senders observed</span></li>`}</ol></div>
     </div>
-    <div class="sim-liveprice"><span>Solana RPC ${chain?.ok === true ? "live" : "unavailable"} · Sepolia explorer ${eth?.ok === true ? "live" : "unavailable"} · ${esc(priceLine)}${esc(priceAge)}</span></div>
+    <div class="sim-liveprice"><span>Solana RPC ${chain?.ok === true ? "live" : "unavailable"} · Ethereum explorer ${eth?.ok === true ? "live" : "unavailable"} · ${esc(priceLine)}${esc(priceAge)}</span></div>
     <div class="sim-honesty"><span>Donations above are observer sums — not sim.tech's books. Payer/sender counts are unique wallets per rail, not people; a wallet on both rails appears in both. ETH is a testnet rail; its totals do not convert to USD.</span></div>
   </div>`;
 }
