@@ -948,7 +948,13 @@ export async function sniffZenErrorShape() {
   }
 }
 
-const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+const SOLANA_RPC_URL =
+  process.env.SOLANA_RPC_URL ||
+  (process.env.HELIUS_API_KEY
+    ? `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`
+    : "https://api.mainnet-beta.solana.com");
+const SIM_SOL_CATCH_UP_BURST = Number(process.env.SIM_SOL_CATCH_UP_BURST || (process.env.HELIUS_API_KEY ? 350 : 60));
+const SIM_SOL_CATCH_UP_PACE_MS = Number(process.env.SIM_SOL_CATCH_UP_PACE_MS || (process.env.HELIUS_API_KEY ? 15 : 60));
 /** StackNet's devnet-era TEST treasury. On mainnet it holds a single 0.0016 SOL dust
  * ping from a spam-distribution blaster (the ETUdaF4… → G2YxRa6w… tree), no other
  * transaction ever. It is NOT a live treasury: only used as a last-resort fallback
@@ -4641,7 +4647,7 @@ function simDepositWindows(rows, valueKey, nowSec) {
 // are carried across polls in the returned source, so a failed read never zeroes
 // the desk — it keeps the last observed totals and reports ok:false.
 async function simSolDepositTotals(previous) {
-  const knownSigs = Array.isArray(previous?.knownSigs) ? previous.knownSigs.slice(0, 700) : [];
+  const knownSigs = Array.isArray(previous?.knownSigs) ? previous.knownSigs.slice(0, 1200) : [];
   const payers = Array.isArray(previous?.payers) ? previous.payers.slice(0, 400) : [];
   const payerTotals = Array.isArray(previous?.solPayerTotals)
     ? previous.solPayerTotals.slice(0, 200)
@@ -4655,14 +4661,15 @@ async function simSolDepositTotals(previous) {
   let largestAt = typeof previous?.solLargestAt === "string" ? previous.solLargestAt : null;
   const sigs = await solanaRpc("getSignaturesForAddress", [
     SIM_SOL_DESTINATION,
-    { limit: 250, commitment: "confirmed" },
+    { limit: 1000, commitment: "confirmed" },
   ]);
   if (!Array.isArray(sigs) || sigs.length === 0) return { okAgg: false };
   const fresh = sigs.filter((s) => s?.signature && !knownSigs.includes(s.signature));
   let fetched = 0;
   let rateLimited = false;
+  const processed = new Set();
   for (const s of fresh) {
-    if (fetched >= 60) break;
+    if (fetched >= SIM_SOL_CATCH_UP_BURST) break;
     fetched += 1;
     let tx;
     try {
@@ -4676,7 +4683,8 @@ async function simSolDepositTotals(previous) {
       rateLimited = /429/.test(String(error?.message || error));
       break;
     }
-    if (!rateLimited) await sleep(60); // gentle pace for the free public RPC
+    processed.add(s.signature);
+    if (!rateLimited) await sleep(SIM_SOL_CATCH_UP_PACE_MS); // gentle pace, esp. for the free public RPC
     const meta = tx?.meta;
     const keys = tx?.transaction?.message?.accountKeys;
     if (!meta || !Array.isArray(keys) || meta.err != null) continue;
@@ -4707,12 +4715,13 @@ async function simSolDepositTotals(previous) {
       largestAt = tSec !== null ? new Date(tSec * 1000).toISOString() : null;
     }
   }
-  if (!rateLimited) {
-    for (const s of fresh) {
-      if (s?.signature && !knownSigs.includes(s.signature)) knownSigs.unshift(s.signature);
-    }
-    if (knownSigs.length > 700) knownSigs.length = 700;
+  // Mark exactly the sigs we fetched as known, whether or not the round hit a
+  // 429. Unfetched sigs stay fresh and are summed next round — a processed tx is
+  // never double-counted and a skipped tx is never silently dropped.
+  for (const sig of processed) {
+    if (sig && !knownSigs.includes(sig)) knownSigs.unshift(sig);
   }
+  if (knownSigs.length > 1200) knownSigs.length = 1200;
   rows.sort((a, b) => a.t - b.t);
   if (rows.length > 300) rows = rows.slice(rows.length - 300);
   payerTotals.sort((a, b) => b.s - a.s);
@@ -5123,9 +5132,9 @@ function simAttempts(previous) {
   return [
     ["sim.site", sniffSimSite()],
     ["sim.front", sniffSimFront()],
-    ["sim.chain", sniffSimChain({ previous })],
-    ["sim.eth", sniffSimEth({ previous })],
-    ["sim.ethm", sniffSimEthMainnet({ previous })],
+    ["sim.chain", sniffSimChain({ previous: previous?.sources?.["sim.chain"] || null })],
+    ["sim.eth", sniffSimEth({ previous: previous?.sources?.["sim.eth"] || null })],
+    ["sim.ethm", sniffSimEthMainnet({ previous: previous?.sources?.["sim.ethm"] || null })],
   ];
 }
 
@@ -5133,7 +5142,7 @@ function simMinuteAttempts(previous) {
   return [
     ["sim.site", sniffSimSite()],
     ["sim.front", sniffSimFront()],
-    ["sim.chain", sniffSimChain({ previous })],
+    ["sim.chain", sniffSimChain({ previous: previous?.sources?.["sim.chain"] || null })],
   ];
 }
 
