@@ -5007,6 +5007,12 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
   let largestHash = typeof previous?.ethLargestHash === "string" ? previous.ethLargestHash : null;
   let largestAt = typeof previous?.ethLargestAt === "string" ? previous.ethLargestAt : null;
   let explorerFallback = null;
+  // Has this rail already walked back to the campaign cutoff? Until it has, the
+  // walk must keep paging even through pages that add nothing new (all-known) —
+  // stopping at the first no-add page is exactly how a carried ring of only the
+  // newest N signatures wedges the total there. Once the cutoff is reached the
+  // window is fixed and maintenance stops at the first no-add page again.
+  let ethScanDone = previous?.ethScanDone === true;
   // Campaign scoping (mirrors the SOL rail): legacy lifetime carry must not leak
   // into the shared ETH figures. Known hashes are cleared too so the campaign
   // window is re-paged from scratch.
@@ -5021,13 +5027,14 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
     largestWei = 0;
     largestHash = null;
     largestAt = null;
+    ethScanDone = false;
   }
   try {
     let cursor = null;
     let pages = 0;
     let caughtUp = false;
     let ingested = 0;
-    while (pages < 80 && !caughtUp) {
+    while (pages < 80 && (ethScanDone ? !caughtUp : true)) {
       const url = cursor
         ? `${sourceUrl}?${new URLSearchParams(cursor).toString()}`
         : sourceUrl;
@@ -5035,8 +5042,13 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
       const items = res.json && Array.isArray(res.json.items) ? res.json.items : null;
       if (!res.ok || !items) break;
       let added = 0;
+      let pageMin = Infinity;
       for (const item of items) {
         const hash = item?.hash;
+        const tsSec = Number.isFinite(Date.parse(item?.timestamp))
+          ? Math.round(Date.parse(item.timestamp) / 1000)
+          : null;
+        if (tsSec !== null && tsSec < pageMin) pageMin = tsSec;
         if (!hash || knownHashes.includes(hash)) continue;
         if (["error", "reverted", "dropped", "failed"].includes(item?.result) || item?.to?.hash !== SIM_ETH_ADDRESS) {
           knownHashes.unshift(hash);
@@ -5044,9 +5056,7 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
         }
         const wei = Number(item?.value);
         if (Number.isFinite(wei) && wei > 0) {
-          const tSec = Number.isFinite(Date.parse(item?.timestamp))
-            ? Math.round(Date.parse(item.timestamp) / 1000)
-            : null;
+          const tSec = tsSec;
           if (tSec === null || tSec < SIM_CAMPAIGN_START_SEC) {
             knownHashes.unshift(hash);
             continue;
@@ -5075,10 +5085,16 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
         added += 1;
       }
       if (knownHashes.length > 2500) knownHashes.length = 2500;
+      if (!ethScanDone && Number.isFinite(pageMin) && pageMin < SIM_CAMPAIGN_START_SEC) {
+        ethScanDone = true; // this page crossed back before the campaign window
+      }
+      if (!ethScanDone && !res.json?.next_page_params) {
+        ethScanDone = true; // explorer history ends before the cutoff
+      }
       cursor = res.json?.next_page_params || null;
       pages += 1;
       ingested += added;
-      if (added === 0) caughtUp = true;
+      if (ethScanDone && added === 0) caughtUp = true;
     }
     if (ingested === 0) {
       // v2 gave nothing new (Blockscout's edge shell returns empty pages to some
@@ -5093,8 +5109,11 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
         const list = v1.json && Array.isArray(v1.json.result) ? v1.json.result : null;
         if (!v1.ok || !list || list.length === 0) break;
         let added = 0;
+        let pageMin = Infinity;
         for (const item of list) {
           const hash = item?.hash;
+          const tsSec = Number(item?.timeStamp) > 0 ? Number(item.timeStamp) : null;
+          if (tsSec !== null && tsSec < pageMin) pageMin = tsSec;
           if (!hash || knownHashes.includes(hash)) continue;
           const targetOk = typeof item?.to === "string" && item.to.toLowerCase() === SIM_ETH_ADDRESS.toLowerCase();
           const badState = typeof item?.isError === "string" && item.isError !== "0";
@@ -5104,7 +5123,7 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
           }
           const wei = Number(item?.value);
           if (Number.isFinite(wei) && wei > 0) {
-            const tSec = Number(item?.timeStamp) > 0 ? Number(item.timeStamp) : null;
+            const tSec = tsSec;
             if (tSec === null || tSec < SIM_CAMPAIGN_START_SEC) {
               knownHashes.unshift(hash);
               continue;
@@ -5133,9 +5152,12 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
           added += 1;
         }
         if (knownHashes.length > 2500) knownHashes.length = 2500;
+        if (!ethScanDone && Number.isFinite(pageMin) && pageMin < SIM_CAMPAIGN_START_SEC) {
+          ethScanDone = true; // this page crossed back before the campaign window
+        }
         v1Pages += 1;
         offset += added;
-        if (added === 0) break;
+        if (ethScanDone && added === 0) break;
       }
       if (offset > 0) ingested = offset;
       explorerFallback = offset > 0 ? "v1" : "v1-empty";
@@ -5188,6 +5210,7 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
       ethLatestHash: latestHash,
       ethPages: pages,
       ethExplorerFallback: explorerFallback,
+      ethScanDone,
       ethTotalWei: totalWei,
       ethDepositRows: rows,
       ethFirstSeenSec: firstSeenSec,
@@ -5242,6 +5265,7 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
       ethLatestHash: latestHash,
       ethPages: 0,
       ethExplorerFallback: explorerFallback ?? null,
+      ethScanDone: previous?.ethScanDone === true,
       ethTotalWei: carriedWei > 0 ? carriedWei : null,
       ethDepositRows: rows,
       ethFirstSeenSec: firstSeenSec,
