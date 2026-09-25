@@ -1720,6 +1720,17 @@ function simEvent(previous, current) {
         : "ETH mainnet rail changed",
     );
   }
+  const prevAzyFp = prevSource("azy.chain").fingerprint;
+  const currAzyFp = currSource("azy.chain").fingerprint;
+  if (prevAzyFp && currAzyFp && prevAzyFp !== currAzyFp) {
+    const currAzyTotal = currSource("azy.chain").azySolDepositsSol;
+    const azyTotal = Number.isFinite(currAzyTotal) ? Math.round(currAzyTotal * 1000) / 1000 : null;
+    bits.push(
+      azyTotal !== null
+        ? `AZY SOL intake grew to ${azyTotal} SOL (${currSource("azy.chain").azyDepositCount ?? 0} deposits)`
+        : "AZY rail changed",
+    );
+  }
   if (!bits.length) return null;
   const rank = /deadline|payrail|destination/i.test(bits.join(" ")) ? "move" : "note";
   return event({
@@ -1733,6 +1744,7 @@ function simEvent(previous, current) {
       mintLatestAt: chain.mintLatestAt ?? null,
       destLatestAt: chain.destLatestAt ?? null,
       deadline: front.deadline ?? null,
+      azySolDepositsSol: currSource("azy.chain").azySolDepositsSol ?? null,
       bits,
     },
   });

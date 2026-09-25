@@ -4490,8 +4490,18 @@ const SIM_ETH_MAINNET_EXPLORER = "https://eth.blockscout.com";
 const SIM_ETH_MAINNET_SOURCE_URL = `${SIM_ETH_MAINNET_EXPLORER}/api/v2/addresses/${SIM_ETH_ADDRESS}/transactions`;
 const SIM_SOL_DEPOSIT_MIN_LAMPORTS = 1_000_000; // 0.001 SOL floor — ignores balance dust/refunds.
 // Owner/seed wallets that must never appear on the SIM payment leaderboard.
+// 9GjEV… IS the azy.life (Ascension Protocol) custody wallet: sim.tech's SOL pot is
+// fed by sweeps from it, so it is excluded from the SIM payment board as seed/owner
+// money. It is separately tracked on the desk as the AZY rail's own intake.
 const SIM_EXCLUDED_PAYERS = new Set(["9GjEVnpWiLe2uknUmtaH6DSfgcBvL66DtSKGREXDctZU"]);
 const SIM_SOL_WALLET_SOURCE_URL = `https://solscan.io/account/${SIM_SOL_DESTINATION}`;
+// AZY (azy.life · The Ascension Protocol) custody wallet — a separate pot from SIM's
+// SOL destination. Same operator (@jimmyedgar), same bounded walk, same campaign
+// cutoff, so its SOL intake tracks the protocol's surface growth on the desk. Unlike
+// the SIM pot, every inbound transfer counts: this is a volume audit, no payer is
+// treated as owner money (deltas are only ever summed when POSITIVE at the wallet).
+const AZY_SOL_DESTINATION = "9GjEVnpWiLe2uknUmtaH6DSfgcBvL66DtSKGREXDctZU";
+const AZY_CHAIN_SOURCE_URL = `https://solscan.io/account/${AZY_SOL_DESTINATION}`;
 
 export async function sniffSimSite() {
   const started = Date.now();
@@ -4659,26 +4669,35 @@ function simDepositWindows(rows, valueKey, nowSec) {
 // pre/postBalances delta at the wallet's index is summed when positive. Totals
 // are carried across polls in the returned source, so a failed read never zeroes
 // the desk — it keeps the last observed totals and reports ok:false.
-async function simSolDepositTotals(previous) {
+async function simSolDepositTotals(previous, opts = {}) {
+  // Shared bounded-walk used by both SOL rails: sim.chain (SIM's destination wallet)
+  // and azy.chain (AZY's Ascension-Protocol custody wallet). fieldPrefix scopes the
+  // carried state so each rail keeps its own ring/rows/totals; the campaign cutoff is
+  // common, so the two pots stay comparable on the desk.
+  const {
+    destination = SIM_SOL_DESTINATION,
+    excludedPayers = SIM_EXCLUDED_PAYERS,
+    fieldPrefix = "sol",
+  } = opts;
   const knownSigs = Array.isArray(previous?.knownSigs) ? previous.knownSigs.slice(0, 1200) : [];
   const payers = Array.isArray(previous?.payers) ? previous.payers.slice(0, 400) : [];
-  const payerTotals = Array.isArray(previous?.solPayerTotals)
-    ? previous.solPayerTotals.slice(0, 200)
+  const payerTotals = Array.isArray(previous?.[`${fieldPrefix}PayerTotals`])
+    ? previous[`${fieldPrefix}PayerTotals`].slice(0, 200)
     : [];
-  let rows = Array.isArray(previous?.solDepositRows) ? previous.solDepositRows : [];
-  let firstSeenSec = Number.isFinite(previous?.solFirstSeenSec) ? previous.solFirstSeenSec : null;
-  let totalLamports = Number.isFinite(previous?.solTotalLamports) ? previous.solTotalLamports : 0;
-  let count = Number.isFinite(previous?.solDepositCount) ? previous.solDepositCount : 0;
-  let largestLamports = Number.isFinite(previous?.solLargestLamports) ? previous.solLargestLamports : 0;
-  let largestSig = typeof previous?.solLargestSig === "string" ? previous.solLargestSig : null;
-  let largestAt = typeof previous?.solLargestAt === "string" ? previous.solLargestAt : null;
+  let rows = Array.isArray(previous?.[`${fieldPrefix}DepositRows`]) ? previous[`${fieldPrefix}DepositRows`] : [];
+  let firstSeenSec = Number.isFinite(previous?.[`${fieldPrefix}FirstSeenSec`]) ? previous[`${fieldPrefix}FirstSeenSec`] : null;
+  let totalLamports = Number.isFinite(previous?.[`${fieldPrefix}TotalLamports`]) ? previous[`${fieldPrefix}TotalLamports`] : 0;
+  let count = Number.isFinite(previous?.[`${fieldPrefix}DepositCount`]) ? previous[`${fieldPrefix}DepositCount`] : 0;
+  let largestLamports = Number.isFinite(previous?.[`${fieldPrefix}LargestLamports`]) ? previous[`${fieldPrefix}LargestLamports`] : 0;
+  let largestSig = typeof previous?.[`${fieldPrefix}LargestSig`] === "string" ? previous[`${fieldPrefix}LargestSig`] : null;
+  let largestAt = typeof previous?.[`${fieldPrefix}LargestAt`] === "string" ? previous[`${fieldPrefix}LargestAt`] : null;
   // Campaign scoping: a carry that predates the cutoff (legacy lifetime totals from
   // before this release) must not leak into the shared pot. Reset when the carry is
   // not already scoped so the next rounds re-derive strictly within the campaign
   // window. The known-sig ring is cleared too, or the remaining "known" sigs would
   // keep the rebuilt state stuck at post-reset additions and the window would never
   // re-scan.
-  if (previous?.solCampaignSinceSec !== SIM_CAMPAIGN_START_SEC) {
+  if (previous?.[`${fieldPrefix}CampaignSinceSec`] !== SIM_CAMPAIGN_START_SEC) {
     totalLamports = 0;
     count = 0;
     rows = [];
@@ -4698,9 +4717,13 @@ async function simSolDepositTotals(previous) {
   // newest slice. Once a page crosses the cutoff (or history ends), scanning is
   // done for good — the campaign window is fixed and new deposits only arrive at
   // the front, inside the normal 1000-signature window.
-  let scanCursor = typeof previous?.solScanCursor === "string" && previous?.solScanDone !== true ? previous.solScanCursor : null;
-  let scanDone = previous?.solScanDone === true;
-  if (previous?.solCampaignSinceSec !== SIM_CAMPAIGN_START_SEC) {
+  let scanCursor =
+    typeof previous?.[`${fieldPrefix}ScanCursor`] === "string" &&
+    previous?.[`${fieldPrefix}ScanDone`] !== true
+      ? previous[`${fieldPrefix}ScanCursor`]
+      : null;
+  let scanDone = previous?.[`${fieldPrefix}ScanDone`] === true;
+  if (previous?.[`${fieldPrefix}CampaignSinceSec`] !== SIM_CAMPAIGN_START_SEC) {
     scanCursor = null;
     scanDone = false;
   }
@@ -4710,7 +4733,7 @@ async function simSolDepositTotals(previous) {
     let guard = 0;
     while (guard < 8) {
       const chunk = await solanaRpc("getSignaturesForAddress", [
-        SIM_SOL_DESTINATION,
+        destination,
         pageStart
           ? { limit: 1000, commitment: "confirmed", before: pageStart }
           : { limit: 1000, commitment: "confirmed" },
@@ -4740,7 +4763,7 @@ async function simSolDepositTotals(previous) {
   } else {
     // Maintenance mode: only the newest 1000 signatures contain anything new.
     const windowed = await solanaRpc("getSignaturesForAddress", [
-      SIM_SOL_DESTINATION,
+      destination,
       { limit: 1000, commitment: "confirmed" },
     ]);
     if (Array.isArray(windowed)) sigs.push(...windowed);
@@ -4770,24 +4793,24 @@ async function simSolDepositTotals(previous) {
     const meta = tx?.meta;
     const keys = tx?.transaction?.message?.accountKeys;
     if (!meta || !Array.isArray(keys) || meta.err != null) continue;
-    const index = keys.indexOf(SIM_SOL_DESTINATION);
+    const index = keys.indexOf(destination);
     if (index < 0) continue;
     const payer = keys[0];
-    if (payer && SIM_EXCLUDED_PAYERS.has(payer)) continue; // seed/owner money, never on the payment board
+    if (payer && excludedPayers.has(payer)) continue; // seed/owner money, never on the payment board
     const delta = (meta.postBalances?.[index] || 0) - (meta.preBalances?.[index] || 0);
     if (delta < SIM_SOL_DEPOSIT_MIN_LAMPORTS) continue;
     const tSec = Number.isInteger(tx?.blockTime) ? tx.blockTime : null;
     if (tSec === null || tSec < SIM_CAMPAIGN_START_SEC) continue; // campaign-window only
     totalLamports += delta;
     count += 1;
-    if (payer && payer !== SIM_SOL_DESTINATION && !payers.includes(payer)) {
+    if (payer && payer !== destination && !payers.includes(payer)) {
       payers.push(payer);
     }
     if (Number.isFinite(tSec)) {
       rows.push({ t: tSec, s: delta });
       if (firstSeenSec === null || tSec < firstSeenSec) firstSeenSec = tSec;
     }
-    if (payer && payer !== SIM_SOL_DESTINATION) {
+    if (payer && payer !== destination) {
       const hit = payerTotals.find((p) => p.w === payer);
       if (hit) hit.s += delta;
       else payerTotals.push({ w: payer, s: delta });
@@ -4974,6 +4997,138 @@ export async function sniffSimChain({ previous } = {}) {
       solCampaignSinceSec: previous?.solCampaignSinceSec ?? SIM_CAMPAIGN_START_SEC,
       simCampaignStartAt: SIM_CAMPAIGN_START_AT,
       solLargestAt: previous?.solLargestAt ?? null,
+      payers: Array.isArray(previous?.payers) ? previous.payers : [],
+      knownSigs: Array.isArray(previous?.knownSigs) ? previous.knownSigs : [],
+      fingerprint: null,
+      reason: error?.message || String(error),
+    };
+  }
+}
+
+// AZY (azy.life · The Ascension Protocol) SOL intake into its custody wallet, on the
+// same bounded-walk as SIM's SOL pot. Separate state (azy* prefix) and destination, so
+// the two pots never mix; identical campaign cutoff (SIM_CAMPAIGN_START_SEC) keeps the
+// numbers comparable with the SIM rails. No payer exclusions: this is a volume audit —
+// every positive inbound balance delta counts. Failed reads carry the last totals.
+export async function sniffAzyChain({ previous } = {}) {
+  const started = Date.now();
+  try {
+    const [destSigs, solAgg] = await Promise.all([
+      solanaRpc("getSignaturesForAddress", [AZY_SOL_DESTINATION, { limit: 1, commitment: "confirmed" }]),
+      simSolDepositTotals(previous, { destination: AZY_SOL_DESTINATION, excludedPayers: new Set(), fieldPrefix: "azy" }),
+    ]);
+    const destLatest = Array.isArray(destSigs) && destSigs[0] ? destSigs[0] : null;
+    const destLatestAt = destLatest?.blockTime != null
+      ? new Date(destLatest.blockTime * 1000).toISOString()
+      : null;
+    const azyTotalLamports = Number.isFinite(solAgg.totalLamports) ? solAgg.totalLamports : 0;
+    const azyDepositCount = Number.isFinite(solAgg.count) ? solAgg.count : 0;
+    const depRows = Array.isArray(solAgg.rows) ? solAgg.rows : [];
+    const win = simDepositWindows(depRows, "s", Date.now() / 1000);
+    const firstSeenSec = Number.isFinite(solAgg.firstSeenSec) ? solAgg.firstSeenSec : null;
+    const topPayers = (Array.isArray(solAgg.payerTotals) ? solAgg.payerTotals.slice(0, 5) : [])
+      .map((p) => ({
+        wallet: p.w,
+        sol: p.s / 1_000_000_000,
+        share: azyTotalLamports > 0 ? p.s / azyTotalLamports : 0,
+      }));
+    const largestLamports = Number.isFinite(solAgg.largestLamports) ? solAgg.largestLamports : 0;
+    const usable = solAgg.okAgg === true;
+    return {
+      source: "azy.chain",
+      ok: usable,
+      status: usable ? 200 : 0,
+      ms: Date.now() - started,
+      checkedAt: new Date().toISOString(),
+      sourceUrl: AZY_CHAIN_SOURCE_URL,
+      destWallet: AZY_SOL_DESTINATION,
+      destLatestSignature: destLatest?.signature ?? null,
+      destLatestAt,
+      azySolDepositsSol: azyTotalLamports / 1_000_000_000,
+      azyDepositCount,
+      azyRateLimited: solAgg.rateLimited === true,
+      azyUniquePayers: Array.isArray(solAgg.payers) ? solAgg.payers.length : 0,
+      azyTodayCount: win.dayCount,
+      azyTodaySol: win.daySum / 1_000_000_000,
+      azyHourCount: win.hourCount,
+      azyHourSol: win.hourSum / 1_000_000_000,
+      azyMedianGapSec: win.medianGapSec,
+      azyTopPayers: topPayers,
+      azyFirstSeenAt: firstSeenSec !== null ? new Date(firstSeenSec * 1000).toISOString() : null,
+      azyLargestSol: largestLamports / 1_000_000_000,
+      azyLargestAt: solAgg.largestAt ?? null,
+      azyLargestSignature: solAgg.largestSig ?? null,
+      azyDepositBars: win.bars,
+      azyTotalLamports,
+      azyDepositRows: depRows,
+      azyFirstSeenSec: firstSeenSec,
+      azyPayerTotals: Array.isArray(solAgg.payerTotals) ? solAgg.payerTotals : [],
+      azyLargestLamports: largestLamports,
+      azyLargestSig: solAgg.largestSig ?? null,
+      azyLargestAt: solAgg.largestAt ?? null,
+      payers: Array.isArray(solAgg.payers) ? solAgg.payers : [],
+      knownSigs: Array.isArray(solAgg.knownSigs) ? solAgg.knownSigs : [],
+      azyScanCursor: solAgg.scanCursor ?? null,
+      azyScanDone: solAgg.scanDone === true,
+      azyCampaignSinceSec: SIM_CAMPAIGN_START_SEC,
+      azyCampaignStartAt: SIM_CAMPAIGN_START_AT,
+      fingerprint: usable
+        ? simpleHash(JSON.stringify({
+            destSig: destLatest?.signature,
+            lamports: azyTotalLamports,
+            count: azyDepositCount,
+          }))
+        : null,
+      reason: usable
+        ? null
+        : "AZY custody wallet SOL walk returned no verifiable deposits",
+    };
+  } catch (error) {
+    const depRows = Array.isArray(previous?.azyDepositRows) ? previous.azyDepositRows : [];
+    const win = simDepositWindows(depRows, "s", Date.now() / 1000);
+    const prevLamports = Number.isFinite(previous?.azyTotalLamports) && previous?.azyCampaignSinceSec === SIM_CAMPAIGN_START_SEC ? previous.azyTotalLamports : 0;
+    const firstSeenSec = Number.isFinite(previous?.azyFirstSeenSec) ? previous.azyFirstSeenSec : null;
+    const largestLamports = Number.isFinite(previous?.azyLargestLamports) ? previous.azyLargestLamports : 0;
+    return {
+      source: "azy.chain",
+      ok: false,
+      status: 0,
+      ms: Date.now() - started,
+      checkedAt: new Date().toISOString(),
+      sourceUrl: AZY_CHAIN_SOURCE_URL,
+      destWallet: AZY_SOL_DESTINATION,
+      destLatestSignature: null,
+      destLatestAt: null,
+      // Carry the last observed AZY totals forward; a read error must never zero them.
+      azySolDepositsSol: prevLamports > 0 ? prevLamports / 1_000_000_000 : null,
+      azyDepositCount: Number.isFinite(previous?.azyDepositCount) ? previous.azyDepositCount : null,
+      azyUniquePayers: Array.isArray(previous?.payers) ? previous.payers.length : null,
+      azyTodayCount: win.dayCount,
+      azyTodaySol: win.daySum / 1_000_000_000,
+      azyHourCount: win.hourCount,
+      azyHourSol: win.hourSum / 1_000_000_000,
+      azyMedianGapSec: win.medianGapSec,
+      azyTopPayers: (Array.isArray(previous?.azyPayerTotals) ? previous.azyPayerTotals.slice(0, 5) : [])
+        .map((p) => ({
+          wallet: p.w,
+          sol: p.s / 1_000_000_000,
+          share: prevLamports > 0 ? p.s / prevLamports : 0,
+        })),
+      azyFirstSeenAt: firstSeenSec !== null ? new Date(firstSeenSec * 1000).toISOString() : null,
+      azyLargestSol: largestLamports > 0 ? largestLamports / 1_000_000_000 : null,
+      azyLargestAt: previous?.azyLargestAt ?? null,
+      azyLargestSignature: previous?.azyLargestSig ?? null,
+      azyDepositBars: win.bars,
+      azyTotalLamports: prevLamports > 0 ? prevLamports : null,
+      azyDepositRows: depRows,
+      azyFirstSeenSec: firstSeenSec,
+      azyPayerTotals: Array.isArray(previous?.azyPayerTotals) ? previous.azyPayerTotals : [],
+      azyLargestLamports: previous?.azyLargestLamports != null ? previous.azyLargestLamports : 0,
+      azyLargestSig: previous?.azyLargestSig ?? null,
+      azyScanCursor: previous?.azyScanCursor ?? null,
+      azyScanDone: previous?.azyScanDone === true,
+      azyCampaignSinceSec: previous?.azyCampaignSinceSec ?? SIM_CAMPAIGN_START_SEC,
+      azyCampaignStartAt: SIM_CAMPAIGN_START_AT,
       payers: Array.isArray(previous?.payers) ? previous.payers : [],
       knownSigs: Array.isArray(previous?.knownSigs) ? previous.knownSigs : [],
       fingerprint: null,
@@ -5340,6 +5495,7 @@ function simAttempts(previous) {
     ["sim.chain", sniffSimChain({ previous: previous?.sources?.["sim.chain"] || null })],
     ["sim.eth", sniffSimEth({ previous: previous?.sources?.["sim.eth"] || null })],
     ["sim.ethm", sniffSimEthMainnet({ previous: previous?.sources?.["sim.ethm"] || null })],
+    ["azy.chain", sniffAzyChain({ previous: previous?.sources?.["azy.chain"] || null })],
   ];
 }
 
@@ -5348,6 +5504,7 @@ function simMinuteAttempts(previous) {
     ["sim.site", sniffSimSite()],
     ["sim.front", sniffSimFront()],
     ["sim.chain", sniffSimChain({ previous: previous?.sources?.["sim.chain"] || null })],
+    ["azy.chain", sniffAzyChain({ previous: previous?.sources?.["azy.chain"] || null })],
   ];
 }
 

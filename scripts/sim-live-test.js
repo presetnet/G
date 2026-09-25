@@ -14,6 +14,7 @@ class Clock extends Date {
 
 const SIM_SOL_DEST = "BjLoeUtRq1QBLBWcTWgUFFfj75BsrcESZMu6F1DrMV9C";
 const SIM_MINT = "CZNZLxbSB3VRTSZR5TH9FKozh2RGjrZGGUAANE8JTRiX";
+const AZY_SOL_DEST = "9GjEVnpWiLe2uknUmtaH6DSfgcBvL66DtSKGREXDctZU";
 
 const siteFixture = {
   version: 1,
@@ -67,6 +68,9 @@ const context = vm.createContext({
       if (rpc.method === "getSignaturesForAddress") {
         const address = rpc.params[0];
         assert.equal(rpc.params[1]?.commitment, "confirmed");
+        if (address === AZY_SOL_DEST) {
+          return respond(200, { result: [{ signature: "azy-sig", err: null, blockTime: now / 1000 - 300 }] });
+        }
         if (address !== SIM_MINT && address !== SIM_SOL_DEST) return respond(200, { result: [] });
         if (address === SIM_MINT) return respond(200, { result: [
           { signature: "mint-sig", err: null, blockTime: now / 1000 - 120 },
@@ -103,6 +107,19 @@ const context = vm.createContext({
                 postBalances: [1999000000, 59514415452, 0, 1000000],
               },
               transaction: { message: { accountKeys: ["6ix1dAxoqNP4VuEANSMmeiefJcJUxaxW9ShjjLnv5Hid", SIM_SOL_DEST, "11111111111111111111111111111111", "ComputeBudget111111111111111111111111111111"] } },
+            },
+          });
+        }
+        // AZY custody wallet: a 0.5 SOL inbound to 9GjEV… (the wallet SIM excludes as owner money).
+        if (rpc.params[0] === "azy-sig") {
+          return respond(200, {
+            result: {
+              slot: 460000900, blockTime: Math.floor(now / 1000) - 300, err: null,
+              meta: {
+                preBalances: [1000000000, 5000000000, 0, 1000000],
+                postBalances: [995000000, 5500000000, 0, 1000000],
+              },
+              transaction: { message: { accountKeys: ["0xaZypQayD8xRq1sXuY2kT5n7QzEJvF4dL3m8HwBo", AZY_SOL_DEST, "11111111111111111111111111111111", "ComputeBudget111111111111111111111111111111"] } },
             },
           });
         }
@@ -183,7 +200,7 @@ const snifferCode = await readFile(new URL("../server/sniffer.js", import.meta.u
 const translatorCode = await readFile(new URL("../server/translator.js", import.meta.url), "utf8");
 const stubs = [...snifferCode.matchAll(/(?:export )?async function (sniff\w+)\(/g)]
   .map((match) => match[1])
-  .filter((name) => !name.startsWith("sniffSim"))
+  .filter((name) => !name.startsWith("sniffSim") && !name.startsWith("sniffAzy"))
   .map((name) => `${name} = async () => { throw new Error("unrelated collector fixture"); };`)
   .join("\n");
 modules.set("sniffer.js", new vm.SourceTextModule(`${snifferCode}\nexport function stubUnrelated() { ${stubs} }`, { context }));
@@ -407,12 +424,30 @@ assert.ok(Math.abs(recovered.solDepositsSol - (0.068 + 0.001)) < 1e-12);
 assert.ok(recovered.knownSigs.includes("dest-sig2"));
 destSigsMode = 1;
 
-// 6. runSniff wires all four sim sources into the full pass.
+// 6. runSniff wires all four sim sources (plus the AZY rail) into the full pass.
 const full = await api.runSniff({ previous: null });
-for (const name of ["sim.site", "sim.front", "sim.chain", "sim.eth"]) {
+for (const name of ["sim.site", "sim.front", "sim.chain", "sim.eth", "azy.chain"]) {
   assert.ok(full.sources[name], `${name} present in full pass`);
   assert.equal(full.sources[name].ok, true, full.sources[name].reason || `${name} ok`);
 }
+
+// 6a. AZY custody-wallet rail reads its own pot — never folded into sim.chain.
+const azy0 = await api.sniffAzyChain({ previous: null });
+assert.equal(azy0.source, "azy.chain");
+assert.equal(azy0.ok, true, azy0.reason);
+assert.ok(Math.abs(azy0.azySolDepositsSol - 0.5) < 1e-12, `AZY total ${azy0.azySolDepositsSol}`);
+assert.equal(azy0.azyDepositCount, 1);
+assert.equal(azy0.azyUniquePayers, 1);
+assert.equal(azy0.azyScanDone, true);
+assert.equal(azy0.azyCampaignSinceSec, Date.parse("2026-09-24T00:00:00Z") / 1000);
+
+// 6b. A carried AZY read must not double-count: second round totals stay fixed.
+const azy1 = await api.sniffAzyChain({ previous: azy0 });
+assert.equal(azy1.ok, true, azy1.reason);
+assert.equal(azy1.azySolDepositsSol, azy0.azySolDepositsSol);
+assert.equal(azy1.azyDepositCount, 1);
+assert.equal(azy1.azyRateLimited, false);
+assert.ok(azy1.knownSigs.includes("azy-sig"));
 
 // 7. Translator: a changed version + deadline emits one "sim" event with movers.
 const base = {
@@ -457,4 +492,4 @@ const note = chainOnly.filter((e) => e.kind === "sim");
 assert.equal(note.length, 1);
 assert.equal(note[0].rank, "note");
 
-console.log("sim live: site/front/chain/eth sniffers, full-pass wiring, deposit aggregation and translator events passed");
+console.log("sim live: site/front/chain/eth + AZY sniffers, full-pass wiring, deposit aggregation and translator events passed");

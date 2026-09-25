@@ -105,6 +105,7 @@ export function renderSimDesk(latest) {
   const front = latest?.sources?.["sim.front"];
   const chain = latest?.sources?.["sim.chain"];
   const eth = latest?.sources?.["sim.eth"];
+  const azy = latest?.sources?.["azy.chain"];
   const status = document.getElementById("simDeskStatus");
   const summary = document.getElementById("simSummary");
   const paymentRows = document.getElementById("simPaymentRows");
@@ -116,7 +117,7 @@ export function renderSimDesk(latest) {
   const frontLive = front?.ok === true;
   const chainLive = chain?.ok === true;
   const ethLive = eth?.ok === true;
-  status.textContent = [sourceState(site), sourceState(front), sourceState(chain), sourceState(eth), sourceState(latest?.sources?.["sim.ethm"])].join(" · ");
+  status.textContent = [sourceState(site), sourceState(front), sourceState(chain), sourceState(eth), sourceState(latest?.sources?.["sim.ethm"]), sourceState(azy)].join(" · ");
 
   const rates = site?.rates || {};
   const ladder = [
@@ -144,7 +145,7 @@ export function renderSimDesk(latest) {
       ].join("") : ""}<div class="sim-honesty"><span>The scoreboard requires an X OAuth session — no public leaderboard is kept here. Receipts on the Sepolia rail and on Ethereum mainnet are both observed on-chain; the SOL rail is mainnet. Deposit totals cover the campaign window — payments received from the campaign launch onward; earlier wallet history is intentionally excluded.</span></div></div>`
     : `<div class="desk-empty"><span>[ - ]</span><span>${esc(front?.reason || "Waiting for the public sim.tech home page")}</span></div>`;
 
-  chainRows.innerHTML = renderMovement(chain, eth, front, latest?.sources?.["sim.ethm"]);
+  chainRows.innerHTML = renderMovement(chain, eth, front, latest?.sources?.["sim.ethm"], azy);
 
   startSimClock(deadline);
   startSimPriceTicker();
@@ -156,15 +157,16 @@ export function renderSimDesk(latest) {
     `Chain: ${chain?.sourceUrl || "https://solscan.io/token/CZNZLxbSB3VRTSZR5TH9FKozh2RGjrZGGUAANE8JTRiX"}`,
     `SOL destination: ${chain?.destWallet || "BjLoeUtRq1QBLBWcTWgUFFfj75BsrcESZMu6F1DrMV9C"}`,
     `ETH rails: ${eth?.sourceUrl || `https://eth-sepolia.blockscout.com/api/v2/addresses/${SIM_ETH_ADDR}/transactions`} (Sepolia, as instructed) · mainnet ${latest?.sources?.["sim.ethm"]?.sourceUrl || `https://eth.blockscout.com/api/v2/addresses/${SIM_ETH_ADDR}/transactions`}`,
+    `AZY (azy.life · Ascension Protocol) custody wallet: ${azy?.destWallet || "9GjEVnpWiLe2uknUmtaH6DSfgcBvL66DtSKGREXDctZU"} · ${azy?.sourceUrl || `https://solscan.io/account/9GjEVnpWiLe2uknUmtaH6DSfgcBvL66DtSKGREXDctZU`}`,
     `Deadline: ${front?.deadline ?? (front?.deadlineFallbackAt || "2026-09-25T20:00:00-04:00")}`,
     `Checked: ${site?.checkedAt || "unknown"}`,
     `No leaderboard kept: the sim.tech score page requires X OAuth.`,
-    `Deposit totals: SOL rail sums mainnet balance deltas (unique payer wallets, not people); ETH totals cover the Sepolia rail (as the site instructed) and the Ethereum mainnet rail (on-chain proof) for the same wallet. All are explorer/RPC observations, not sim.tech's own books. Live SOL/ETH prices are a public CoinGecko feed.`,
+    `Deposit totals: SOL rail sums mainnet balance deltas (unique payer wallets, not people); ETH totals cover the Sepolia rail (as the site instructed) and the Ethereum mainnet rail (on-chain proof) for the same wallet. AZY is a separate custody wallet — its SOL intake is audited as its own pot, never folded into the SIM rails. All are explorer/RPC observations, not sim.tech's own books. Live SOL/ETH prices are a public CoinGecko feed.`,
   ].filter(Boolean).join("\n");
 }
 
-function renderMovement(chain, eth, front, ethm) {
-  const hasData = chain?.solDepositsSol != null || chain?.ok === true || eth?.ok === true || eth?.ethDepositsEth != null || ethm?.ethDepositsEth != null;
+function renderMovement(chain, eth, front, ethm, azy) {
+  const hasData = chain?.solDepositsSol != null || chain?.ok === true || eth?.ok === true || eth?.ethDepositsEth != null || ethm?.ethDepositsEth != null || azy?.azySolDepositsSol != null;
   if (!hasData) {
     return `<div class="desk-empty"><span>[ - ]</span><span>${esc(chain?.reason || "Waiting for the public Solana RPC + Ethereum explorers")}</span></div>`;
   }
@@ -172,9 +174,10 @@ function renderMovement(chain, eth, front, ethm) {
   const solTotal = num(chain?.solDepositsSol);
   const ethTotal = num(eth?.ethDepositsEth);
   const mainTotal = num(ethm?.ethDepositsEth);
+  const azyTotal = num(azy?.azySolDepositsSol);
   const solUsd = num(simPrice.sol) && num(solTotal) ? Number(simPrice.sol) * Number(solTotal) : null;
   const deadline = front?.deadline || front?.deadlineFallbackAt || null;
-  const campaignAt = chain?.simCampaignStartAt || eth?.simCampaignStartAt || ethm?.simCampaignStartAt || null;
+  const campaignAt = chain?.simCampaignStartAt || eth?.simCampaignStartAt || ethm?.simCampaignStartAt || azy?.azyCampaignStartAt || null;
   const campaignLabel = campaignAt
     ? new Date(campaignAt).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " ET"
     : "campaign open";
@@ -182,8 +185,9 @@ function renderMovement(chain, eth, front, ethm) {
   const solBars = buildSparkBars(chain?.solDepositBars, "s");
   const ethBars = buildSparkBars(eth?.ethDepositBars, "w");
   const mainBars = buildSparkBars(ethm?.ethDepositBars, "w");
+  const azyBars = buildSparkBars(azy?.azyDepositBars, "s");
 
-  const launchCandidates = [chain?.solFirstSeenAt, eth?.ethFirstSeenAt, ethm?.ethFirstSeenAt]
+  const launchCandidates = [chain?.solFirstSeenAt, eth?.ethFirstSeenAt, ethm?.ethFirstSeenAt, azy?.azyFirstSeenAt]
     .map((v) => Date.parse(v || ""))
     .filter(Number.isFinite)
     .sort((a, b) => a - b);
@@ -201,6 +205,7 @@ function renderMovement(chain, eth, front, ethm) {
     ["Sepolia rail · this hour", eth?.ethHourCount != null ? `${fmt(eth.ethHourCount)} · ${fmt(eth.ethHourEth, 4)} ETH` : "--"],
     ["Sepolia rail · today", eth?.ethTodayCount != null ? `${fmt(eth.ethTodayCount)} · ${fmt(eth.ethTodayEth, 4)} ETH` : "--"],
     ["Mainnet · today", ethm?.ethTodayCount != null ? `${fmt(ethm.ethTodayCount)} · ${fmt(ethm.ethTodayEth, 4)} ETH` : "--"],
+    ["AZY · today", azy?.azyTodayCount != null ? `${fmt(azy.azyTodayCount)} · ${fmt(azy.azyTodaySol, 4)} SOL` : "--"],
     ["median gap", gapText(chain?.solMedianGapSec ?? eth?.ethMedianGapSec)],
   ].map(([label, value]) => `<span class="sim-chip"><b>${esc(value)}</b><small>${esc(label)}</small></span>`).join("");
 
@@ -247,6 +252,11 @@ function renderMovement(chain, eth, front, ethm) {
         <b class="sim-pot-total">${mainTotal != null ? `${fmt(mainTotal, 4)} ETH` : "--"}</b>
         <span class="sim-pot-sub">${(ethm?.ethChain || "Ethereum mainnet (1)").replace("Ethereum mainnet (1)", "Ethereum (1)")} · ${ethm?.ethDepositCount != null ? `${fmt(ethm.ethDepositCount)} tx${ethm.ethDepositCount === 1 ? "" : "s"} · ${fmt(ethm.ethUniqueSenders)} sender${ethm.ethUniqueSenders === 1 ? "" : "s"} · since ${campaignLabel}` : `no receipts read yet · since ${campaignLabel}`}</span>
       </div>
+      <div class="sim-pot sim-pot-azy">
+        <span class="sim-pot-label">AZY · Ascension Protocol SOL intake</span>
+        <b class="sim-pot-total">${azyTotal != null ? `${fmt(azyTotal, 4)} SOL` : "--"}</b>
+        <span class="sim-pot-sub">${azy?.destWallet ? walletLink(azy.destWallet) : "azy.life custody wallet"} · ${azy?.azyDepositCount != null ? `${fmt(azy.azyDepositCount)} tx${azy.azyDepositCount === 1 ? "" : "s"} · ${fmt(azy.azyUniquePayers)} payer${azy.azyUniquePayers === 1 ? "" : "s"} · since ${campaignLabel}` : `no deposits read yet · since ${campaignLabel}`}</span>
+      </div>
       <div class="sim-clock">
         <span class="sim-clock-label">deadline</span>
         <b id="simClock">${esc(clockLeft(deadline))}</b>
@@ -264,6 +274,7 @@ function renderMovement(chain, eth, front, ethm) {
       <div class="sim-spark"><h4>SOL received · last 24h by hour</h4><div class="sim-bars">${solBars}</div><small>${fmt(chain?.solTodayCount)} deposits today</small></div>
       <div class="sim-spark"><h4>Sepolia rail ETH · last 24h by hour</h4><div class="sim-bars sim-bars-eth">${ethBars}</div><small>${fmt(eth?.ethTodayCount)} txs today</small></div>
       <div class="sim-spark"><h4>Ethereum mainnet ETH · last 24h by hour</h4><div class="sim-bars sim-bars-eth">${mainBars}</div><small>${fmt(ethm?.ethTodayCount)} txs today</small></div>
+      <div class="sim-spark"><h4>AZY SOL intake · last 24h by hour</h4><div class="sim-bars">${azyBars}</div><small>${fmt(azy?.azyTodayCount)} deposits today</small></div>
     </div>`;
 }
 

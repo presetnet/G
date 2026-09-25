@@ -130,11 +130,13 @@
 .sim-desk a:hover, .sim-desk a:focus-visible { color: #e4d6ff; }
 
 .sim-movement { display: grid; gap: .6rem; }
-.sim-funding { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .55rem; }
+.sim-funding { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .55rem; }
 .sim-pot { min-width: 0; padding: .8rem .8rem .7rem; border: 1px solid #4a3540; border-radius: 10px; background: radial-gradient(120% 100% at 80% 0%, #241a2b 0%, #14181c 65%); }
 .sim-pot-eth { border-color: #1e3f3a; background: radial-gradient(120% 100% at 80% 0%, #11231f 0%, #14181c 65%); }
+.sim-pot-azy { border-color: #4a3a6b; background: radial-gradient(120% 100% at 80% 0%, #2a1f3f 0%, #14181c 65%); }
 .sim-pot-label { display: block; color: #8ee6a8; font: 600 .58rem var(--font-mono); letter-spacing: .14em; text-transform: uppercase; }
 .sim-pot-eth .sim-pot-label { color: #7fe8d8; }
+.sim-pot-azy .sim-pot-label { color: #d7b4ff; }
 .sim-pot-total { display: block; margin-top: .35rem; overflow-wrap: anywhere; color: #f8f4e0; font: 600 1.35rem var(--font-mono); }
 .sim-pot-sub { display: block; margin-top: .3rem; color: #8da5a2; font: .58rem/1.5 var(--font-mono); }
 .sim-clock { min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: .8rem; border: 1px solid #4a3540; border-radius: 10px; background: #14181c; }
@@ -142,7 +144,7 @@
 #simClock { display: block; margin-top: .3rem; color: #ffd9a8; font: 600 1.5rem var(--font-mono); letter-spacing: .03em; font-variant-numeric: tabular-nums; }
 .sim-progress { height: 5px; margin-top: .5rem; overflow: hidden; border-radius: 3px; background: #20262a; }
 .sim-progress i { display: block; height: 100%; background: linear-gradient(90deg, #c9a7ff, #ff9ac2); }
-.sim-velocity { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .5rem; }
+.sim-velocity { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .5rem; }
 .sim-chip { min-width: 0; padding: .6rem .7rem; border: 1px solid #26353a; border-radius: 7px; background: #151d20; }
 .sim-chip b { display: block; overflow: hidden; color: #e4d8ff; font: 500 .72rem var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .sim-chip small { display: block; margin-top: .2rem; color: #8da5a2; font: .58rem var(--font-mono); }
