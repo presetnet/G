@@ -963,6 +963,10 @@ const SIM_CAMPAIGN_START =
   Date.parse(process.env.SIM_CAMPAIGN_START || "2026-09-24T09:00:00-04:00");
 const SIM_CAMPAIGN_START_SEC = Number.isFinite(SIM_CAMPAIGN_START) ? SIM_CAMPAIGN_START / 1000 : 0;
 const SIM_CAMPAIGN_START_AT = new Date(SIM_CAMPAIGN_START_SEC * 1000).toISOString();
+// Bump whenever a SOL-rail walker/scope change means carried totals must be
+// rebuilt from the campaign cutoff instead of carried forward (e.g. the shared
+// desk accumulated a mismatched base). Two rails: sim.chain and azy.chain.
+const SOL_RAIL_SCOPE = "2026-09-25-solid";
 // Semantics version for the ETH rail walker. Bump when the walk rules change: a
 // carried ethScanDone=true from an older build would otherwise trick the new
 // walker into stopping at the first all-known page and never backfilling the
@@ -4697,7 +4701,7 @@ async function simSolDepositTotals(previous, opts = {}) {
   // window. The known-sig ring is cleared too, or the remaining "known" sigs would
   // keep the rebuilt state stuck at post-reset additions and the window would never
   // re-scan.
-  if (previous?.[`${fieldPrefix}CampaignSinceSec`] !== SIM_CAMPAIGN_START_SEC) {
+  if (previous?.[`${fieldPrefix}CampaignSinceSec`] !== SIM_CAMPAIGN_START_SEC || previous?.[`${fieldPrefix}Scope`] !== SOL_RAIL_SCOPE) {
     totalLamports = 0;
     count = 0;
     rows = [];
@@ -4723,7 +4727,7 @@ async function simSolDepositTotals(previous, opts = {}) {
       ? previous[`${fieldPrefix}ScanCursor`]
       : null;
   let scanDone = previous?.[`${fieldPrefix}ScanDone`] === true;
-  if (previous?.[`${fieldPrefix}CampaignSinceSec`] !== SIM_CAMPAIGN_START_SEC) {
+  if (previous?.[`${fieldPrefix}CampaignSinceSec`] !== SIM_CAMPAIGN_START_SEC || previous?.[`${fieldPrefix}Scope`] !== SOL_RAIL_SCOPE) {
     scanCursor = null;
     scanDone = false;
   }
@@ -4827,7 +4831,7 @@ async function simSolDepositTotals(previous, opts = {}) {
   for (const sig of processed) {
     if (sig && !knownSigs.includes(sig)) knownSigs.unshift(sig);
   }
-  if (knownSigs.length > 4800) knownSigs.length = 4800;
+  if (knownSigs.length > 1500) knownSigs.length = 1500;
   // The scan cursor may only sit at the oldest signature this round actually
   // fetched. Advancing past the burst frontier would silently skip every deposit
   // between the old cursor and the new one; sitting at processedOldestSig makes
@@ -4835,9 +4839,9 @@ async function simSolDepositTotals(previous, opts = {}) {
   if (!scanDone) scanCursor = processedOldestSig ?? scanCursor;
   else scanCursor = null;
   rows.sort((a, b) => a.t - b.t);
-  if (rows.length > 1500) rows = rows.slice(rows.length - 1500);
+  if (rows.length > 700) rows = rows.slice(rows.length - 700);
   payerTotals.sort((a, b) => b.s - a.s);
-  if (payerTotals.length > 200) payerTotals.length = 200;
+  if (payerTotals.length > 100) payerTotals.length = 100;
   return {
     okAgg: true,
     rateLimited,
@@ -4853,6 +4857,7 @@ async function simSolDepositTotals(previous, opts = {}) {
     largestAt,
     scanCursor,
     scanDone,
+    scope: SOL_RAIL_SCOPE,
   };
 }
 
@@ -4930,6 +4935,7 @@ export async function sniffSimChain({ previous } = {}) {
       knownSigs: Array.isArray(solAgg.knownSigs) ? solAgg.knownSigs : [],
       solScanCursor: solAgg.scanCursor ?? null,
       solScanDone: solAgg.scanDone === true,
+      solScope: SOL_RAIL_SCOPE,
       solCampaignSinceSec: SIM_CAMPAIGN_START_SEC,
       simCampaignStartAt: SIM_CAMPAIGN_START_AT,
       fingerprint: usable
@@ -4994,6 +5000,7 @@ export async function sniffSimChain({ previous } = {}) {
       solLargestSig: previous?.solLargestSig ?? null,
       solScanCursor: previous?.solScanCursor ?? null,
       solScanDone: previous?.solScanDone === true,
+      solScope: previous?.solScope ?? SOL_RAIL_SCOPE,
       solCampaignSinceSec: previous?.solCampaignSinceSec ?? SIM_CAMPAIGN_START_SEC,
       simCampaignStartAt: SIM_CAMPAIGN_START_AT,
       solLargestAt: previous?.solLargestAt ?? null,
@@ -5070,6 +5077,7 @@ export async function sniffAzyChain({ previous } = {}) {
       knownSigs: Array.isArray(solAgg.knownSigs) ? solAgg.knownSigs : [],
       azyScanCursor: solAgg.scanCursor ?? null,
       azyScanDone: solAgg.scanDone === true,
+      azyScope: SOL_RAIL_SCOPE,
       azyCampaignSinceSec: SIM_CAMPAIGN_START_SEC,
       azyCampaignStartAt: SIM_CAMPAIGN_START_AT,
       fingerprint: usable
@@ -5127,6 +5135,7 @@ export async function sniffAzyChain({ previous } = {}) {
       azyLargestSig: previous?.azyLargestSig ?? null,
       azyScanCursor: previous?.azyScanCursor ?? null,
       azyScanDone: previous?.azyScanDone === true,
+      azyScope: previous?.azyScope ?? SOL_RAIL_SCOPE,
       azyCampaignSinceSec: previous?.azyCampaignSinceSec ?? SIM_CAMPAIGN_START_SEC,
       azyCampaignStartAt: SIM_CAMPAIGN_START_AT,
       payers: Array.isArray(previous?.payers) ? previous.payers : [],
