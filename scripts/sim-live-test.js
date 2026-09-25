@@ -32,6 +32,7 @@ let destSigsMode = 1;
 let rpc429 = false;
 let v2Empty = false;
 let ethMainnetV2Empty = false;
+let v1Empty = false;
 
 const readOnlyStore = {
   loadMiningSurfaceCache: async () => null,
@@ -119,6 +120,7 @@ const context = vm.createContext({
     }
     if (url.origin === "https://eth-sepolia.blockscout.com") {
       if (url.searchParams.get("module") === "account") {
+        if (v1Empty) return respond(200, { status: "0", message: "No records found", result: [] });
         return respond(200, {
           status: "1", message: "OK",
           result: [
@@ -314,6 +316,21 @@ assert.equal(ethMainFb.ethDepositCount, 1, "mainnet v1 fallback counts deposits"
 assert.equal(ethMainFb.ethExplorerFallback, "v1");
 assert.equal(ethMainFb.ethLatestHash, "0xma1");
 assert.equal(ethMainFb.ethChain, "Ethereum mainnet (1)");
+
+// 4d. An explorer that serves nothing verifiable (v2 shells empty AND the v1
+// fallback has no records) must never be reported as a confident 0.0000 ETH —
+// it is an unavailable source carrying last-observed totals. This is the exact
+// bug that showed 0 ETH for a ~1000-deposit wallet while Blockscout throttled
+// the deploy's egress IP.
+v2Empty = true;
+v1Empty = true;
+const shelled = await api.sniffSimEth({ previous: null });
+assert.equal(shelled.ok, false, "a fully-shelled read is unavailable, not ok");
+assert.equal(shelled.status, 0);
+assert.equal(shelled.ethDepositsEth, null, "never a confident 0.0000 ETH");
+assert.ok(/no verifiable/.test(String(shelled.reason || "")), shelled.reason || "reason present");
+v2Empty = false;
+v1Empty = false;
 
 // A second idle poll must not double-count anything (dedupe by tx hash).
 const ethRepeat = await api.sniffSimEth({ previous: eth });

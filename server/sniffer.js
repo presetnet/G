@@ -4685,14 +4685,66 @@ async function simSolDepositTotals(previous) {
     largestSig = null;
     largestAt = null;
   }
-  const sigs = await solanaRpc("getSignaturesForAddress", [
-    SIM_SOL_DESTINATION,
-    { limit: 1000, commitment: "confirmed" },
-  ]);
-  if (!Array.isArray(sigs) || sigs.length === 0) return { okAgg: false };
+  // Full-history walk to the campaign cutoff. getSignaturesForAddress is a fixed
+  // cursor call: the newest 1000 signatures only cover this wallet's last few
+  // hours, which is NOT the campaign window the desk must share. Until a page
+  // reaches a signature older than the cutoff, page backwards with `before`
+  // (carried as solScanCursor) so every campaign deposit is summed, not just the
+  // newest slice. Once a page crosses the cutoff (or history ends), scanning is
+  // done for good — the campaign window is fixed and new deposits only arrive at
+  // the front, inside the normal 1000-signature window.
+  let scanCursor = typeof previous?.solScanCursor === "string" && previous?.solScanDone !== true ? previous.solScanCursor : null;
+  let scanDone = previous?.solScanDone === true;
+  if (previous?.solCampaignSinceSec !== SIM_CAMPAIGN_START_SEC) {
+    scanCursor = null;
+    scanDone = false;
+  }
+  const sigs = [];
+  if (!scanDone) {
+    let pageStart = scanCursor;
+    let guard = 0;
+    while (guard < 8) {
+      const chunk = await solanaRpc("getSignaturesForAddress", [
+        SIM_SOL_DESTINATION,
+        pageStart
+          ? { limit: 1000, commitment: "confirmed", before: pageStart }
+          : { limit: 1000, commitment: "confirmed" },
+      ]);
+      if (!Array.isArray(chunk) || !chunk.length) {
+        scanDone = true; // no older history; the window is fully scanned
+        break;
+      }
+      const unknown = chunk.filter((s) => s?.signature && !knownSigs.includes(s.signature));
+      if (unknown.length === 0) {
+        scanDone = true; // every sig in this page was already fetched and known
+        break;
+      }
+      sigs.push(...chunk);
+      pageStart = chunk[chunk.length - 1]?.signature ?? pageStart;
+      guard += 1;
+      const minT = Math.min(...chunk.map((s) => (Number.isInteger(s?.blockTime) ? s.blockTime : Infinity)));
+      if (Number.isFinite(minT) && minT < SIM_CAMPAIGN_START_SEC) {
+        scanDone = true; // this page crossed the campaign boundary
+        break;
+      }
+      if (chunk.length < 1000) {
+        scanDone = true; // short page = history end
+        break;
+      }
+    }
+  } else {
+    // Maintenance mode: only the newest 1000 signatures contain anything new.
+    const windowed = await solanaRpc("getSignaturesForAddress", [
+      SIM_SOL_DESTINATION,
+      { limit: 1000, commitment: "confirmed" },
+    ]);
+    if (Array.isArray(windowed)) sigs.push(...windowed);
+  }
+  if (sigs.length === 0 && !scanDone) return { okAgg: false };
   const fresh = sigs.filter((s) => s?.signature && !knownSigs.includes(s.signature));
   let fetched = 0;
   let rateLimited = false;
+  let processedOldestSig = null;
   const processed = new Set();
   for (const s of fresh) {
     if (fetched >= SIM_SOL_CATCH_UP_BURST) break;
@@ -4704,12 +4756,11 @@ async function simSolDepositTotals(previous) {
         { commitment: "confirmed", maxSupportedTransactionVersion: 0 },
       ]);
     } catch (error) {
-      // A public RPC 429s under a burst of getTransaction calls. Stop polling this
-      // round rather than throwing: the carried totals must stay readable.
       rateLimited = /429/.test(String(error?.message || error));
       break;
     }
     processed.add(s.signature);
+    processedOldestSig = s.signature;
     if (!rateLimited) await sleep(SIM_SOL_CATCH_UP_PACE_MS); // gentle pace, esp. for the free public RPC
     const meta = tx?.meta;
     const keys = tx?.transaction?.message?.accountKeys;
@@ -4748,7 +4799,13 @@ async function simSolDepositTotals(previous) {
   for (const sig of processed) {
     if (sig && !knownSigs.includes(sig)) knownSigs.unshift(sig);
   }
-  if (knownSigs.length > 1200) knownSigs.length = 1200;
+  if (knownSigs.length > 4800) knownSigs.length = 4800;
+  // The scan cursor may only sit at the oldest signature this round actually
+  // fetched. Advancing past the burst frontier would silently skip every deposit
+  // between the old cursor and the new one; sitting at processedOldestSig makes
+  // the next round resume exactly at the unconsumed frontier.
+  if (!scanDone) scanCursor = processedOldestSig ?? scanCursor;
+  else scanCursor = null;
   rows.sort((a, b) => a.t - b.t);
   if (rows.length > 1500) rows = rows.slice(rows.length - 1500);
   payerTotals.sort((a, b) => b.s - a.s);
@@ -4766,6 +4823,8 @@ async function simSolDepositTotals(previous) {
     largestLamports,
     largestSig,
     largestAt,
+    scanCursor,
+    scanDone,
   };
 }
 
@@ -4841,6 +4900,8 @@ export async function sniffSimChain({ previous } = {}) {
       solLargestAt: solAgg.largestAt ?? null,
       payers: Array.isArray(solAgg.payers) ? solAgg.payers : [],
       knownSigs: Array.isArray(solAgg.knownSigs) ? solAgg.knownSigs : [],
+      solScanCursor: solAgg.scanCursor ?? null,
+      solScanDone: solAgg.scanDone === true,
       solCampaignSinceSec: SIM_CAMPAIGN_START_SEC,
       simCampaignStartAt: SIM_CAMPAIGN_START_AT,
       fingerprint: usable
@@ -4903,6 +4964,8 @@ export async function sniffSimChain({ previous } = {}) {
       solPayerTotals: Array.isArray(previous?.solPayerTotals) ? previous.solPayerTotals : [],
       solLargestLamports: previous?.solLargestLamports != null ? previous.solLargestLamports : 0,
       solLargestSig: previous?.solLargestSig ?? null,
+      solScanCursor: previous?.solScanCursor ?? null,
+      solScanDone: previous?.solScanDone === true,
       solCampaignSinceSec: previous?.solCampaignSinceSec ?? SIM_CAMPAIGN_START_SEC,
       simCampaignStartAt: SIM_CAMPAIGN_START_AT,
       solLargestAt: previous?.solLargestAt ?? null,
@@ -4930,7 +4993,7 @@ export async function sniffSimEthMainnet({ previous } = {}) {
 async function sniffSimEthRail({ previous = {}, cfg = {} }) {
   const { source = "sim.eth", explorer = SIM_ETH_EXPLORER, sourceUrl = SIM_ETH_SOURCE_URL, chainLabel = "Sepolia (11155111)" } = cfg;
   const started = Date.now();
-  const knownHashes = Array.isArray(previous?.ethKnownHashes) ? previous.ethKnownHashes.slice(0, 600) : [];
+  const knownHashes = Array.isArray(previous?.ethKnownHashes) ? previous.ethKnownHashes.slice(0, 2500) : [];
   const senders = Array.isArray(previous?.ethSenders) ? previous.ethSenders.slice(0, 400) : [];
   const senderTotals = Array.isArray(previous?.ethSenderTotals)
     ? previous.ethSenderTotals.slice(0, 200)
@@ -4964,7 +5027,7 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
     let pages = 0;
     let caughtUp = false;
     let ingested = 0;
-    while (pages < 6 && !caughtUp) {
+    while (pages < 80 && !caughtUp) {
       const url = cursor
         ? `${sourceUrl}?${new URLSearchParams(cursor).toString()}`
         : sourceUrl;
@@ -5011,7 +5074,7 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
         knownHashes.unshift(hash);
         added += 1;
       }
-      if (knownHashes.length > 600) knownHashes.length = 600;
+      if (knownHashes.length > 2500) knownHashes.length = 2500;
       cursor = res.json?.next_page_params || null;
       pages += 1;
       ingested += added;
@@ -5022,7 +5085,7 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
       // egress IPs): fall back to the v1 txlist API for the same wallet.
       let offset = 0;
       let v1Pages = 0;
-      while (v1Pages < 6) {
+      while (v1Pages < 80) {
         const v1 = await fetchJson(
           `${explorer}/api?module=account&action=txlist&address=${SIM_ETH_ADDRESS}&startblock=0&endblock=99999999&page=${v1Pages + 1}&offset=50&sort=desc`,
           { timeoutMs: 8_000 }
@@ -5069,7 +5132,7 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
           knownHashes.unshift(hash);
           added += 1;
         }
-        if (knownHashes.length > 600) knownHashes.length = 600;
+        if (knownHashes.length > 2500) knownHashes.length = 2500;
         v1Pages += 1;
         offset += added;
         if (added === 0) break;
@@ -5077,11 +5140,21 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
       if (offset > 0) ingested = offset;
       explorerFallback = offset > 0 ? "v1" : "v1-empty";
     }
+    // A read that produced no verifiable deposits in-window must not be written
+    // as a confident 0.0000 ETH. When Blockscout throttles this egress IP it
+    // serves "UNAVAILABLE: values withheld" shells or empty pages that decode
+    // into exactly that zero — the desk would print 0.0000 for a wallet with
+    // ~1000 positive deposits. Throw so the catch carries the last observed
+    // totals (or null on a never-seen wallet). An IDLE read with carried
+    // positive totals (count/totalWei > 0) is a legitimate ok:true no-change.
+    if (ingested === 0 && totalWei === 0 && count === 0) {
+      throw new Error(`${chainLabel} explorer returned no verifiable deposits (${explorerFallback || "v2"}); keeping last observed totals`);
+    }
     rows.sort((a, b) => a.t - b.t);
     if (rows.length > 1500) rows = rows.slice(rows.length - 1500);
     senderTotals.sort((a, b) => b.v - a.v);
     if (senderTotals.length > 200) senderTotals.length = 200;
-    const usable = pages > 0;
+    const usable = pages > 0 || ingested > 0;
     const win = simDepositWindows(rows, "w", Date.now() / 1000);
     const topSenders = senderTotals.slice(0, 5).map((p) => ({
       wallet: p.w,
