@@ -260,7 +260,7 @@ function renderMovement(chain, eth, front, ethm) {
       <div class="sim-spark"><h4>SOL received · last 24h by hour</h4><div class="sim-bars">${solBars}</div><small>${fmt(chain?.solTodayCount)} deposits today</small></div>
       <div class="sim-spark"><h4>Sepolia rail ETH · last 24h by hour</h4><div class="sim-bars sim-bars-eth">${ethBars}</div><small>${fmt(eth?.ethTodayCount)} txs today</small></div>
       <div class="sim-spark"><h4>Ethereum mainnet ETH · last 24h by hour</h4><div class="sim-bars sim-bars-eth">${mainBars}</div><small>${fmt(ethm?.ethTodayCount)} txs today</small></div>
-    </div>
+    </div>`;
 }
 
 const SIM_SOL_DEST = "BjLoeUtRq1QBLBWcTWgUFFfj75BsrcESZMu6F1DrMV9C";
