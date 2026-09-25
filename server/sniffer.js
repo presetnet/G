@@ -955,6 +955,14 @@ const SOLANA_RPC_URL =
     : "https://api.mainnet-beta.solana.com");
 const SIM_SOL_CATCH_UP_BURST = Number(process.env.SIM_SOL_CATCH_UP_BURST || (process.env.HELIUS_API_KEY ? 350 : 60));
 const SIM_SOL_CATCH_UP_PACE_MS = Number(process.env.SIM_SOL_CATCH_UP_PACE_MS || (process.env.HELIUS_API_KEY ? 15 : 60));
+// Only deposits received from the campaign inception onward (default: Thu Sep 24,
+// 9am ET) are shared on the desk. Older wallet history is real but not "our"
+// deposits; the carried totals are scoped to this window so the pot is never a
+// lifetime figure. Override via SIM_CAMPAIGN_START (ISO 8601).
+const SIM_CAMPAIGN_START =
+  Date.parse(process.env.SIM_CAMPAIGN_START || "2026-09-24T09:00:00-04:00");
+const SIM_CAMPAIGN_START_SEC = Number.isFinite(SIM_CAMPAIGN_START) ? SIM_CAMPAIGN_START / 1000 : 0;
+const SIM_CAMPAIGN_START_AT = new Date(SIM_CAMPAIGN_START_SEC * 1000).toISOString();
 /** StackNet's devnet-era TEST treasury. On mainnet it holds a single 0.0016 SOL dust
  * ping from a spam-distribution blaster (the ETUdaF4… → G2YxRa6w… tree), no other
  * transaction ever. It is NOT a live treasury: only used as a last-resort fallback
@@ -4659,6 +4667,21 @@ async function simSolDepositTotals(previous) {
   let largestLamports = Number.isFinite(previous?.solLargestLamports) ? previous.solLargestLamports : 0;
   let largestSig = typeof previous?.solLargestSig === "string" ? previous.solLargestSig : null;
   let largestAt = typeof previous?.solLargestAt === "string" ? previous.solLargestAt : null;
+  // Campaign scoping: a carry that predates the cutoff (legacy lifetime totals from
+  // before this release) must not leak into the shared pot. Reset when the carry is
+  // not already scoped so the next rounds re-derive strictly within the campaign
+  // window. The known-sig ring is kept either way — it is cut-off-agnostic dedupe.
+  if (previous?.solCampaignSinceSec !== SIM_CAMPAIGN_START_SEC) {
+    totalLamports = 0;
+    count = 0;
+    rows = [];
+    payers.length = 0;
+    payerTotals.length = 0;
+    firstSeenSec = null;
+    largestLamports = 0;
+    largestSig = null;
+    largestAt = null;
+  }
   const sigs = await solanaRpc("getSignaturesForAddress", [
     SIM_SOL_DESTINATION,
     { limit: 1000, commitment: "confirmed" },
@@ -4694,9 +4717,10 @@ async function simSolDepositTotals(previous) {
     if (payer && SIM_EXCLUDED_PAYERS.has(payer)) continue; // seed/owner money, never on the payment board
     const delta = (meta.postBalances?.[index] || 0) - (meta.preBalances?.[index] || 0);
     if (delta < SIM_SOL_DEPOSIT_MIN_LAMPORTS) continue;
+    const tSec = Number.isInteger(tx?.blockTime) ? tx.blockTime : null;
+    if (tSec === null || tSec < SIM_CAMPAIGN_START_SEC) continue; // campaign-window only
     totalLamports += delta;
     count += 1;
-    const tSec = Number.isInteger(tx?.blockTime) ? tx.blockTime : null;
     if (payer && payer !== SIM_SOL_DESTINATION && !payers.includes(payer)) {
       payers.push(payer);
     }
@@ -4723,7 +4747,7 @@ async function simSolDepositTotals(previous) {
   }
   if (knownSigs.length > 1200) knownSigs.length = 1200;
   rows.sort((a, b) => a.t - b.t);
-  if (rows.length > 300) rows = rows.slice(rows.length - 300);
+  if (rows.length > 1500) rows = rows.slice(rows.length - 1500);
   payerTotals.sort((a, b) => b.s - a.s);
   if (payerTotals.length > 200) payerTotals.length = 200;
   return {
@@ -4814,6 +4838,8 @@ export async function sniffSimChain({ previous } = {}) {
       solLargestAt: solAgg.largestAt ?? null,
       payers: Array.isArray(solAgg.payers) ? solAgg.payers : [],
       knownSigs: Array.isArray(solAgg.knownSigs) ? solAgg.knownSigs : [],
+      solCampaignSinceSec: SIM_CAMPAIGN_START_SEC,
+      simCampaignStartAt: SIM_CAMPAIGN_START_AT,
       fingerprint: usable
         ? simpleHash(JSON.stringify({
             simSupply,
@@ -4830,7 +4856,7 @@ export async function sniffSimChain({ previous } = {}) {
   } catch (error) {
     const depRows = Array.isArray(previous?.solDepositRows) ? previous.solDepositRows : [];
     const win = simDepositWindows(depRows, "s", Date.now() / 1000);
-    const prevLamports = Number.isFinite(previous?.solTotalLamports) ? previous.solTotalLamports : 0;
+    const prevLamports = Number.isFinite(previous?.solTotalLamports) && previous?.solCampaignSinceSec === SIM_CAMPAIGN_START_SEC ? previous.solTotalLamports : 0;
     const firstSeenSec = Number.isFinite(previous?.solFirstSeenSec) ? previous.solFirstSeenSec : null;
     const largestLamports = Number.isFinite(previous?.solLargestLamports) ? previous.solLargestLamports : 0;
     return {
@@ -4874,6 +4900,8 @@ export async function sniffSimChain({ previous } = {}) {
       solPayerTotals: Array.isArray(previous?.solPayerTotals) ? previous.solPayerTotals : [],
       solLargestLamports: previous?.solLargestLamports != null ? previous.solLargestLamports : 0,
       solLargestSig: previous?.solLargestSig ?? null,
+      solCampaignSinceSec: previous?.solCampaignSinceSec ?? SIM_CAMPAIGN_START_SEC,
+      simCampaignStartAt: SIM_CAMPAIGN_START_AT,
       solLargestAt: previous?.solLargestAt ?? null,
       payers: Array.isArray(previous?.payers) ? previous.payers : [],
       knownSigs: Array.isArray(previous?.knownSigs) ? previous.knownSigs : [],
@@ -4912,6 +4940,19 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
   let largestWei = Number.isFinite(previous?.ethLargestWei) ? previous.ethLargestWei : 0;
   let largestHash = typeof previous?.ethLargestHash === "string" ? previous.ethLargestHash : null;
   let largestAt = typeof previous?.ethLargestAt === "string" ? previous.ethLargestAt : null;
+  // Campaign scoping (mirrors the SOL rail): legacy lifetime carry must not leak
+  // into the shared ETH figures. Known hashes are kept regardless.
+  if (previous?.ethCampaignSinceSec !== SIM_CAMPAIGN_START_SEC) {
+    totalWei = 0;
+    count = 0;
+    rows = [];
+    senders.length = 0;
+    senderTotals.length = 0;
+    firstSeenSec = null;
+    largestWei = 0;
+    largestHash = null;
+    largestAt = null;
+  }
   try {
     let explorerFallback = null;
     let cursor = null;
@@ -4935,14 +4976,18 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
         }
         const wei = Number(item?.value);
         if (Number.isFinite(wei) && wei > 0) {
+          const tSec = Number.isFinite(Date.parse(item?.timestamp))
+            ? Math.round(Date.parse(item.timestamp) / 1000)
+            : null;
+          if (tSec === null || tSec < SIM_CAMPAIGN_START_SEC) {
+            knownHashes.unshift(hash);
+            continue;
+          }
           totalWei += wei;
           count += 1;
           const from = item?.from?.hash;
           if (from && !senders.includes(from)) senders.push(from);
           latestHash = hash;
-          const tSec = Number.isFinite(Date.parse(item?.timestamp))
-            ? Math.round(Date.parse(item.timestamp) / 1000)
-            : null;
           if (Number.isFinite(tSec)) {
             rows.push({ t: tSec, w: wei });
             if (firstSeenSec === null || tSec < firstSeenSec) firstSeenSec = tSec;
@@ -4991,12 +5036,16 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
           }
           const wei = Number(item?.value);
           if (Number.isFinite(wei) && wei > 0) {
+            const tSec = Number(item?.timeStamp) > 0 ? Number(item.timeStamp) : null;
+            if (tSec === null || tSec < SIM_CAMPAIGN_START_SEC) {
+              knownHashes.unshift(hash);
+              continue;
+            }
             totalWei += wei;
             count += 1;
             const from = typeof item?.from === "string" ? item.from : null;
             if (from && !senders.includes(from)) senders.push(from);
             latestHash = hash;
-            const tSec = Number(item?.timeStamp) > 0 ? Number(item.timeStamp) : null;
             if (Number.isFinite(tSec)) {
               rows.push({ t: tSec, w: wei });
               if (firstSeenSec === null || tSec < firstSeenSec) firstSeenSec = tSec;
@@ -5024,7 +5073,7 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
       explorerFallback = offset > 0 ? "v1" : "v1-empty";
     }
     rows.sort((a, b) => a.t - b.t);
-    if (rows.length > 300) rows = rows.slice(rows.length - 300);
+    if (rows.length > 1500) rows = rows.slice(rows.length - 1500);
     senderTotals.sort((a, b) => b.v - a.v);
     if (senderTotals.length > 200) senderTotals.length = 200;
     const usable = pages > 0;
@@ -5070,6 +5119,8 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
       ethLargestAt: largestAt,
       ethKnownHashes: knownHashes,
       ethSenders: senders,
+      ethCampaignSinceSec: SIM_CAMPAIGN_START_SEC,
+      simCampaignStartAt: SIM_CAMPAIGN_START_AT,
       fingerprint: usable
         ? simpleHash(JSON.stringify({ wei: totalWei, count, latestHash }))
         : null,
@@ -5078,7 +5129,7 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
   } catch (error) {
     rows.sort((a, b) => a.t - b.t);
     const win = simDepositWindows(rows, "w", Date.now() / 1000);
-    const carriedWei = Number.isFinite(previous?.ethTotalWei) ? previous.ethTotalWei : 0;
+    const carriedWei = Number.isFinite(previous?.ethTotalWei) && previous?.ethCampaignSinceSec === SIM_CAMPAIGN_START_SEC ? previous.ethTotalWei : 0;
     const firstSeenSec = Number.isFinite(previous?.ethFirstSeenSec) ? previous.ethFirstSeenSec : null;
     const largestWei = Number.isFinite(previous?.ethLargestWei) ? previous.ethLargestWei : 0;
     return {
@@ -5122,6 +5173,8 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
       ethLargestAt: previous?.ethLargestAt ?? null,
       ethKnownHashes: knownHashes,
       ethSenders: senders,
+      ethCampaignSinceSec: previous?.ethCampaignSinceSec ?? SIM_CAMPAIGN_START_SEC,
+      simCampaignStartAt: SIM_CAMPAIGN_START_AT,
       fingerprint: null,
       reason: error?.message || String(error),
     };

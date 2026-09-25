@@ -141,7 +141,7 @@ export function renderSimDesk(latest) {
         `<span><b>${esc(pay.solAmountSol ?? "--")} SOL</b>${walletLink(pay.sol || SIM_SOL_DEST)}<small>mainnet SOL destination · ${chain?.destWallet ? walletLink(chain.destWallet) : ""}</small></span>`,
         `<span><b>${esc(pay.ethAmount ?? "--")} ETH</b>${esc(pay.eth || SIM_ETH_DEST)}${ethAddressLink(SIM_ETH_ADDR)}<small>${front.markers?.ethRailSepolia ? "site instructs the Sepolia rail (11155111); the desk also reads Ethereum mainnet for this wallet" : "Ethereum mainnet rail"}</small></span>`,
         `<span><b>${pay.xmoneyUsd ? `$${pay.xmoneyUsd}` : "--"}</b>@XMONEY<small>X payment instruction</small></span>`,
-      ].join("") : ""}<div class="sim-honesty"><span>The scoreboard requires an X OAuth session — no public leaderboard is kept here. Receipts on the Sepolia rail and on Ethereum mainnet are both observed on-chain; the SOL rail is mainnet.</span></div></div>`
+      ].join("") : ""}<div class="sim-honesty"><span>The scoreboard requires an X OAuth session — no public leaderboard is kept here. Receipts on the Sepolia rail and on Ethereum mainnet are both observed on-chain; the SOL rail is mainnet. Deposit totals cover the campaign window — payments received from the campaign launch onward; earlier wallet history is intentionally excluded.</span></div></div>`
     : `<div class="desk-empty"><span>[ - ]</span><span>${esc(front?.reason || "Waiting for the public sim.tech home page")}</span></div>`;
 
   chainRows.innerHTML = renderMovement(chain, eth, front, latest?.sources?.["sim.ethm"]);
@@ -174,6 +174,10 @@ function renderMovement(chain, eth, front, ethm) {
   const mainTotal = num(ethm?.ethDepositsEth);
   const solUsd = num(simPrice.sol) && num(solTotal) ? Number(simPrice.sol) * Number(solTotal) : null;
   const deadline = front?.deadline || front?.deadlineFallbackAt || null;
+  const campaignAt = chain?.simCampaignStartAt || eth?.simCampaignStartAt || ethm?.simCampaignStartAt || null;
+  const campaignLabel = campaignAt
+    ? new Date(campaignAt).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " ET"
+    : "campaign open";
 
   const solBars = buildSparkBars(chain?.solDepositBars, "s");
   const ethBars = buildSparkBars(eth?.ethDepositBars, "w");
@@ -231,17 +235,17 @@ function renderMovement(chain, eth, front, ethm) {
       <div class="sim-pot">
         <span class="sim-pot-label">Solana mainnet · SOL pot</span>
         <b class="sim-pot-total">${solTotal != null ? `${fmt(solTotal, 4)} SOL` : "--"}</b>
-        <span class="sim-pot-sub">${chain?.solRateLimited === true ? "RPC rate-limit pause · showing last observed" : solUsd != null ? `≈ $${fmt(solUsd, 0)} at live price · ` : ""}${chain?.solDepositCount != null ? `${fmt(chain.solDepositCount)} payment${chain.solDepositCount === 1 ? "" : "s"} · ${fmt(chain.solUniquePayers)} payer${chain.solUniquePayers === 1 ? "" : "s"}${repeat ? ` · ${repeat}× repeat rate` : ""}` : "awaiting the first observed payment"}</span>
+        <span class="sim-pot-sub">${chain?.solRateLimited === true ? "RPC rate-limit pause · showing last observed" : solUsd != null ? `≈ $${fmt(solUsd, 0)} at live price · ` : ""}${chain?.solDepositCount != null ? `${fmt(chain.solDepositCount)} payment${chain.solDepositCount === 1 ? "" : "s"} · ${fmt(chain.solUniquePayers)} payer${chain.solUniquePayers === 1 ? "" : "s"}${repeat ? ` · ${repeat}× repeat rate` : ""} · since ${campaignLabel}` : `awaiting the first observed payment · since ${campaignLabel}`}</span>
       </div>
       <div class="sim-pot sim-pot-eth">
         <span class="sim-pot-label">Sepolia rail · as instructed</span>
         <b class="sim-pot-total">${ethTotal != null ? `${fmt(ethTotal, 4)} ETH` : "--"}</b>
-        <span class="sim-pot-sub">${eth?.ethChain || "Sepolia (11155111)"} · ${eth?.ethDepositCount != null ? `${fmt(eth.ethDepositCount)} tx${eth.ethDepositCount === 1 ? "" : "s"} · ${fmt(eth.ethUniqueSenders)} sender${eth.ethUniqueSenders === 1 ? "" : "s"}` : "no receipts read yet"}</span>
+        <span class="sim-pot-sub">${eth?.ethChain || "Sepolia (11155111)"} · ${eth?.ethDepositCount != null ? `${fmt(eth.ethDepositCount)} tx${eth.ethDepositCount === 1 ? "" : "s"} · ${fmt(eth.ethUniqueSenders)} sender${eth.ethUniqueSenders === 1 ? "" : "s"} · since ${campaignLabel}` : `no receipts read yet · since ${campaignLabel}`}</span>
       </div>
       <div class="sim-pot sim-pot-eth">
         <span class="sim-pot-label">Ethereum mainnet · on-chain</span>
         <b class="sim-pot-total">${mainTotal != null ? `${fmt(mainTotal, 4)} ETH` : "--"}</b>
-        <span class="sim-pot-sub">${(ethm?.ethChain || "Ethereum mainnet (1)").replace("Ethereum mainnet (1)", "Ethereum (1)")} · ${ethm?.ethDepositCount != null ? `${fmt(ethm.ethDepositCount)} tx${ethm.ethDepositCount === 1 ? "" : "s"} · ${fmt(ethm.ethUniqueSenders)} sender${ethm.ethUniqueSenders === 1 ? "" : "s"}` : "no receipts read yet"}</span>
+        <span class="sim-pot-sub">${(ethm?.ethChain || "Ethereum mainnet (1)").replace("Ethereum mainnet (1)", "Ethereum (1)")} · ${ethm?.ethDepositCount != null ? `${fmt(ethm.ethDepositCount)} tx${ethm.ethDepositCount === 1 ? "" : "s"} · ${fmt(ethm.ethUniqueSenders)} sender${ethm.ethUniqueSenders === 1 ? "" : "s"} · since ${campaignLabel}` : `no receipts read yet · since ${campaignLabel}`}</span>
       </div>
       <div class="sim-clock">
         <span class="sim-clock-label">deadline</span>

@@ -38,7 +38,7 @@ const readOnlyStore = {
   saveMiningSurfaceCache: async () => {},
 };
 const context = vm.createContext({
-  Date: Clock, process: { env: {} }, Buffer, AbortController, URL,
+  Date: Clock, process: { env: { SIM_CAMPAIGN_START: "2026-09-24T00:00:00Z" } }, Buffer, AbortController, URL,
   setTimeout, clearTimeout,
   fetch: async (input, options = {}) => {
     const url = new URL(input);
