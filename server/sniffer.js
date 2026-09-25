@@ -967,7 +967,7 @@ const SIM_CAMPAIGN_START_AT = new Date(SIM_CAMPAIGN_START_SEC * 1000).toISOStrin
 // carried ethScanDone=true from an older build would otherwise trick the new
 // walker into stopping at the first all-known page and never backfilling the
 // freshly-defined coverage.
-const SIM_ETH_SCAN_EPOCH = 4;
+const SIM_ETH_SCAN_EPOCH = 5;
 /** StackNet's devnet-era TEST treasury. On mainnet it holds a single 0.0016 SOL dust
  * ping from a spam-distribution blaster (the ETUdaF4… → G2YxRa6w… tree), no other
  * transaction ever. It is NOT a live treasury: only used as a last-resort fallback
@@ -5022,10 +5022,13 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
   // v1 coverage is tracked separately: a v2-only walk that shelled out to empty
   // pages must never gate the fallback's first page behind a "done" marker.
   let v1ScanDone = previous?.ethExplorerFallback === "v1" && previous?.ethScanDone === true && previous?.ethScanEpoch === SIM_ETH_SCAN_EPOCH;
-  // Campaign scoping (mirrors the SOL rail): legacy lifetime carry must not leak
-  // into the shared ETH figures. Known hashes are cleared too so the campaign
-  // window is re-paged from scratch.
-  if (previous?.ethCampaignSinceSec !== SIM_CAMPAIGN_START_SEC) {
+  // If the campaign scope changed OR the walker semantics changed since the last
+  // read, the accumulated totals were built under different rules — inheriting
+  // them would re-sum (a previous build's inflated carry and its ring-trimmed
+  // hash set re-add together). Any such change must rebuild the whole
+  // accumulation from a clean ring and zeroed totals; the full walk then lands
+  // exactly on the explorer's served set.
+  if (previous?.ethCampaignSinceSec !== SIM_CAMPAIGN_START_SEC || previous?.ethScanEpoch !== SIM_ETH_SCAN_EPOCH) {
     totalWei = 0;
     count = 0;
     rows = [];
@@ -5037,10 +5040,6 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
     largestHash = null;
     largestAt = null;
     ethScanDone = false;
-    v1ScanDone = false;
-  }
-  if (previous?.ethScanEpoch !== SIM_ETH_SCAN_EPOCH) {
-    ethScanDone = false; // walker semantics changed: re-walk from the front
     v1ScanDone = false;
   }
   try {
@@ -5065,10 +5064,11 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
         : sourceUrl;
       const res = await fetchJson(url, { timeoutMs: 8_000 });
       const items = res.json && Array.isArray(res.json.items) ? res.json.items : null;
-      if (!res.ok || !items || items.length === 0) {
-        ethScanDone = true; // explorer history ends (or refuses) here
-        break;
-      }
+      // A fetch failure or an empty items array is NOT a trustworthy coverage
+      // end — Blockscout throttles this egress IP with empty shells. Break
+      // without flipping the scan marker so a later healthy pass continues the
+      // walk (totals only accrue, dedupe prevents any re-sum).
+      if (!res.ok || !items || items.length === 0) break;
       let added = 0;
       for (const item of items) {
         const hash = item?.hash;
