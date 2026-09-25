@@ -967,7 +967,7 @@ const SIM_CAMPAIGN_START_AT = new Date(SIM_CAMPAIGN_START_SEC * 1000).toISOStrin
 // carried ethScanDone=true from an older build would otherwise trick the new
 // walker into stopping at the first all-known page and never backfilling the
 // freshly-defined coverage.
-const SIM_ETH_SCAN_EPOCH = 5;
+const SIM_ETH_SCAN_EPOCH = 6;
 /** StackNet's devnet-era TEST treasury. On mainnet it holds a single 0.0016 SOL dust
  * ping from a spam-distribution blaster (the ETUdaF4… → G2YxRa6w… tree), no other
  * transaction ever. It is NOT a live treasury: only used as a last-resort fallback
@@ -5047,6 +5047,7 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
     let pages = 0;
     let addedLast = 0; // newest walked page's new-hash count; 0 mean all-known
     let ingested = 0;
+    let unresolved = 0; // items the explorer withheld (throttle variants)
     // Fixed-budget walk. Blockscout v2 `next_page_params` is NOT monotonic for
     // this address (pages bounce between Sep 2026, Jul 2025, Oct 2025 and Dec
     // 2024 camps), so no timestamp heuristic can decide where the window ends —
@@ -5081,6 +5082,17 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
           continue;
         }
         const wei = Number(item?.value);
+        // A throttled "UNAVAILABLE: values withheld" item carries no value field
+        // (null/undefined/empty — Number(null) even reads as 0, so test the raw
+        // field, not the parsed number). Committing its hash to the ring now —
+        // with the value lost — would strand those deposits permanently once the
+        // walk is marked done. Leave unresolvable items uncommitted so a later
+        // healthy pass retries them: they can only add, never re-sum (the ring
+        // only ever commits real, fully-resolvable rows).
+        if (!item?.value || !Number.isFinite(wei)) {
+          unresolved += 1;
+          continue;
+        }
         if (Number.isFinite(wei) && wei > 0) {
           const tSec = tsSec;
           if (tSec === null || tSec < SIM_CAMPAIGN_START_SEC) {
@@ -5111,13 +5123,17 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
         added += 1;
       }
       if (knownHashes.length > 12000) knownHashes.length = 12000;
-      if (!res.json?.next_page_params) {
-        ethScanDone = true; // explorer history ends before we hit the budget
-      }
       cursor = res.json?.next_page_params || null;
       pages += 1;
       ingested += added;
       addedLast = added;
+      if (!cursor) {
+        // End of the explorer's served history for this walk. Coverage is
+        // complete only when nothing was withheld; unresolved items keep
+        // coverage open so a later pass retries them.
+        if (unresolved === 0) ethScanDone = true;
+        break;
+      }
     }
     if (ingested === 0) {
       // v2 gave nothing new (Blockscout's edge shell returns empty pages to some
@@ -5125,6 +5141,7 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
       let offset = 0;
       let v1Pages = 0;
       let v1AddedLast = 0;
+      let v1Unresolved = 0; // v1 items the explorer withheld (throttle variants)
       while (v1Pages < 100 && !(v1ScanDone && v1AddedLast === 0)) {
         const v1 = await fetchJson(
           `${explorer}/api?module=account&action=txlist&address=${SIM_ETH_ADDRESS}&startblock=0&endblock=99999999&page=${v1Pages + 1}&offset=50&sort=desc`,
@@ -5132,8 +5149,10 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
         );
         const list = v1.json && Array.isArray(v1.json.result) ? v1.json.result : null;
         if (!v1.ok || !list || list.length === 0) {
-          v1ScanDone = true; // explorer history ends (or refuses) here
-          ethScanDone = true; // either walker covering to its end = coverage complete
+          if (v1Unresolved === 0) {
+            v1ScanDone = true; // explorer history ends, fully resolved
+            ethScanDone = true; // either walker covering to its end = coverage complete
+          }
           break;
         }
         let added = 0;
@@ -5148,6 +5167,12 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
             continue;
           }
           const wei = Number(item?.value);
+          // Same guard as v2: a withheld-value row must not be ring-committed,
+          // or a later completed walk would strand its deposits forever.
+          if (!item?.value || !Number.isFinite(wei)) {
+            v1Unresolved += 1;
+            continue;
+          }
           if (Number.isFinite(wei) && wei > 0) {
             const tSec = tsSec;
             if (tSec === null || tSec < SIM_CAMPAIGN_START_SEC) {

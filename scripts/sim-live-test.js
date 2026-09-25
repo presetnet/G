@@ -33,6 +33,7 @@ let rpc429 = false;
 let v2Empty = false;
 let ethMainnetV2Empty = false;
 let v1Empty = false;
+let v2Withheld = false;
 
 const readOnlyStore = {
   loadMiningSurfaceCache: async () => null,
@@ -130,6 +131,15 @@ const context = vm.createContext({
         });
       }
       if (v2Empty) return respond(200, { items: [], next_page_params: null });
+      if (v2Withheld) {
+        return respond(200, {
+          items: [
+            { hash: "0xw1", result: "ok", value: null, to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x999999" }, timestamp: "2026-09-24T11:05:00.000Z" },
+            { hash: "0xaaa", result: "pending", value: "3000000000000000", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x96C5161617323A56434753Cbe43BAd516ADc7f48" }, timestamp: "2026-09-24T11:10:00.000Z" },
+          ],
+          next_page_params: null,
+        });
+      }
       const items = [
         { hash: "0xaaa", result: "pending", value: "3000000000000000", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x96C5161617323A56434753Cbe43BAd516ADc7f48" }, timestamp: "2026-09-24T11:10:00.000Z" },
         { hash: "0xbbb", result: "ok", value: "100000000000000000", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x686bab3F162e72F903fA9DA42D1726e5D01BB46A" }, timestamp: "2026-09-24T11:14:12.000Z" },
@@ -331,6 +341,27 @@ assert.equal(shelled.ethDepositsEth, null, "never a confident 0.0000 ETH");
 assert.ok(/no verifiable/.test(String(shelled.reason || "")), shelled.reason || "reason present");
 v2Empty = false;
 v1Empty = false;
+
+// 4e. An explorer that WITHHOLDS a deposit's value ("UNAVAILABLE: values
+// withheld" throttle variants) must not burn that hash: never committed to the
+// ring, never counted, and coverage must stay open (ethScanDone false) so a
+// later healthy pass retries the row instead of stranding the pot short.
+v2Withheld = true;
+const withheld = await api.sniffSimEth();
+assert.equal(withheld.ok, true, withheld.reason || "withheld read stays usable");
+assert.equal(withheld.ethDepositCount, 1, "only the resolvable deposit counts");
+assert.ok(Math.abs(withheld.ethDepositsEth - 0.003) < 1e-12);
+assert.ok(!withheld.ethKnownHashes.includes("0xw1"), "withheld hash is not ring-committed");
+assert.equal(withheld.ethScanDone, false, "withheld rows keep coverage open");
+assert.equal(withheld.ethExplorerFallback, null);
+// A follow-up pass with the throttle STILL holding re-reads the withheld row;
+// it must neither be ring-committed nor re-sum the deposit it hides.
+const withheldRepeat = await api.sniffSimEth({ previous: withheld });
+assert.equal(withheldRepeat.ethDepositCount, 1, "no re-sum from re-reading withheld row");
+assert.equal(withheldRepeat.ethDepositsEth, withheld.ethDepositsEth);
+assert.ok(!withheldRepeat.ethKnownHashes.includes("0xw1"), "still uncommitted on retry");
+assert.equal(withheldRepeat.ethScanDone, false, "coverage still open while withheld");
+v2Withheld = false;
 
 // A second idle poll must not double-count anything (dedupe by tx hash).
 const ethRepeat = await api.sniffSimEth({ previous: eth });
