@@ -31,6 +31,7 @@ let siteStatus = 200;
 let destSigsMode = 1;
 let rpc429 = false;
 let v2Empty = false;
+let ethMainnetV2Empty = false;
 
 const readOnlyStore = {
   loadMiningSurfaceCache: async () => null,
@@ -116,7 +117,7 @@ const context = vm.createContext({
       }
       throw new Error(`Unexpected RPC ${rpc.method}`);
     }
-    if (url.origin === "https://eth.blockscout.com") {
+    if (url.origin === "https://eth-sepolia.blockscout.com") {
       if (url.searchParams.get("module") === "account") {
         return respond(200, {
           status: "1", message: "OK",
@@ -134,6 +135,23 @@ const context = vm.createContext({
         { hash: "0xddd", result: "reverted", value: "3000000000000000", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x3333" }, timestamp: "2026-09-24T11:20:00.000Z" },
       ];
       return respond(200, { items, next_page_params: null });
+    }
+    if (url.origin === "https://eth.blockscout.com") {
+      if (url.searchParams.get("module") === "account") {
+        return respond(200, {
+          status: "1", message: "OK",
+          result: [
+            { hash: "0xma1", from: "0x5c2bd5c6b9a2f0c3ac53d7c4e1ea9cf498a2d78f", to: "0xe18d3f89665ebf4ef885389b62a91ed910572af4", value: "6000000000000000", isError: "0", timeStamp: Math.floor(now / 1000) - 700 },
+            { hash: "0xmb2", from: "0x7f0cf1d1b7c8e5a3491b2e9f07c4a6dca6f8f905", to: "0xe18d3f89665ebf4ef885389b62a91ed910572af4", value: "9000000000000000", isError: "1", timeStamp: Math.floor(now / 1000) - 600 },
+          ],
+        });
+      }
+      if (ethMainnetV2Empty) return respond(200, { items: [], next_page_params: null });
+      const mainItems = [
+        { hash: "0xma1", result: "pending", value: "4000000000000000", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x5C2BD5c6b9A2F0c3Ac53d7C4e1EA9Cf498A2d78F" }, timestamp: "2026-09-24T11:30:00.000Z" },
+        { hash: "0xma3", result: "reverted", value: "7000000000000000", to: { hash: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4" }, from: { hash: "0x4444" }, timestamp: "2026-09-24T11:34:12.000Z" },
+      ];
+      return respond(200, { items: mainItems, next_page_params: null });
     }
     throw new Error(`Unexpected fixture URL ${url}`);
   },
@@ -278,6 +296,24 @@ assert.equal(fallbackEth.ethLatestHash, "0xaaa");
 assert.equal(fallbackEth.ethUniqueSenders, 1);
 assert.equal(fallbackEth.ethLargestEth, 0.003);
 assert.ok(!fallbackEth.ethTopSenders.some((p) => p.wallet === "0x686bab3F162e72F903fA9DA42D1726e5D01BB46A"), "reverted (isError 1) v1 rows are excluded");
+
+// 4c. The same wallet's Ethereum MAINNET rail reads independently (sim.ethm).
+const ethMain = await api.sniffSimEthMainnet();
+assert.equal(ethMain.source, "sim.ethm");
+assert.equal(ethMain.ethChain, "Ethereum mainnet (1)");
+assert.equal(ethMain.ethDepositCount, 1, "mainnet v2 counts 0xma1; reverted 0xma3 excluded");
+assert.ok(Math.abs(ethMain.ethDepositsEth - 0.004) < 1e-12);
+assert.equal(ethMain.ethMainnetUniqueSender ?? ethMain.ethUniqueSenders, 1);
+assert.equal(ethMain.ethLatestHash, "0xma1");
+assert.equal(ethMain.ethExplorerFallback, null);
+// mainnet v2 pages shell out empty -> v1 txlist fallback serves the receipts.
+ethMainnetV2Empty = true;
+const ethMainFb = await api.sniffSimEthMainnet();
+ethMainnetV2Empty = false;
+assert.equal(ethMainFb.ethDepositCount, 1, "mainnet v1 fallback counts deposits");
+assert.equal(ethMainFb.ethExplorerFallback, "v1");
+assert.equal(ethMainFb.ethLatestHash, "0xma1");
+assert.equal(ethMainFb.ethChain, "Ethereum mainnet (1)");
 
 // A second idle poll must not double-count anything (dedupe by tx hash).
 const ethRepeat = await api.sniffSimEth({ previous: eth });

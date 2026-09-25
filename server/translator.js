@@ -1708,6 +1708,18 @@ function simEvent(previous, current) {
         : "ETH rail changed",
     );
   }
+  const prevEthmFp = prevSource("sim.ethm").fingerprint;
+  const currEthmFp = currSource("sim.ethm").fingerprint;
+  if (prevEthmFp && currEthmFp && prevEthmFp !== currEthmFp) {
+    const currEthmCount = currSource("sim.ethm").ethDepositCount;
+    const currEthmTotal = currSource("sim.ethm").ethDepositsEth;
+    const ethmTotal = Number.isFinite(currEthmTotal) ? Math.round(currEthmTotal * 1000) / 1000 : null;
+    bits.push(
+      ethmTotal !== null
+        ? `ETH mainnet rail grew to ${ethmTotal} ETH (${currEthmCount} deposits)`
+        : "ETH mainnet rail changed",
+    );
+  }
   if (!bits.length) return null;
   const rank = /deadline|payrail|destination/i.test(bits.join(" ")) ? "move" : "note";
   return event({

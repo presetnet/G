@@ -4461,10 +4461,14 @@ const SIM_SITE_SOURCE_URL = `${SIM_BASE_URL}/api/site`;
 const SIM_SESSION_SOURCE_URL = `${SIM_BASE_URL}/api/session`;
 const SIM_CHAIN_SOURCE_URL = `https://solscan.io/token/${SIM_TOKEN_MINT}`;
 const SIM_PAYMENT_DEADLINE_MS = Date.parse("2026-09-25T20:00:00-04:00");
-// void.eth resolves on mainnet ENS to this address; the rail posts on mainnet ETH (chain 1).
+// void.eth resolves on mainnet ENS to this address. The site's encrypted ETH rail
+// instructs Sepolia (chain 11155111); the same wallet also receives Ethereum
+// MAINNET deposits. The desk reads BOTH: the instructed rail and the mainnet proof.
 const SIM_ETH_ADDRESS = "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4";
-const SIM_ETH_EXPLORER = "https://eth.blockscout.com";
+const SIM_ETH_EXPLORER = "https://eth-sepolia.blockscout.com";
 const SIM_ETH_SOURCE_URL = `${SIM_ETH_EXPLORER}/api/v2/addresses/${SIM_ETH_ADDRESS}/transactions`;
+const SIM_ETH_MAINNET_EXPLORER = "https://eth.blockscout.com";
+const SIM_ETH_MAINNET_SOURCE_URL = `${SIM_ETH_MAINNET_EXPLORER}/api/v2/addresses/${SIM_ETH_ADDRESS}/transactions`;
 const SIM_SOL_DEPOSIT_MIN_LAMPORTS = 1_000_000; // 0.001 SOL floor — ignores balance dust/refunds.
 // Owner/seed wallets that must never appear on the SIM payment leaderboard.
 const SIM_EXCLUDED_PAYERS = new Set(["9GjEVnpWiLe2uknUmtaH6DSfgcBvL66DtSKGREXDctZU"]);
@@ -4876,6 +4880,15 @@ export async function sniffSimChain({ previous } = {}) {
 // `ok` coin transfers, and tracks unique senders. Stops as soon as a page adds
 // nothing new, so idle polls cost one request; increments ride carried state.
 export async function sniffSimEth({ previous } = {}) {
+  return sniffSimEthRail({ previous, cfg: { source: "sim.eth", explorer: SIM_ETH_EXPLORER, sourceUrl: SIM_ETH_SOURCE_URL, chainLabel: "Sepolia (11155111)" } });
+}
+
+export async function sniffSimEthMainnet({ previous } = {}) {
+  return sniffSimEthRail({ previous, cfg: { source: "sim.ethm", explorer: SIM_ETH_MAINNET_EXPLORER, sourceUrl: SIM_ETH_MAINNET_SOURCE_URL, chainLabel: "Ethereum mainnet (1)" } });
+}
+
+async function sniffSimEthRail({ previous = {}, cfg = {} }) {
+  const { source = "sim.eth", explorer = SIM_ETH_EXPLORER, sourceUrl = SIM_ETH_SOURCE_URL, chainLabel = "Sepolia (11155111)" } = cfg;
   const started = Date.now();
   const knownHashes = Array.isArray(previous?.ethKnownHashes) ? previous.ethKnownHashes.slice(0, 600) : [];
   const senders = Array.isArray(previous?.ethSenders) ? previous.ethSenders.slice(0, 400) : [];
@@ -4898,8 +4911,8 @@ export async function sniffSimEth({ previous } = {}) {
     let ingested = 0;
     while (pages < 6 && !caughtUp) {
       const url = cursor
-        ? `${SIM_ETH_SOURCE_URL}?${new URLSearchParams(cursor).toString()}`
-        : SIM_ETH_SOURCE_URL;
+        ? `${sourceUrl}?${new URLSearchParams(cursor).toString()}`
+        : sourceUrl;
       const res = await fetchJson(url, { timeoutMs: 8_000 });
       const items = res.json && Array.isArray(res.json.items) ? res.json.items : null;
       if (!res.ok || !items) break;
@@ -4952,7 +4965,7 @@ export async function sniffSimEth({ previous } = {}) {
       let v1Pages = 0;
       while (v1Pages < 6) {
         const v1 = await fetchJson(
-          `${SIM_ETH_EXPLORER}/api?module=account&action=txlist&address=${SIM_ETH_ADDRESS}&startblock=0&endblock=99999999&page=${v1Pages + 1}&offset=50&sort=desc`,
+          `${explorer}/api?module=account&action=txlist&address=${SIM_ETH_ADDRESS}&startblock=0&endblock=99999999&page=${v1Pages + 1}&offset=50&sort=desc`,
           { timeoutMs: 8_000 }
         );
         const list = v1.json && Array.isArray(v1.json.result) ? v1.json.result : null;
@@ -5013,15 +5026,15 @@ export async function sniffSimEth({ previous } = {}) {
       share: totalWei > 0 ? p.v / totalWei : 0,
     }));
     return {
-      source: "sim.eth",
+      source,
       ok: usable,
       status: usable ? 200 : 0,
       ms: Date.now() - started,
       checkedAt: new Date().toISOString(),
-      sourceUrl: SIM_ETH_SOURCE_URL,
+      sourceUrl,
       ethName: SIM_ETH_DESTINATION,
       ethAddress: SIM_ETH_ADDRESS,
-      ethChain: "ethereum (1)",
+      ethChain: chainLabel,
       ethDepositsEth: totalWei / 1e18,
       ethDepositCount: count,
       ethUniqueSenders: senders.length,
@@ -5051,7 +5064,7 @@ export async function sniffSimEth({ previous } = {}) {
       fingerprint: usable
         ? simpleHash(JSON.stringify({ wei: totalWei, count, latestHash }))
         : null,
-      reason: usable ? null : "Ethereum explorer returned no transaction history",
+      reason: usable ? null : `${chainLabel} explorer returned no transaction history`,
     };
   } catch (error) {
     rows.sort((a, b) => a.t - b.t);
@@ -5060,15 +5073,15 @@ export async function sniffSimEth({ previous } = {}) {
     const firstSeenSec = Number.isFinite(previous?.ethFirstSeenSec) ? previous.ethFirstSeenSec : null;
     const largestWei = Number.isFinite(previous?.ethLargestWei) ? previous.ethLargestWei : 0;
     return {
-      source: "sim.eth",
+      source,
       ok: false,
       status: 0,
       ms: Date.now() - started,
       checkedAt: new Date().toISOString(),
-      sourceUrl: SIM_ETH_SOURCE_URL,
+      sourceUrl,
       ethName: SIM_ETH_DESTINATION,
       ethAddress: SIM_ETH_ADDRESS,
-      ethChain: "ethereum (1)",
+      ethChain: chainLabel,
       ethDepositsEth: carriedWei > 0 ? carriedWei / 1e18 : null,
       ethDepositCount: Number.isFinite(previous?.ethDepositCount) ? previous.ethDepositCount : null,
       ethUniqueSenders: Array.isArray(previous?.ethSenders) ? previous.ethSenders.length : null,
@@ -5112,6 +5125,7 @@ function simAttempts(previous) {
     ["sim.front", sniffSimFront()],
     ["sim.chain", sniffSimChain({ previous })],
     ["sim.eth", sniffSimEth({ previous })],
+    ["sim.ethm", sniffSimEthMainnet({ previous })],
   ];
 }
 
