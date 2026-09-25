@@ -4943,6 +4943,7 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
   let largestWei = Number.isFinite(previous?.ethLargestWei) ? previous.ethLargestWei : 0;
   let largestHash = typeof previous?.ethLargestHash === "string" ? previous.ethLargestHash : null;
   let largestAt = typeof previous?.ethLargestAt === "string" ? previous.ethLargestAt : null;
+  let explorerFallback = null;
   // Campaign scoping (mirrors the SOL rail): legacy lifetime carry must not leak
   // into the shared ETH figures. Known hashes are cleared too so the campaign
   // window is re-paged from scratch.
@@ -4959,7 +4960,6 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
     largestAt = null;
   }
   try {
-    let explorerFallback = null;
     let cursor = null;
     let pages = 0;
     let caughtUp = false;
