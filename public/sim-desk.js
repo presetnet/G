@@ -144,7 +144,7 @@ export function renderSimDesk(latest) {
       ].join("") : ""}<div class="sim-honesty"><span>The scoreboard requires an X OAuth session — no public leaderboard is kept here. Receipts on the Sepolia rail and on Ethereum mainnet are both observed on-chain; the SOL rail is mainnet.</span></div></div>`
     : `<div class="desk-empty"><span>[ - ]</span><span>${esc(front?.reason || "Waiting for the public sim.tech home page")}</span></div>`;
 
-  chainRows.innerHTML = renderMovement(chain, eth, front, latest.sources["sim.ethm"]);
+  chainRows.innerHTML = renderMovement(chain, eth, front, latest?.sources?.["sim.ethm"]);
 
   startSimClock(deadline);
   startSimPriceTicker();
