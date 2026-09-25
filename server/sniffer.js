@@ -4670,13 +4670,16 @@ async function simSolDepositTotals(previous) {
   // Campaign scoping: a carry that predates the cutoff (legacy lifetime totals from
   // before this release) must not leak into the shared pot. Reset when the carry is
   // not already scoped so the next rounds re-derive strictly within the campaign
-  // window. The known-sig ring is kept either way — it is cut-off-agnostic dedupe.
+  // window. The known-sig ring is cleared too, or the remaining "known" sigs would
+  // keep the rebuilt state stuck at post-reset additions and the window would never
+  // re-scan.
   if (previous?.solCampaignSinceSec !== SIM_CAMPAIGN_START_SEC) {
     totalLamports = 0;
     count = 0;
     rows = [];
     payers.length = 0;
     payerTotals.length = 0;
+    knownSigs.length = 0;
     firstSeenSec = null;
     largestLamports = 0;
     largestSig = null;
@@ -4941,13 +4944,15 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
   let largestHash = typeof previous?.ethLargestHash === "string" ? previous.ethLargestHash : null;
   let largestAt = typeof previous?.ethLargestAt === "string" ? previous.ethLargestAt : null;
   // Campaign scoping (mirrors the SOL rail): legacy lifetime carry must not leak
-  // into the shared ETH figures. Known hashes are kept regardless.
+  // into the shared ETH figures. Known hashes are cleared too so the campaign
+  // window is re-paged from scratch.
   if (previous?.ethCampaignSinceSec !== SIM_CAMPAIGN_START_SEC) {
     totalWei = 0;
     count = 0;
     rows = [];
     senders.length = 0;
     senderTotals.length = 0;
+    knownHashes.length = 0;
     firstSeenSec = null;
     largestWei = 0;
     largestHash = null;
