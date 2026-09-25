@@ -8,3 +8,4 @@ _sample_*.json
 
 .vercel
 .env*
+.playwright-mcp/
