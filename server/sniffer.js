@@ -963,6 +963,11 @@ const SIM_CAMPAIGN_START =
   Date.parse(process.env.SIM_CAMPAIGN_START || "2026-09-24T09:00:00-04:00");
 const SIM_CAMPAIGN_START_SEC = Number.isFinite(SIM_CAMPAIGN_START) ? SIM_CAMPAIGN_START / 1000 : 0;
 const SIM_CAMPAIGN_START_AT = new Date(SIM_CAMPAIGN_START_SEC * 1000).toISOString();
+// Semantics version for the ETH rail walker. Bump when the walk rules change: a
+// carried ethScanDone=true from an older build would otherwise trick the new
+// walker into stopping at the first all-known page and never backfilling the
+// freshly-defined coverage.
+const SIM_ETH_SCAN_EPOCH = 4;
 /** StackNet's devnet-era TEST treasury. On mainnet it holds a single 0.0016 SOL dust
  * ping from a spam-distribution blaster (the ETUdaF4… → G2YxRa6w… tree), no other
  * transaction ever. It is NOT a live treasury: only used as a last-resort fallback
@@ -4993,7 +4998,7 @@ export async function sniffSimEthMainnet({ previous } = {}) {
 async function sniffSimEthRail({ previous = {}, cfg = {} }) {
   const { source = "sim.eth", explorer = SIM_ETH_EXPLORER, sourceUrl = SIM_ETH_SOURCE_URL, chainLabel = "Sepolia (11155111)" } = cfg;
   const started = Date.now();
-  const knownHashes = Array.isArray(previous?.ethKnownHashes) ? previous.ethKnownHashes.slice(0, 2500) : [];
+  const knownHashes = Array.isArray(previous?.ethKnownHashes) ? previous.ethKnownHashes.slice(0, 12000) : [];
   const senders = Array.isArray(previous?.ethSenders) ? previous.ethSenders.slice(0, 400) : [];
   const senderTotals = Array.isArray(previous?.ethSenderTotals)
     ? previous.ethSenderTotals.slice(0, 200)
@@ -5007,12 +5012,16 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
   let largestHash = typeof previous?.ethLargestHash === "string" ? previous.ethLargestHash : null;
   let largestAt = typeof previous?.ethLargestAt === "string" ? previous.ethLargestAt : null;
   let explorerFallback = null;
-  // Has this rail already walked back to the campaign cutoff? Until it has, the
-  // walk must keep paging even through pages that add nothing new (all-known) —
-  // stopping at the first no-add page is exactly how a carried ring of only the
-  // newest N signatures wedges the total there. Once the cutoff is reached the
-  // window is fixed and maintenance stops at the first no-add page again.
-  let ethScanDone = previous?.ethScanDone === true;
+  // Has this rail already walked its full page budget (or the explorer's history
+  // end) since the walker epoch last changed? Until it has, the walk must keep
+  // paging even through pages that add nothing new (all-known) — stopping at the
+  // first no-add page is exactly how a carried ring of only the newest N hashes
+  // wedged the total before. Once coverage is complete the window is fixed and
+  // maintenance stops at the first no-add page again.
+  let ethScanDone = previous?.ethScanDone === true && previous?.ethScanEpoch === SIM_ETH_SCAN_EPOCH;
+  // v1 coverage is tracked separately: a v2-only walk that shelled out to empty
+  // pages must never gate the fallback's first page behind a "done" marker.
+  let v1ScanDone = previous?.ethExplorerFallback === "v1" && previous?.ethScanDone === true && previous?.ethScanEpoch === SIM_ETH_SCAN_EPOCH;
   // Campaign scoping (mirrors the SOL rail): legacy lifetime carry must not leak
   // into the shared ETH figures. Known hashes are cleared too so the campaign
   // window is re-paged from scratch.
@@ -5028,27 +5037,44 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
     largestHash = null;
     largestAt = null;
     ethScanDone = false;
+    v1ScanDone = false;
+  }
+  if (previous?.ethScanEpoch !== SIM_ETH_SCAN_EPOCH) {
+    ethScanDone = false; // walker semantics changed: re-walk from the front
+    v1ScanDone = false;
   }
   try {
     let cursor = null;
     let pages = 0;
-    let caughtUp = false;
+    let addedLast = 0; // newest walked page's new-hash count; 0 mean all-known
     let ingested = 0;
-    while (pages < 80 && (ethScanDone ? !caughtUp : true)) {
+    // Fixed-budget walk. Blockscout v2 `next_page_params` is NOT monotonic for
+    // this address (pages bounce between Sep 2026, Jul 2025, Oct 2025 and Dec
+    // 2024 camps), so no timestamp heuristic can decide where the window ends —
+    // a first-page-below-cutoff read stops the walk early and misses real
+    // in-window deposits hidden in the bounced-back pages (measured: mainnet pot
+    // seated at 11.6 ETH instead of ~758.7). Instead we walk up to 100 pages,
+    // dedupe by hash, count only in-window deposits, and stop at a genuine
+    // history end (no next_page_params / empty page) or the page budget. The
+    // hash ring cap (12000) is far above the ~5000 hashes such a walk can touch,
+    // so nothing is ever dropped and no hash is ever re-counted across passes:
+    // totals only ever accrue toward the explorer's served set, never re-sum.
+    while (pages < 100 && !(ethScanDone && addedLast === 0)) {
       const url = cursor
         ? `${sourceUrl}?${new URLSearchParams(cursor).toString()}`
         : sourceUrl;
       const res = await fetchJson(url, { timeoutMs: 8_000 });
       const items = res.json && Array.isArray(res.json.items) ? res.json.items : null;
-      if (!res.ok || !items) break;
+      if (!res.ok || !items || items.length === 0) {
+        ethScanDone = true; // explorer history ends (or refuses) here
+        break;
+      }
       let added = 0;
-      let pageMin = Infinity;
       for (const item of items) {
         const hash = item?.hash;
         const tsSec = Number.isFinite(Date.parse(item?.timestamp))
           ? Math.round(Date.parse(item.timestamp) / 1000)
           : null;
-        if (tsSec !== null && tsSec < pageMin) pageMin = tsSec;
         if (!hash || knownHashes.includes(hash)) continue;
         if (["error", "reverted", "dropped", "failed"].includes(item?.result) || item?.to?.hash !== SIM_ETH_ADDRESS) {
           knownHashes.unshift(hash);
@@ -5084,36 +5110,36 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
         knownHashes.unshift(hash);
         added += 1;
       }
-      if (knownHashes.length > 2500) knownHashes.length = 2500;
-      if (!ethScanDone && Number.isFinite(pageMin) && pageMin < SIM_CAMPAIGN_START_SEC) {
-        ethScanDone = true; // this page crossed back before the campaign window
-      }
-      if (!ethScanDone && !res.json?.next_page_params) {
-        ethScanDone = true; // explorer history ends before the cutoff
+      if (knownHashes.length > 12000) knownHashes.length = 12000;
+      if (!res.json?.next_page_params) {
+        ethScanDone = true; // explorer history ends before we hit the budget
       }
       cursor = res.json?.next_page_params || null;
       pages += 1;
       ingested += added;
-      if (ethScanDone && added === 0) caughtUp = true;
+      addedLast = added;
     }
     if (ingested === 0) {
       // v2 gave nothing new (Blockscout's edge shell returns empty pages to some
       // egress IPs): fall back to the v1 txlist API for the same wallet.
       let offset = 0;
       let v1Pages = 0;
-      while (v1Pages < 80) {
+      let v1AddedLast = 0;
+      while (v1Pages < 100 && !(v1ScanDone && v1AddedLast === 0)) {
         const v1 = await fetchJson(
           `${explorer}/api?module=account&action=txlist&address=${SIM_ETH_ADDRESS}&startblock=0&endblock=99999999&page=${v1Pages + 1}&offset=50&sort=desc`,
           { timeoutMs: 8_000 }
         );
         const list = v1.json && Array.isArray(v1.json.result) ? v1.json.result : null;
-        if (!v1.ok || !list || list.length === 0) break;
+        if (!v1.ok || !list || list.length === 0) {
+          v1ScanDone = true; // explorer history ends (or refuses) here
+          ethScanDone = true; // either walker covering to its end = coverage complete
+          break;
+        }
         let added = 0;
-        let pageMin = Infinity;
         for (const item of list) {
           const hash = item?.hash;
           const tsSec = Number(item?.timeStamp) > 0 ? Number(item.timeStamp) : null;
-          if (tsSec !== null && tsSec < pageMin) pageMin = tsSec;
           if (!hash || knownHashes.includes(hash)) continue;
           const targetOk = typeof item?.to === "string" && item.to.toLowerCase() === SIM_ETH_ADDRESS.toLowerCase();
           const badState = typeof item?.isError === "string" && item.isError !== "0";
@@ -5151,13 +5177,10 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
           knownHashes.unshift(hash);
           added += 1;
         }
-        if (knownHashes.length > 2500) knownHashes.length = 2500;
-        if (!ethScanDone && Number.isFinite(pageMin) && pageMin < SIM_CAMPAIGN_START_SEC) {
-          ethScanDone = true; // this page crossed back before the campaign window
-        }
+        if (knownHashes.length > 12000) knownHashes.length = 12000;
         v1Pages += 1;
         offset += added;
-        if (ethScanDone && added === 0) break;
+        v1AddedLast = added;
       }
       if (offset > 0) ingested = offset;
       explorerFallback = offset > 0 ? "v1" : "v1-empty";
@@ -5176,7 +5199,7 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
     if (rows.length > 1500) rows = rows.slice(rows.length - 1500);
     senderTotals.sort((a, b) => b.v - a.v);
     if (senderTotals.length > 200) senderTotals.length = 200;
-    const usable = pages > 0 || ingested > 0;
+    const usable = pages > 0 || ingested > 0 || count > 0;
     const win = simDepositWindows(rows, "w", Date.now() / 1000);
     const topSenders = senderTotals.slice(0, 5).map((p) => ({
       wallet: p.w,
@@ -5211,6 +5234,7 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
       ethPages: pages,
       ethExplorerFallback: explorerFallback,
       ethScanDone,
+      ethScanEpoch: SIM_ETH_SCAN_EPOCH,
       ethTotalWei: totalWei,
       ethDepositRows: rows,
       ethFirstSeenSec: firstSeenSec,
@@ -5265,7 +5289,8 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
       ethLatestHash: latestHash,
       ethPages: 0,
       ethExplorerFallback: explorerFallback ?? null,
-      ethScanDone: previous?.ethScanDone === true,
+      ethScanDone: previous?.ethScanDone === true && previous?.ethScanEpoch === SIM_ETH_SCAN_EPOCH,
+      ethScanEpoch: SIM_ETH_SCAN_EPOCH,
       ethTotalWei: carriedWei > 0 ? carriedWei : null,
       ethDepositRows: rows,
       ethFirstSeenSec: firstSeenSec,
