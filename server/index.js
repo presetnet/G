@@ -9,6 +9,7 @@ import { prettyCapability } from "./translator.js";
 import { loadSnapshots, loadTraffic, recordTraffic } from "./store.js";
 import { publicConfig } from "./service.js";
 import { buildStoredMarketPayload } from "./market.js";
+import { inspectWallets } from "./wallet-assets.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -155,6 +156,21 @@ app.get("/api/market", async (_req, res) => {
   try {
     const stored = await getDashboardPayload();
     const payload = buildStoredMarketPayload(stored.latest);
+    res.json(payload);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/assets", async (req, res) => {
+  const raw = req.query.wallets ?? req.query.address ?? "";
+  const wallets = String(raw).split(/[,\s]+/).map((v) => v.trim()).filter(Boolean);
+  if (wallets.length === 0) {
+    res.status(400).json({ error: "Provide ?wallets=addr1,addr2" });
+    return;
+  }
+  try {
+    const payload = await inspectWallets(wallets, { fresh: req.query.refresh === "1" });
     res.json(payload);
   } catch (error) {
     res.status(500).json({ error: error.message });

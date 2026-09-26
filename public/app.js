@@ -10,6 +10,7 @@ import { initTrixDesk, renderTrixDesk } from "./trix-desk.js";
 import { renderDibziDesk } from "./dibzi-desk.js";
 import { renderSimDesk } from "./sim-desk.js";
 import { initOverview, renderOverview } from "./overview.js";
+import { initAssetViewer, renderAssetViewer } from "./asset-viewer.js";
 import { createChebyshevTone } from "./chebyshev-audio.js";
 import {
   buildHeatmapGrid,
@@ -1183,8 +1184,9 @@ if (s.treasuryRpcOk) {
   }
 renderTrixDesk(latest);
   renderDibziDesk(latest);
-  renderSimDesk(latest);
-  renderSettlementStatus(s);
+renderSimDesk(latest);
+renderAssetViewer(latest);
+renderSettlementStatus(s);
   renderKeySale(s);
   renderKey9g(s);
   document.querySelectorAll(".metrics > .metric").forEach((card) => {
@@ -2510,6 +2512,7 @@ els.pollBtn.addEventListener("click", pollNow);
 initCompactView();
 initTrixDesk();
 initOverview();
+initAssetViewer();
 initAudioLab();
 renderProvenance(memory.latest);
 hydrateIcons();
