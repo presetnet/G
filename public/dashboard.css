@@ -149,6 +149,10 @@
 .sim-chip b { display: block; overflow: hidden; color: #e4d8ff; font: 500 .72rem var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .sim-chip small { display: block; margin-top: .2rem; color: #8da5a2; font: .58rem var(--font-mono); }
 .sim-spark-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; }
+.sim-azy-block { margin-top: .7rem; padding: .8rem; border: 1px solid #3b2f55; border-radius: 10px; background: radial-gradient(120% 100% at 80% 0%, #1d1530 0%, #14181c 80%); }
+.sim-azy-head { margin: 0 0 .6rem; color: #d7b4ff; font: 600 .68rem var(--font-ui); text-transform: uppercase; letter-spacing: .08em; }
+.sim-azy-head span { display: block; margin-top: .2rem; color: #8da5a2; font: .56rem var(--font-mono); letter-spacing: 0; text-transform: none; }
+.sim-azy-fund { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; }
 .sim-spark { padding: .7rem; border: 1px solid #26353a; border-radius: 8px; background: #151d20; }
 .sim-spark h4 { margin: 0; color: #e4d8ff; font: 600 .68rem var(--font-ui); }
 .sim-spark small { display: block; margin-top: .35rem; color: #8da5a2; font: .58rem var(--font-mono); }
@@ -316,6 +320,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   .sim-funding { grid-template-columns: 1fr; }
   .sim-velocity { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .sim-spark-grid { grid-template-columns: minmax(0, 1fr); }
+  .sim-azy-fund { grid-template-columns: minmax(0, 1fr); }
   .desk-secondary { display: none; }
   .desk-table { font-size: .72rem; }
   .desk-table th { font-size: .58rem; }

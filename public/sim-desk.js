@@ -252,11 +252,6 @@ function renderMovement(chain, eth, front, ethm, azy) {
         <b class="sim-pot-total">${mainTotal != null ? `${fmt(mainTotal, 4)} ETH` : "--"}</b>
         <span class="sim-pot-sub">${(ethm?.ethChain || "Ethereum mainnet (1)").replace("Ethereum mainnet (1)", "Ethereum (1)")} · ${ethm?.ethDepositCount != null ? `${fmt(ethm.ethDepositCount)} tx${ethm.ethDepositCount === 1 ? "" : "s"} · ${fmt(ethm.ethUniqueSenders)} sender${ethm.ethUniqueSenders === 1 ? "" : "s"} · since ${campaignLabel}` : `no receipts read yet · since ${campaignLabel}`}</span>
       </div>
-      <div class="sim-pot sim-pot-azy">
-        <span class="sim-pot-label">AZY · Ascension Protocol SOL intake</span>
-        <b class="sim-pot-total">${azyTotal != null ? `${fmt(azyTotal, 4)} SOL` : "--"}</b>
-        <span class="sim-pot-sub">${azy?.destWallet ? walletLink(azy.destWallet) : "azy.life custody wallet"} · ${azy?.azyDepositCount != null ? `${fmt(azy.azyDepositCount)} tx${azy.azyDepositCount === 1 ? "" : "s"} · ${fmt(azy.azyUniquePayers)} payer${azy.azyUniquePayers === 1 ? "" : "s"} · since ${campaignLabel}` : `no deposits read yet · since ${campaignLabel}`}</span>
-      </div>
       <div class="sim-clock">
         <span class="sim-clock-label">deadline</span>
         <b id="simClock">${esc(clockLeft(deadline))}</b>
@@ -274,7 +269,21 @@ function renderMovement(chain, eth, front, ethm, azy) {
       <div class="sim-spark"><h4>SOL received · last 24h by hour</h4><div class="sim-bars">${solBars}</div><small>${fmt(chain?.solTodayCount)} deposits today</small></div>
       <div class="sim-spark"><h4>Sepolia rail ETH · last 24h by hour</h4><div class="sim-bars sim-bars-eth">${ethBars}</div><small>${fmt(eth?.ethTodayCount)} txs today</small></div>
       <div class="sim-spark"><h4>Ethereum mainnet ETH · last 24h by hour</h4><div class="sim-bars sim-bars-eth">${mainBars}</div><small>${fmt(ethm?.ethTodayCount)} txs today</small></div>
-      <div class="sim-spark"><h4>AZY SOL intake · last 24h by hour</h4><div class="sim-bars">${azyBars}</div><small>${fmt(azy?.azyTodayCount)} deposits today</small></div>
+    </div>
+    <div class="sim-azy-block">
+      <h4 class="sim-azy-head">AZY · azy.life <span>separate custody SOL pot — audited on its own, never folded into the SIM rails</span></h4>
+      <div class="sim-azy-fund">
+        <div class="sim-pot sim-pot-azy">
+          <span class="sim-pot-label">AZY · Ascension Protocol SOL intake</span>
+          <b class="sim-pot-total">${azyTotal != null ? `${fmt(azyTotal, 4)} SOL` : "--"}</b>
+          <span class="sim-pot-sub">${azy?.destWallet ? walletLink(azy.destWallet) : "azy.life custody wallet"} · ${azy?.azyDepositCount != null ? `${fmt(azy.azyDepositCount)} tx${azy.azyDepositCount === 1 ? "" : "s"} · ${fmt(azy.azyUniquePayers)} payer${azy.azyUniquePayers === 1 ? "" : "s"} · since ${campaignLabel}` : `no deposits read yet · since ${campaignLabel}`}</span>
+        </div>
+        <div class="sim-spark">
+          <h4>AZY SOL intake · last 24h by hour</h4>
+          <div class="sim-bars">${azyBars}</div>
+          <small>${fmt(azy?.azyTodayCount)} deposits today</small>
+        </div>
+      </div>
     </div>`;
 }
 

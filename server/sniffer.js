@@ -4492,6 +4492,16 @@ const SIM_ETH_EXPLORER = "https://eth-sepolia.blockscout.com";
 const SIM_ETH_SOURCE_URL = `${SIM_ETH_EXPLORER}/api/v2/addresses/${SIM_ETH_ADDRESS}/transactions`;
 const SIM_ETH_MAINNET_EXPLORER = "https://eth.blockscout.com";
 const SIM_ETH_MAINNET_SOURCE_URL = `${SIM_ETH_MAINNET_EXPLORER}/api/v2/addresses/${SIM_ETH_ADDRESS}/transactions`;
+// MAGMA rail — "The Simulation" (SIM) ERC-721 collection on Ethereum mainnet
+// (contract "SimulationTypes"). A live-minting collection airdropped into the
+// ecosystem: total_supply / transfers / holders climb continuously while mints
+// run. Not a deposit pot — a mint-rate counter the desk can watch in real time.
+const MAGMA_CONTRACT = "0xc3706195ff60658585b58716717ee7acc5ebca60";
+const MAGMA_CONTRACT_DISPLAY = "0xc3706195Ff60658585B58716717ee7Acc5ebcA60";
+const MAGMA_TOKEN_URL = `${SIM_ETH_MAINNET_EXPLORER}/api/v2/tokens/${MAGMA_CONTRACT}`;
+const MAGMA_COUNTERS_URL = `${MAGMA_TOKEN_URL}/counters`;
+const MAGMA_OPENSEA_URL = "https://opensea.io/collection/the-simulation-958481099";
+const MAGMA_SOURCE_URL = MAGMA_TOKEN_URL;
 const SIM_SOL_DEPOSIT_MIN_LAMPORTS = 1_000_000; // 0.001 SOL floor — ignores balance dust/refunds.
 // Owner/seed wallets that must never appear on the SIM payment leaderboard.
 // 9GjEV… IS the azy.life (Ascension Protocol) custody wallet: sim.tech's SOL pot is
@@ -5497,6 +5507,100 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
   }
 }
 
+// MAGMA — "The Simulation" (SIM) ERC-721 collection mint-rate counter on
+// Ethereum mainnet (contract "SimulationTypes"). Two cheap Blockscout GETs per
+// check (token meta + counters). No campaign window: the collection mints live
+// and supply only grows, so the rail reports supply / holders / transfers plus
+// the delta minted since the previous read. A throttle must never print zeros
+// for a live collection — the catch carries the last observed counters.
+export async function sniffMagmaEth({ previous = {} } = {}) {
+  const started = Date.now();
+  const prevSupply = Number.isFinite(previous?.magmaSupply) ? previous.magmaSupply : null;
+  const prevCheckedAt = typeof previous?.checkedAt === "string" ? Date.parse(previous.checkedAt) : null;
+  const prev = previous?.fingerprint ?? null;
+  let supply = prevSupply;
+  let holders = Number.isFinite(previous?.magmaHolders) ? previous.magmaHolders : null;
+  let transfers = Number.isFinite(previous?.magmaTransfers) ? previous.magmaTransfers : null;
+  const firstSeenAt = typeof previous?.magmaFirstSeenAt === "string" ? previous.magmaFirstSeenAt : new Date().toISOString();
+  try {
+    const [metaRes, countersRes] = await Promise.all([
+      fetchJson(MAGMA_TOKEN_URL, { timeoutMs: 8_000 }),
+      fetchJson(MAGMA_COUNTERS_URL, { timeoutMs: 8_000 }),
+    ]);
+    const meta = metaRes?.json && typeof metaRes.json === "object" ? metaRes.json : null;
+    const counters = countersRes?.json && typeof countersRes.json === "object" ? countersRes.json : null;
+    const rawSupply = Number(meta?.total_supply);
+    const rawHolders = Number(meta?.holders_count ?? counters?.token_holders_count);
+    const rawTransfers = Number(counters?.transfers_count);
+    if (!meta || !Number.isFinite(rawSupply) || rawSupply <= 0) {
+      throw new Error("Blockscout returned no readable The Simulation token meta");
+    }
+    // Minting only adds supply; a Blockscout snapshot can momentarily regress
+    // (reorg / index lag), so never report a drop — hold the peak observed.
+    supply = Math.max(rawSupply, prevSupply ?? rawSupply);
+    holders = Number.isFinite(rawHolders) ? rawHolders : holders;
+    transfers = Number.isFinite(rawTransfers) ? rawTransfers : transfers;
+  } catch (error) {
+    return {
+      source: "magma.eth",
+      ok: false,
+      status: 0,
+      ms: Date.now() - started,
+      checkedAt: new Date().toISOString(),
+      sourceUrl: MAGMA_SOURCE_URL,
+      magmaName: "The Simulation",
+      magmaSymbol: "SIM",
+      magmaType: "ERC-721",
+      magmaContract: MAGMA_CONTRACT_DISPLAY,
+      magmaOpenseaUrl: MAGMA_OPENSEA_URL,
+      magmaSupply: supply,
+      magmaHolders: holders,
+      magmaTransfers: transfers,
+      magmaPrevSupply: prevSupply,
+      magmaMintedSincePrev:
+        prevSupply !== null && supply !== null ? Math.max(0, supply - prevSupply) : null,
+      magmaActive:
+        prevSupply !== null && supply !== null && supply > prevSupply,
+      magmaFirstSeenAt: firstSeenAt,
+      fingerprint:
+        prevSupply !== null && supply !== null && supply !== prevSupply ? simpleHash(JSON.stringify({ supply })) : prev,
+      reason: error?.message || String(error),
+    };
+  }
+  const checkedAt = new Date().toISOString();
+  const elapsedSec =
+    prevCheckedAt && Number.isFinite(prevCheckedAt) ? (Date.now() - prevCheckedAt) / 1000 : null;
+  const mintedSincePrev = prevSupply !== null ? Math.max(0, supply - prevSupply) : 0;
+  const mintedPerHour =
+    elapsedSec && elapsedSec > 60 && mintedSincePrev > 0
+      ? (mintedSincePrev * 3600) / elapsedSec
+      : null;
+  const usable = Number.isFinite(holders) && holders > 0;
+  return {
+    source: "magma.eth",
+    ok: usable,
+    status: usable ? 200 : 0,
+    ms: Date.now() - started,
+    checkedAt,
+    sourceUrl: MAGMA_SOURCE_URL,
+    magmaName: "The Simulation",
+    magmaSymbol: "SIM",
+    magmaType: "ERC-721",
+    magmaContract: MAGMA_CONTRACT_DISPLAY,
+    magmaOpenseaUrl: MAGMA_OPENSEA_URL,
+    magmaSupply: supply,
+    magmaHolders: holders,
+    magmaTransfers: transfers,
+    magmaPrevSupply: prevSupply,
+    magmaMintedSincePrev: mintedSincePrev,
+    magmaMintedPerHour: mintedPerHour,
+    magmaActive: mintedSincePrev > 0,
+    magmaFirstSeenAt: firstSeenAt,
+    fingerprint: simpleHash(JSON.stringify({ supply, holders, transfers })),
+    reason: usable ? null : "collection has no holders yet",
+  };
+}
+
 function simAttempts(previous) {
   return [
     ["sim.site", sniffSimSite()],
@@ -5505,6 +5609,7 @@ function simAttempts(previous) {
     ["sim.eth", sniffSimEth({ previous: previous?.sources?.["sim.eth"] || null })],
     ["sim.ethm", sniffSimEthMainnet({ previous: previous?.sources?.["sim.ethm"] || null })],
     ["azy.chain", sniffAzyChain({ previous: previous?.sources?.["azy.chain"] || null })],
+    ["magma.eth", sniffMagmaEth({ previous: previous?.sources?.["magma.eth"] || null })],
   ];
 }
 
@@ -5514,6 +5619,7 @@ function simMinuteAttempts(previous) {
     ["sim.front", sniffSimFront()],
     ["sim.chain", sniffSimChain({ previous: previous?.sources?.["sim.chain"] || null })],
     ["azy.chain", sniffAzyChain({ previous: previous?.sources?.["azy.chain"] || null })],
+    ["magma.eth", sniffMagmaEth({ previous: previous?.sources?.["magma.eth"] || null })],
   ];
 }
 
