@@ -10,6 +10,7 @@ import { loadSnapshots, loadTraffic, recordTraffic } from "./store.js";
 import { publicConfig } from "./service.js";
 import { buildStoredMarketPayload } from "./market.js";
 import { inspectWallets } from "./wallet-assets.js";
+import { inspectSimListings } from "./sim-listing.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -171,6 +172,21 @@ app.get("/api/assets", async (req, res) => {
   }
   try {
     const payload = await inspectWallets(wallets, { fresh: req.query.refresh === "1" });
+    res.json(payload);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/sim-listing", async (req, res) => {
+  const raw = req.query.wallets ?? req.query.address ?? "";
+  const wallets = String(raw).split(/[,\s;]+/).map((v) => v.trim()).filter(Boolean);
+  if (wallets.length === 0) {
+    res.status(400).json({ error: "Provide ?wallets=0x… (Ethereum address holding a Simulation)" });
+    return;
+  }
+  try {
+    const payload = await inspectSimListings(wallets, { fresh: req.query.refresh === "1" });
     res.json(payload);
   } catch (error) {
     res.status(500).json({ error: error.message });

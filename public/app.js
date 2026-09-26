@@ -11,6 +11,7 @@ import { renderDibziDesk } from "./dibzi-desk.js";
 import { renderSimDesk } from "./sim-desk.js";
 import { initOverview, renderOverview } from "./overview.js";
 import { initAssetViewer, renderAssetViewer } from "./asset-viewer.js";
+import { initSimListing, renderSimListing } from "./sim-listing.js";
 import { createChebyshevTone } from "./chebyshev-audio.js";
 import {
   buildHeatmapGrid,
@@ -1186,6 +1187,7 @@ renderTrixDesk(latest);
   renderDibziDesk(latest);
 renderSimDesk(latest);
 renderAssetViewer(latest);
+renderSimListing(latest);
 renderSettlementStatus(s);
   renderKeySale(s);
   renderKey9g(s);
@@ -2513,6 +2515,7 @@ initCompactView();
 initTrixDesk();
 initOverview();
 initAssetViewer();
+initSimListing();
 initAudioLab();
 renderProvenance(memory.latest);
 hydrateIcons();
