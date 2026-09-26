@@ -107,11 +107,15 @@ function makeFetch(overrides = {}) {
     if (target.startsWith("https://lite-api.jup.ag/price/v3")) {
       calls.jupiter.push(target.split("ids=")[1]);
       if (state.jupiterMode === "down") return { ok: false, status: 503, json: async () => null };
-      return json({
+      // Jupiter only answers for mints it can price, and drops the tail of a
+      // long ids list — so the native mint is priced by the solo request below.
+      const ids = target.split("ids=")[1].split(",");
+      const table = {
         RealSpl2222222222222222222222222222222222: { usdPrice: 2.5, liquidity: 41000, decimals: 6 },
         So11111111111111111111111111111111111111112: { usdPrice: 121.83, liquidity: 959617958, decimals: 9 },
         // DustMint deliberately absent → unpriced, must sort last
-      });
+      };
+      return json(Object.fromEntries(ids.filter((id) => table[id]).map((id) => [id, table[id]])));
     }
     if (target.includes("/api/v2/addresses/") && target.endsWith("/token-balances")) {
       calls.blockscout.push("token-balances");
@@ -194,6 +198,7 @@ console.log("asset viewer · fixtures (no network)");
   check("solana ok", sol.ok === true);
   check("solana native SOL 140.770653101", sol.native.amount === 140.770653101, String(sol.native.amount));
   check("solana native priced from jupiter", sol.native.usdRate === 121.83 && Math.abs(sol.native.usd - 140.770653101 * 121.83) < 0.01, JSON.stringify(sol.native));
+  check("native mint priced by a solo request", calls.jupiter.some((ids) => ids === "So11111111111111111111111111111111111111112"), JSON.stringify(calls.jupiter));
   check("solana priced token ranks above unpriced dust", sol.tokens[0].amount === 5 && sol.tokens[0].usd === 12.5, JSON.stringify(sol.tokens[0]));
   check("solana unpriced dust sorted last", sol.tokens[1].mint.startsWith("Dust") && sol.tokens[1].usd === null);
   check("unpriced count disclosed", sol.caps.some((c) => /no Jupiter price/.test(c)), JSON.stringify(sol.caps));

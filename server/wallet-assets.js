@@ -114,7 +114,8 @@ const scale = (raw, decimals) => {
 const isoFrom = (seconds) =>
   Number.isFinite(Number(seconds)) ? new Date(Number(seconds) * 1000).toISOString() : null;
 
-const isNativeMint = (mint) => mint === "So11111111111111111111111111111111111111112" || mint === "So11111111111111111111111111111111111111113";
+const NATIVE_MINT = "So11111111111111111111111111111111111111112";
+const isNativeMint = (mint) => mint === NATIVE_MINT || mint === "So11111111111111111111111111111111111111113";
 let lastJupiterError = null;
 
 /** Keyless USD prices for SPL mints via Jupiter, in batches. Never fatal. */
@@ -275,6 +276,17 @@ async function inspectSolana(identity, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) 
       );
     }
   }
+  // Jupiter drops the tail of a long ids list, so the native mint needs its own
+  // small request or a wallet that holds no wrapped SOL has no SOL price.
+  if (!priced.has(NATIVE_MINT)) {
+    try {
+      const solo = await jupiterPrices([NATIVE_MINT], { timeoutMs });
+      for (const [mint, price] of solo.prices) priced.set(mint, price);
+      if (solo.prices.size === 0) row.warnings.push("SOL/USD price unread (Jupiter) — amounts shown without a USD column");
+    } catch (error) {
+      row.warnings.push(`SOL/USD price unread (Jupiter): ${error?.message || error}`);
+    }
+  }
   for (const token of all) {
     const price = priced.get(token.mint);
     if (price) {
@@ -316,7 +328,7 @@ async function inspectSolana(identity, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) 
   if (!row.ok) row.reason = "getBalance returned no value";
   // Native SOL in USD: native.amount is already what the row reports, so the
   // price lands on native.usdRate only.
-  const solPrice = priced.get("So11111111111111111111111111111111111111112");
+  const solPrice = priced.get(NATIVE_MINT);
   if (solPrice && row.native.amount !== null) {
     row.native.usdRate = solPrice.usd;
     row.native.usd = solPrice.usd * row.native.amount;
