@@ -11,6 +11,7 @@ import { publicConfig } from "./service.js";
 import { buildStoredMarketPayload } from "./market.js";
 import { inspectWallets } from "./wallet-assets.js";
 import { inspectSimListings } from "./sim-listing.js";
+import simCollapseHandler from "../api/sim-collapse.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -192,6 +193,8 @@ app.get("/api/sim-listing", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+app.all("/api/sim-collapse", simCollapseHandler);
 
 app.get("/api/meta/capabilities", async (_req, res) => {
   try {

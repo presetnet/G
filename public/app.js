@@ -12,6 +12,7 @@ import { renderSimDesk } from "./sim-desk.js";
 import { initOverview, renderOverview } from "./overview.js";
 import { initAssetViewer, renderAssetViewer } from "./asset-viewer.js";
 import { initSimListing, renderSimListing } from "./sim-listing.js";
+import { initSimCollapse } from "./sim-collapse.js";
 import { createChebyshevTone } from "./chebyshev-audio.js";
 import {
   buildHeatmapGrid,
@@ -2516,6 +2517,7 @@ initTrixDesk();
 initOverview();
 initAssetViewer();
 initSimListing();
+initSimCollapse();
 initAudioLab();
 renderProvenance(memory.latest);
 hydrateIcons();
