@@ -13,16 +13,12 @@ const age = (at) => (Number.isFinite(Date.parse(at)) ? `${Math.max(0, Math.floor
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
 
 const MAX_WALLETS = 4;
-// The desk already tracks these, and the void.eth rail is the one that actually
-// holds a SIM, so the fold opens on a real question rather than a blank form.
-const DEFAULT_WALLETS = [
-  { address: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4", label: "SIM · void.eth rail" },
-  { address: "0xE18B0E42f7eD3Bd7A1F1E1b8B0B4c1A6D8e9F0A11", label: "paste your own" },
-];
-
+// Opt-in, page-session-only checks; no prefilled or restored wallet addresses.
 let wallets = [];
 let data = null;
 let busy = false;
+let requestId = 0;
+let activeRequest = null;
 
 function render() {
   const root = document.getElementById("simListing");
@@ -37,12 +33,13 @@ function render() {
 
   root.innerHTML = `
     <div class="desk-toolbar"><h3 id="simListingTitle">Why can't I list my SIM?</h3>
-      <p>Paste the wallet that holds the NFT. Live read of the holder, the Safe behind it, the token's own metadata, the collection's image host, and the public OpenSea item page. No key, no order — this says what is in the way and stops there.</p>
+      <p>Paste the wallet that holds the NFT. Live read of the holder, the Safe behind it, the token's own metadata, the collection's image host, and the public OpenSea item page. Wallet checks last only for this page session; addresses are forgotten on reload.</p>
     </div>
     <form class="sl-form" id="slForm">
       <input id="slInput" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="0x… Ethereum address (the holder, not the owner account)" aria-label="Holder wallet address">
       <button type="submit">Check</button>
       <button type="button" id="slRefresh" ${busy ? "disabled" : ""}>${busy ? "Reading…" : "Re-read"}</button>
+      <button type="button" id="slClear" ${wallets.length ? "" : "disabled"}>Clear wallets</button>
     </form>
     <div class="sl-chips">${chips}</div>
     <div class="sl-results" id="slResults" aria-live="polite">${
@@ -70,6 +67,10 @@ function render() {
     refresh();
   });
   root.querySelector("#slRefresh")?.addEventListener("click", () => refresh(true));
+  root.querySelector("#slClear")?.addEventListener("click", () => {
+    wallets = [];
+    refresh();
+  });
   root.querySelectorAll("[data-drop]").forEach((b) =>
     b.addEventListener("click", () => {
       const addr = b.getAttribute("data-drop");
@@ -87,21 +88,38 @@ function render() {
 }
 
 async function refresh(fresh = false) {
-  if (busy || !wallets.length) return;
+  const id = ++requestId;
+  activeRequest?.abort();
+  activeRequest = null;
+  data = null;
+  if (!wallets.length) {
+    busy = false;
+    render();
+    return;
+  }
+  const controller = new AbortController();
+  activeRequest = controller;
+  const timer = setTimeout(() => controller.abort(), 60_000);
   busy = true;
   render();
   try {
     const res = await fetch(`/api/sim-listing?wallets=${encodeURIComponent(wallets.map((w) => w.address).join(","))}${fresh ? "&refresh=1" : ""}`, {
-      signal: AbortSignal.timeout(60_000),
+      signal: controller.signal,
     });
     const json = await res.json();
+    if (id !== requestId) return;
     if (json.error) throw new Error(json.error);
     data = { ...json, labels: Object.fromEntries(wallets.map((w) => [w.address.toLowerCase(), w.label])) };
   } catch (error) {
+    if (id !== requestId) return;
     data = { error: error.message, wallets: [] };
   } finally {
-    busy = false;
-    render();
+    clearTimeout(timer);
+    if (id === requestId) {
+      activeRequest = null;
+      busy = false;
+      render();
+    }
   }
 }
 
@@ -176,7 +194,6 @@ function renderToken(t) {
 }
 
 export function initSimListing() {
-  if (!wallets.length) wallets = DEFAULT_WALLETS.filter((w) => !w.dismissable);
   if (!document.getElementById("simListing")) {
     // Own top-level fold, sibling of the asset fold. Nesting inside an existing
     // closed <details> hides the tool while the DOM still looks correct.

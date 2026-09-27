@@ -2,8 +2,7 @@
 // on chain right now: native balance, SPL/ERC-20 holdings, NFT collections
 // (including The Simulation / SIM), and last activity. Every number is fetched
 // live per request from the public RPC / Blockscout via /api/assets and names
-// the endpoint that served it; nothing here is cached client-side beyond the
-// short localStorage list of wallets you added.
+// the endpoint that served it. Wallets are kept only while this page is open.
 const esc = (v) => String(v ?? "—").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const link = (url, label) => `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`;
 const short = (a) => (a && a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a || "");
@@ -14,41 +13,25 @@ const STORE_KEY = "gt.assetViewer.wallets";
 const MAX_WALLETS = 8;
 const SIM_COLLECTION_ADDRESS = "0xc3706195ff60658585b58716717ee7acc5ebca60";
 
-// Wallets the desk already talks about, so the viewer starts with real targets.
-const DEFAULT_WALLETS = [
-  { address: "BjLoeUtRq1QBLBWcTWgUFFfj75BsrcESZMu6F1DrMV9C", label: "SIM · SOL pot (mainnet)" },
-  { address: "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4", label: "SIM · void.eth rail" },
-  { address: "9GjEVnpWiLe2uknUmtaH6DSfgcBvL66DtSKGREXDctZU", label: "AZY · custody wallet" },
-  { address: "0xc3706195Ff60658585B58716717ee7Acc5ebcA60", label: "MAGMA · The Simulation (contract)" },
-];
-
-let savedWallets = [];
+let sessionWallets = [];
 // assets = our own /api/assets read. deskSources = the desk snapshot, used only
 // for the recent-payer shortcuts. Two different payloads, two variables, on
 // purpose — merging them once broke render().
 let assets = null;
 let deskSources = null;
 let busy = false;
+let requestId = 0;
+let activeRequest = null;
 let price = { sol: null, eth: null, at: null };
 
-function loadSaved() {
+function forgetSaved() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(STORE_KEY) || "[]");
-    savedWallets = Array.isArray(parsed)
-      ? parsed.filter((w) => typeof w === "string" && w.trim()).slice(0, MAX_WALLETS)
-      : [];
+    localStorage.removeItem(STORE_KEY);
   } catch {
-    savedWallets = [];
+    /* Storage can be unavailable; old entries are never read either way. */
   }
 }
-function persist() {
-  try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(savedWallets));
-  } catch {
-    /* private mode — the list is a convenience, not state */
-  }
-}
-const allWallets = () => [...DEFAULT_WALLETS, ...savedWallets.map((address) => ({ address, label: null }))].slice(0, MAX_WALLETS);
+const allWallets = () => sessionWallets.map((address) => ({ address, label: null }));
 
 async function fetchPrices() {
   try {
@@ -61,20 +44,34 @@ async function fetchPrices() {
 }
 
 async function refresh(fresh = false) {
-  if (busy) return;
+  const id = ++requestId;
+  activeRequest?.abort();
+  activeRequest = null;
+  assets = null;
+  const wallets = allWallets().map((w) => w.address);
+  if (!wallets.length) {
+    busy = false;
+    render();
+    return;
+  }
+  activeRequest = new AbortController();
   busy = true;
   render();
-  const wallets = allWallets().map((w) => w.address);
   try {
-    const res = await fetch(`/api/assets?wallets=${encodeURIComponent(wallets.join(","))}${fresh ? "&refresh=1" : ""}`);
+    const res = await fetch(`/api/assets?wallets=${encodeURIComponent(wallets.join(","))}${fresh ? "&refresh=1" : ""}`, { signal: activeRequest.signal });
     const json = await res.json();
+    if (id !== requestId) return;
     if (json.error) throw new Error(json.error);
     assets = { ...json, labels: Object.fromEntries(allWallets().map((w) => [w.address.toLowerCase(), w.label])) };
   } catch (error) {
+    if (id !== requestId) return;
     assets = { error: error.message, wallets: [] };
   } finally {
-    busy = false;
-    render();
+    if (id === requestId) {
+      activeRequest = null;
+      busy = false;
+      render();
+    }
   }
 }
 
@@ -83,7 +80,7 @@ function render() {
   if (!root) return;
   const chips = allWallets()
     .map((w) => {
-      const mine = savedWallets.some((s) => s.toLowerCase() === w.address.toLowerCase());
+      const mine = sessionWallets.some((s) => s.toLowerCase() === w.address.toLowerCase());
       return `<span class="av-chip"><button type="button" data-inspect="${esc(w.address)}" title="${esc(w.address)}">${esc(w.label || short(w.address))}</button>${
         mine ? `<button type="button" class="av-x" data-drop="${esc(w.address)}" title="Remove">×</button>` : ""
       }</span>`;
@@ -100,12 +97,13 @@ function render() {
 
   root.innerHTML = `
     <div class="desk-toolbar"><h3 id="assetViewerTitle">What is real in a wallet</h3>
-      <p>Paste any Solana or Ethereum wallet. Live read from the public Solana RPC and Blockscout — native balance, tokens, NFTs (incl. The Simulation), last activity. Not a service; an observation you can re-check on the explorer.</p>
+      <p>Paste any Solana or Ethereum wallet. Live read from the public Solana RPC and Blockscout — native balance, tokens, NFTs (incl. The Simulation), last activity. Wallet checks last only for this page session; addresses are forgotten on reload.</p>
     </div>
     <form class="av-form" id="avForm">
       <input id="avInput" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="Solana base58 or 0x… Ethereum address (comma-separated ok)" aria-label="Wallet address">
       <button type="submit">Add wallet</button>
       <button type="button" id="avRefresh" ${busy ? "disabled" : ""}>${busy ? "Reading…" : "Refresh"}</button>
+      <button type="button" id="avClear" ${sessionWallets.length ? "" : "disabled"}>Clear wallets</button>
     </form>
     <div class="av-chips">${chips}</div>
     ${payers ? `<div class="av-payers"><small>recent payers on the desk</small>${payers}</div>` : ""}
@@ -129,26 +127,28 @@ function render() {
       .filter((v) => !allWallets().some((w) => w.address.toLowerCase() === v.toLowerCase()))
       .slice(0, MAX_WALLETS);
     if (!added.length) return;
-    savedWallets = [...savedWallets, ...added].slice(0, MAX_WALLETS);
-    persist();
+    sessionWallets = [...sessionWallets, ...added].slice(0, MAX_WALLETS);
     if (input) input.value = "";
     refresh();
   });
   root.querySelector("#avRefresh")?.addEventListener("click", () => refresh(true));
+  root.querySelector("#avClear")?.addEventListener("click", () => {
+    sessionWallets = [];
+    forgetSaved();
+    refresh();
+  });
   root.querySelectorAll("[data-drop]").forEach((b) =>
     b.addEventListener("click", () => {
       const addr = b.getAttribute("data-drop");
-      savedWallets = savedWallets.filter((s) => s.toLowerCase() !== addr.toLowerCase());
-      persist();
+      sessionWallets = sessionWallets.filter((s) => s.toLowerCase() !== addr.toLowerCase());
       refresh();
     }),
   );
   root.querySelectorAll("[data-add]").forEach((b) =>
     b.addEventListener("click", () => {
       const addr = b.getAttribute("data-add");
-      if (savedWallets.some((s) => s.toLowerCase() === addr.toLowerCase())) return;
-      savedWallets = [...savedWallets, addr].slice(0, MAX_WALLETS);
-      persist();
+      if (sessionWallets.some((s) => s.toLowerCase() === addr.toLowerCase())) return;
+      sessionWallets = [...sessionWallets, addr].slice(0, MAX_WALLETS);
       refresh();
     }),
   );
@@ -239,7 +239,7 @@ function renderWallet(w, label) {
 }
 
 export function initAssetViewer() {
-  loadSaved();
+  forgetSaved();
   if (!document.getElementById("assetViewer")) {
     // Own top-level fold, sibling of the SIM fold — NOT inside it. Nesting here
     // hid the viewer behind a closed <details> while the DOM still looked fine.
