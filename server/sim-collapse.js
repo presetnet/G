@@ -1,12 +1,15 @@
 // Read-only collapse receipts and block-pinned recipe reads. No wallet discovery,
 // signatures, persistent personal history, or inference from marketplace prices.
 import { AbiCoder, Interface, formatEther, keccak256 } from "ethers";
+import { readSupplyPulse, readSalesPulse, readRuleChanges } from "./sim-pulse.js";
 
 export const SIM_CONTRACT = "0xc3706195ff60658585b58716717ee7acc5ebca60";
 export const MAX_LOOKUPS = 4;
 export const SIM_ABI = new Interface([
   "function formulaCount() view returns (uint256)",
   "function collapseFee() view returns (uint256)",
+  "function totalSupply() view returns (uint256)",
+  "function nextTokenId() view returns (uint256)",
   "function renderer() view returns (address)",
   "function getTypeFormula(uint256) view returns (tuple(uint8 mode,uint256 quantity,uint256[] inputTypes,uint256[] counts,uint256[] outputTypes,uint32[] outputWeights,bool active))",
   "function tokenCategory(uint256) view returns (uint256)",
@@ -116,6 +119,8 @@ export function verifyCollapseReceipt(tx, receipt, expectedHash) {
 export function createCollapseReader({ fetchImpl = fetch, rpcUrls = RPCS, timeoutMs = 7000, requestBudgetMs = 45000 } = {}) {
   let recipeCache = null;
   let recipePending = null;
+  let pulseCache = null;
+  let pulsePending = null;
 
   function session() {
     const deadline = Date.now() + requestBudgetMs;
@@ -187,6 +192,32 @@ export function createCollapseReader({ fetchImpl = fetch, rpcUrls = RPCS, timeou
       return { ...value, cached: false };
     }).finally(() => { recipePending = null; });
     return recipePending;
+  }
+
+  async function readPulse() {
+    const s = session();
+    await s.checkChain();
+    const block = await s.rpc("eth_blockNumber", []);
+    const [supplyRead, marketRead] = await Promise.allSettled([
+      readSupplyPulse(s, block), readSalesPulse(s, { contract: SIM_CONTRACT, block }),
+    ]);
+    const supply = supplyRead.status === "fulfilled" ? { ok: true, ...supplyRead.value } : { ok: false, error: supplyRead.reason.message };
+    const market = marketRead.status === "fulfilled" ? { ok: true, ...marketRead.value } : { ok: false, error: marketRead.reason.message };
+    const oldBlock = supply.history?.find((h) => h.label === "24h" && h.ok)?.sample.block;
+    const changes = await readRuleChanges(s, { block, oldBlock });
+    delete supply.history;
+    return { contract: SIM_CONTRACT, block: Number(BigInt(block)), checkedAt: new Date().toISOString(), supply, market, changes,
+      source: `https://etherscan.io/address/${SIM_CONTRACT}#readContract` };
+  }
+
+  async function pulse({ fresh = false } = {}) {
+    if (!fresh && pulseCache && Date.now() - pulseCache.at < 60_000) return { ...pulseCache.value, cached: true };
+    if (!pulsePending) pulsePending = readPulse().then((value) => {
+      // Never retain a failed supply read as a fresh success.
+      if (value.supply.ok) pulseCache = { at: Date.now(), value };
+      return { ...value, cached: false };
+    }).finally(() => { pulsePending = null; });
+    return pulsePending;
   }
 
   async function decode(value) {
@@ -277,7 +308,7 @@ export function createCollapseReader({ fetchImpl = fetch, rpcUrls = RPCS, timeou
     }, MAX_LOOKUPS);
     return { contract: SIM_CONTRACT, results, checkedAt: new Date().toISOString() };
   }
-  return { recipes, decode, decodeMany };
+  return { recipes, pulse, decode, decodeMany };
 }
 
 export const collapseReader = createCollapseReader();

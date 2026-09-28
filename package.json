@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "sniff": "node server/cli-sniff.js"
+    "sniff": "node server/cli-sniff.js",
+    "test": "node --experimental-vm-modules --test \"scripts/*-test.js\""
   },
   "engines": {
     "node": ">=18"

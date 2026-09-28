@@ -528,5 +528,24 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .sc-traits dt { color: var(--muted); }
 .sc-traits dd { margin: .25rem 0 0; color: var(--ink); }
 .sc-cost { font: .64rem/1.6 var(--font-mono); color: var(--ink); margin: .65rem 0 .2rem; }
-@media (max-width: 900px) { .sc-layout { grid-template-columns: minmax(0, 1fr); } }
+.sc-pulse-head { padding-top: .2rem; }
+.sc-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; margin: .2rem 0 .4rem; }
+.sc-card { min-width: 0; padding: .8rem; border: 1px solid var(--line); border-radius: 8px; background: #141a1d; display: grid; gap: .4rem; align-content: start; }
+.sc-card-wide { grid-column: 1 / -1; background: linear-gradient(135deg, #171b24, #141a1d); }
+.sc-card h5 { margin: 0; color: #c9a7ff; font: 600 .68rem var(--font-ui); text-transform: uppercase; letter-spacing: .08em; }
+.sc-headline { display: flex; flex-wrap: wrap; gap: .5rem 1.1rem; }
+.sc-headline > div { min-width: 0; display: grid; gap: .15rem; }
+.sc-headline b { color: #f3d88a; font: 500 .8rem var(--font-mono); overflow-wrap: anywhere; }
+.sc-headline small, .sc-clockline small { color: var(--muted); font: .58rem/1.5 var(--font-mono); overflow-wrap: anywhere; }
+.sc-progress { height: 5px; overflow: hidden; border-radius: 3px; background: #20262a; }
+.sc-progress i { display: block; height: 100%; background: linear-gradient(90deg, #c9a7ff, #ff9ac2); }
+.sc-clockline { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .6rem; margin: .1rem 0; }
+.sc-clockline .sc-label { color: #ff9ac2; font: 600 .58rem var(--font-mono); letter-spacing: .12em; text-transform: uppercase; }
+.sc-clockline b { color: #f8f4e0; font: 500 1.05rem var(--font-mono); }
+.sc-clockline small { flex-basis: 100%; }
+.sc-changes { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; font: .64rem/1.5 var(--font-mono); }
+.sc-changes li { color: var(--ink); }
+.sc-changes li b { color: #f3d88a; font-weight: 500; }
+.sc-muted { color: var(--muted); }
+@media (max-width: 900px) { .sc-layout { grid-template-columns: minmax(0, 1fr); } .sc-cards { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 480px) { .sc-burn-list { grid-template-columns: minmax(0, 1fr); } .sim-collapse { padding: 0 .6rem .7rem; } }

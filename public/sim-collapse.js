@@ -9,6 +9,16 @@ let recipeData = null;
 let recipeBusy = false;
 let decodeId = 0;
 let activeDecode = null;
+let pulseData = null;
+let pulseBusy = false;
+let pulseTimer = null;
+let clockTimer = null;
+
+const num = (value) => Number(value).toLocaleString();
+const eth = (value) => `${esc(value)} ETH`;
+const when = (value) => Number.isFinite(Date.parse(value))
+  ? new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+  : "unknown time";
 
 function originalTypes(ids) {
   return ids.length === 8 && ["1", "2", "3", "4", "5", "6", "7", "8"].every((id) => ids.includes(id));
@@ -58,6 +68,107 @@ async function refreshRecipes() {
     renderRecipes();
   } catch (e) { renderRecipes(e.message); }
   finally { recipeBusy = false; button.disabled = false; button.textContent = "Reload recipes"; }
+}
+
+function leftText(at) {
+  const time = Date.parse(at || "");
+  if (!Number.isFinite(time)) return "projection unavailable";
+  const left = time - Date.now();
+  if (left <= 0) return "6,000 reached";
+  const minutes = Math.floor(left / 60000);
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  return days > 0 ? `${days}d ${hours}h ${minutes % 60}m` : hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+}
+function tickClocks() {
+  const supply = pulseData?.supply?.ok ? pulseData.supply : null;
+  const set = (id, at) => { const node = root.querySelector(id); if (node && at) node.textContent = leftText(at); };
+  set("#scCountdown", supply?.projection?.at);
+  set("#scCountdownAlt", supply?.shortProjection?.at);
+}
+function startClock() {
+  if (clockTimer !== null) return;
+  clockTimer = setInterval(tickClocks, 1000);
+}
+function supplyCard(s) {
+  if (!s.ok) return `<article class="sc-card sc-card-wide"><h5>Supply watch · 6,000</h5><p class="sc-error">Supply read failed: ${esc(s.error)}</p></article>`;
+  const good = s.windows.filter((w) => w.ok);
+  const base = s.windows.find((w) => w.label === "24h" && w.ok) || good.at(-1);
+  const span = base ? base.supplyBefore - s.target : 0;
+  const pct = span > 0 ? Math.max(0, Math.min(100, (base.supplyBefore - s.current) / span * 100)) : 0;
+  const rows = s.windows.map((w) => w.ok
+    ? `<tr><td>${esc(w.label)}</td><td>${num(w.supplyBefore)} → ${num(w.supplyNow)}</td><td>${w.netReduction >= 0 ? "−" : "+"}${num(Math.abs(w.netReduction))} net</td><td>${num(w.minted)} minted · ${num(w.burned)} burned</td></tr>`
+    : `<tr><td>${esc(w.label)}</td><td colspan="3" class="sc-muted">unavailable — ${esc(w.error)}</td></tr>`).join("");
+  const projection = s.projection
+    ? `<p class="sc-clockline"><span class="sc-label">Pace projection</span><b id="scCountdown">${esc(leftText(s.projection.at))}</b><small>reaching 6,000 around ${esc(when(s.projection.at))} at the observed ${esc(s.projection.basis)} net rate of ${s.projection.netPerHour.toFixed(1)}/h</small></p>`
+    : `<p class="sc-clockline"><span class="sc-label">Pace projection</span><b>—</b><small>net supply is flat or rising in the measured windows, so no date is projected</small></p>`;
+  const alt = s.shortProjection && s.shortProjection.at !== s.projection?.at
+    ? `<p class="sc-note">Same math on the last hour alone: <b id="scCountdownAlt">${esc(leftText(s.shortProjection.at))}</b> (around ${esc(when(s.shortProjection.at))}).</p>` : "";
+  return `<article class="sc-card sc-card-wide">
+    <h5>Supply watch · 6,000 target</h5>
+    <div class="sc-headline"><div><b>${num(s.current)}</b><small>live supply now</small></div><div><b>${num(s.remaining)}</b><small>to go before 6,000</small></div><div><b>${num(s.mintedLifetime)}</b><small>minted · ${num(s.burnedLifetime)} burned</small></div></div>
+    <div class="sc-progress" role="img" aria-label="${pct.toFixed(0)} percent of the last window's distance to 6,000 closed"><i style="width:${pct.toFixed(1)}%"></i></div>
+    <p class="sc-note">${base ? `${pct.toFixed(0)}% of the last ${esc(base.label)}'s distance from ${num(base.supplyBefore)} to 6,000 is closed.` : "No historical window available for a progress bar."} Supply is read on chain; mints and collapses both move it.</p>
+    ${projection}${alt}
+    ${s.paceUnstable ? '<p class="sc-warning">The measured rate is not stable — the last hour and the last six hours disagree by more than 2×, so treat the date as a rough pace, not a schedule.</p>' : ""}
+    <div class="sc-table-wrap"><table class="sc-table"><thead><tr><th>Window</th><th>Supply</th><th>Net</th><th>Activity</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="sc-note">${esc(s.note)}</p>
+  </article>`;
+}
+function marketCard(m) {
+  if (!m.ok) return `<article class="sc-card"><h5>Paid prices on chain</h5><p class="sc-error">Sale read failed: ${esc(m.error)}</p></article>`;
+  const stat = (label, value) => `<div><b>${value}</b><small>${esc(label)}</small></div>`;
+  const rows = m.sales.slice(0, 8).map((s) => `<tr><td>${s.typeId ? esc(s.name || `TYPE ${s.typeId}`) : '<span class="sc-muted">TYPE unread</span>'}</td><td>#${esc(s.tokenId)}</td><td>${eth(s.amountEth)}</td><td>${link(s.source, s.tx.slice(0, 10) + "…")}</td></tr>`).join("");
+  const skipped = Object.entries(m.skipped || {}).filter(([, n]) => n > 0);
+  return `<article class="sc-card">
+    <h5>Paid prices on chain</h5>
+    <div class="sc-headline">${m.stats
+      ? `${stat("median paid", eth(m.stats.medianEth))}${stat("low → high", `${esc(m.stats.lowEth)} → ${esc(m.stats.highEth)} ETH`)}${m.originals ? stat("median · originals", eth(m.originals.medianEth)) : ""}${m.upgraded ? stat("median · upgraded", eth(m.upgraded.medianEth)) : ""}`
+      : '<p class="sc-note">No comparable single-NFT ETH/WETH fills in the inspected sample.</p>'}</div>
+    ${rows ? `<div class="sc-table-wrap"><table class="sc-table"><thead><tr><th>TYPE</th><th>Token</th><th>Paid</th><th>Receipt</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}
+    <p class="sc-note">${m.inspectedTransactions} recent transfers inspected · ${m.stats ? `${m.stats.count} verified sale${m.stats.count === 1 ? "" : "s"}` : "no verified sales"}${skipped.length ? ` · skipped ${skipped.map(([k, n]) => `${esc(k)} (${n})`).join(", ")}` : ""}${m.failures.length ? ` · ${m.failures.length} receipt${m.failures.length === 1 ? "" : "s"} unread` : ""}.</p>
+    ${m.capped ? '<p class="sc-note">Discovery stopped at the read cap, so this is a sample of recent sales, not a market-wide floor or full history.</p>' : ""}
+    <p class="sc-note">${esc(m.note)}</p>
+  </article>`;
+}
+function changesCard(c) {
+  if (!c?.ok) return `<article class="sc-card"><h5>What changed</h5><p class="sc-note">Rule history unavailable — ${esc(c?.error || "no baseline")}.</p></article>`;
+  const added = c.added.map((a) => `<li><b>#${esc(a.id)}</b> ${num(a.quantity)} in → <b>${esc(a.outputs.join(" / "))}</b>${a.active ? "" : " (disabled)"}</li>`).join("");
+  return `<article class="sc-card">
+    <h5>What changed on chain</h5>
+    <p class="sc-note">Recipe count <b>${c.previousCount} → ${c.currentCount}</b> between blocks ${num(c.fromBlock)} and ${num(c.toBlock)} (last 24h).</p>
+    ${added ? `<ul class="sc-changes">${added}</ul>` : '<p class="sc-note">No new recipes in that window.</p>'}
+    ${c.addedCapped ? '<p class="sc-warning">More recipes were added than were read, so this list is partial.</p>' : ""}
+    <p class="sc-note">Collapse fee ${c.feeChanged ? `<b>${esc(c.previousFeeEth)} → ${esc(c.feeEth)} ETH</b>` : `<b>${esc(c.feeEth)} ETH</b>, unchanged`} in that window · owner-settable.</p>
+  </article>`;
+}
+function renderPulse(error = null) {
+  const target = root.querySelector("#scPulse");
+  if (!pulseData) {
+    target.innerHTML = `<p class="sc-note${error ? " sc-error" : ""}">${esc(error || "Reading live supply, recent paid prices, and recipe changes from Ethereum…")}</p>`;
+    return;
+  }
+  const p = pulseData;
+  target.innerHTML = `${error ? `<p class="sc-error">Refresh failed: ${esc(error)}. The figures below are the previous snapshot.</p>` : ""}<div class="sc-cards">${supplyCard(p.supply)}${marketCard(p.market)}${changesCard(p.changes)}</div><p class="sc-note">Block-pinned snapshot ${esc(stamp(p.checkedAt))} · block ${num(p.block)} · updates every minute · ${link(p.source, "read the contract")}</p>`;
+  tickClocks();
+}
+async function refreshPulse() {
+  if (pulseBusy) return;
+  pulseBusy = true;
+  const button = root.querySelector("#scPulseRefresh");
+  if (button) { button.disabled = true; button.textContent = "Reading…"; }
+  try {
+    const response = await fetch(`/api/sim-collapse?view=pulse${pulseData ? "&refresh=1" : ""}`, { signal: AbortSignal.timeout(55_000) });
+    const data = await response.json();
+    if (!response.ok || data.error) throw new Error(data.error || `HTTP ${response.status}`);
+    pulseData = data;
+    renderPulse();
+  } catch (e) { renderPulse(e.message); }
+  finally { pulseBusy = false; if (button) { button.disabled = false; button.textContent = "Refresh now"; } }
+}
+function startPulseTimer() {
+  if (pulseTimer !== null) return;
+  pulseTimer = setInterval(refreshPulse, 60_000);
 }
 
 function batchCard(batch) {
@@ -137,6 +248,8 @@ export function initSimCollapse() {
   fold.open = true;
   fold.innerHTML = `<summary>SIM burn → upgrade · recipes & collapse decoder</summary><section id="simCollapse" class="sim-collapse" aria-labelledby="scTitle">
     <div class="desk-toolbar"><h3 id="scTitle">Burn → upgrade</h3><p>Live recipes and exact burn batches. Read-only; no wallet connection, saved addresses, or saved lookup history.</p></div>
+    <div class="sc-subhead sc-pulse-head"><h4>Supply, paid prices, and rule changes</h4><button type="button" id="scPulseRefresh">Refresh now</button></div>
+    <div id="scPulse" aria-live="polite"><p class="sc-note">Reading live supply, recent paid prices, and recipe changes from Ethereum…</p></div>
     <div class="sc-layout"><section><div class="sc-subhead"><h4>Current recipes</h4><button type="button" id="scRefresh">Reload recipes</button></div><div id="scRecipes" aria-live="polite"><p class="sc-note">Reading recipes…</p></div></section>
     <section><h4>What went into a collapse?</h4><form id="scForm" class="sc-form"><label for="scInput">Transaction hashes or output token IDs · up to four</label><textarea id="scInput" rows="2" autocomplete="off" spellcheck="false" placeholder="Paste 0x… transaction hashes or output token IDs"></textarea><div><button id="scDecode" type="submit">Decode batches</button><button id="scClear" type="button">Clear lookups</button></div></form><div id="scResults" aria-live="polite"><p class="sc-note">Each result lists the burned names and IDs together under the output they created.</p></div></section></div>
     <details class="sc-mechanics"><summary>What determines the upgrade and its traits?</summary><p>The chosen formula defines the output TYPE pool. Your input token IDs, rarity and other traits do not enter the output seed; they only have to meet the recipe.</p><p>Seed = keccak256(abi.encode(chain ID, collection, mint recipient, new token ID)). Secondary traits are deterministic. Another mint or collapse can advance the shared token counter before your transaction lands. Direct minting is owner-only.</p><p>Existing TYPE names are intentional, including UNDEFINED. New recipes and fee changes can be introduced by the owner. This panel reads the current state rather than assuming yesterday’s rules.</p></details>
@@ -146,6 +259,7 @@ export function initSimCollapse() {
   else (document.querySelector("main") || document.body).append(fold);
   root = fold.querySelector("#simCollapse");
   root.querySelector("#scRefresh").addEventListener("click", refreshRecipes);
+  root.querySelector("#scPulseRefresh").addEventListener("click", refreshPulse);
   root.querySelector("#scForm").addEventListener("submit", decodeLookups);
   root.querySelector("#scClear").addEventListener("click", clearLookups);
   const reveal = () => {
@@ -158,4 +272,7 @@ export function initSimCollapse() {
   });
   requestAnimationFrame(reveal);
   refreshRecipes();
+  refreshPulse();
+  startClock();
+  startPulseTimer();
 }
