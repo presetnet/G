@@ -2414,6 +2414,37 @@ const TRIX_BOX_LAUNCH_START_MS = Date.parse("2026-08-29T00:00:00Z");
 const TRIX_BOX_CHAIN_PAGES = 8;
 let trixBoxChainInFlight = null;
 
+// TRIX sells boxes as a wallet-scoped *preorder* against its BuyPack program,
+// not as a plain NFT mint. /api/mkt/g is the only public (wallet-free) gate.
+// TRIX publishes no purchase program id on any public route we probed, so this
+// source asserts no program address and makes no chain-level purchase claim;
+// see trix.boxchain for the treasury-signature evidence instead.
+const TRIX_PREORDER_STATE_URL = `${TRIX_BASE_URL}/api/mkt/g`;
+// A second public route that returns the same global gate; probing it lets the
+// source corroborate the verdict instead of trusting one endpoint.
+const TRIX_PREORDER_ALIAS_ROUTES = ["/api/mkt/preorder"];
+// Probed only to publish their status codes: TRIX retired these, and the
+// eligibility route is session-scoped, which is why an anonymous read cannot
+// answer "can this wallet order?".
+const TRIX_PREORDER_RETIRED_ROUTES = ["/api/mkt/state", "/api/mkt/leaderboard"];
+const TRIX_PREORDER_SCOPED_ROUTES = ["/api/mkt/g/eligibility"];
+let trixPreorderInFlight = null;
+// Button states copied from the shipped trix.market preorder bundle, in the
+// order the component evaluates them. Each row explains a label a wallet can
+// actually get stuck on, so the desk can decode a stuck button instead of
+// guessing. `global` marks rows resolvable without wallet data.
+const TRIX_PREORDER_GATES = [
+  { order: 1, label: "ORDERING", cause: "An order is already being submitted, or a preflight check is running.", walletScoped: true, global: false },
+  { order: 2, label: "MORE RELEASE SOON", cause: "This address is not eligible yet and TRIX is still releasing boxes to it.", walletScoped: true, global: false },
+  { order: 3, label: "SOLD OUT", cause: "The current round is fully allocated.", walletScoped: false, global: true },
+  { order: 4, label: "Loading...", cause: "Eligibility has not resolved, or a previous order left the wallet in needsReview / failed / refunded state, which pins the button.", walletScoped: true, global: false },
+  { order: 5, label: "INSUFFICIENT SOL", cause: "maxAffordable from /api/mkt/g/eligibility is below the requested quantity.", walletScoped: true, global: false },
+  { order: 6, label: "WAIT m:ss", cause: "Per-wallet cooldown: TRIX throttles one committed box per 60s.", walletScoped: true, global: false },
+  { order: 7, label: "TRY AGAIN", cause: "Eligibility came back with an error for this wallet.", walletScoped: true, global: false },
+  { order: 8, label: "RESUME REMAINING", cause: "A partially paid order is saved locally and needs payment to finish.", walletScoped: true, global: false },
+  { order: 9, label: "PREORDER N", cause: "Eligible, funded, off cooldown: this is the only clickable state.", walletScoped: true, global: true },
+];
+
 const DIBZI_BASE_URL = "https://dibzi.ai";
 const DIBZI_PROGRAM_ID = "3VQDLcMiUrqLHXhkinwj9AW9h5BHdqYkv4AY2cyTv7gS";
 const DIBZI_TIMEOUT_MS = 6_000;
@@ -2423,6 +2454,11 @@ const DIBZI_NAME_LIMIT = 2_500;
 const DIBZI_BIDS_PER_NAME_LIMIT = 250;
 const DIBZI_RECENT_BID_LIMIT = 60;
 const DIBZI_WALLET_LIMIT = 25;
+// The open board is derived from the FULL /api/names response, not the
+// DIBZI_NAME_LIMIT sample: the sample truncates below the current board size and
+// silently drops still-open auctions, which would understate what can be bid on.
+const DIBZI_OPEN_BOARD_LIMIT = 60;
+const DIBZI_MINUTE_MS = 60_000;
 
 export async function sniffDibziAbout() {
   const started = Date.now();
@@ -2500,6 +2536,28 @@ function dibziDate(value) {
   return Number.isFinite(time) ? new Date(time).toISOString() : null;
 }
 
+/**
+ * Read DIBZI's published bid-increment rule out of /api/config instead of
+ * hardcoding it. The site publishes strings like "max(0.03 SOL, 7.5%)"; a rule
+ * we cannot parse is reported as unknown rather than guessed, so a minimum bid
+ * is never presented as authoritative when the site changes the rule.
+ */
+function dibziIncrementRule(text) {
+  const source = typeof text === "string" ? text : "";
+  const floor = /([\d.]+)\s*SOL/i.exec(source);
+  const percent = /([\d.]+)\s*%/.exec(source);
+  const floorSol = floor ? Number(floor[1]) : null;
+  const fraction = percent ? Number(percent[1]) / 100 : null;
+  const usable = Number.isFinite(floorSol) && floorSol >= 0 && Number.isFinite(fraction) && fraction > 0;
+  return { raw: source || null, floorSol: usable ? floorSol : null, fraction: usable ? fraction : null, usable };
+}
+
+/** TRIX/DIBZI both quote SOL as lamports; keep the division in one place. */
+function lamportsToSol(lamports) {
+  const number = dibziNumber(lamports);
+  return number === null ? null : number / 1e9;
+}
+
 function normalizeDibziBid(bid, name, profileByWallet) {
   const wallet = typeof bid?.wallet === "string" && bid.wallet ? bid.wallet : null;
   const lamports = dibziNumber(bid?.amount);
@@ -2544,6 +2602,18 @@ export async function sniffDibzi() {
       nameSampleTruncated: false,
     highestBidSol: null,
     highestBidName: null,
+    morphEnabled: null,
+    openingSol: null,
+    incrementRule: null,
+    flashSale: null,
+    openAuctions: [],
+    openAuctionsTotal: 0,
+    openFloorSol: null,
+    openFloorName: null,
+    openFloorMinBidSol: null,
+    openSingleBidCount: 0,
+    morphedNamesTotal: 0,
+    morphStyles: [],
     checkedAt: null,
     reason: null,
   };
@@ -2558,6 +2628,50 @@ export async function sniffDibzi() {
     }
     const profiles = Array.isArray(profilesRes.json) ? profilesRes.json : [];
     const profileByWallet = new Map(profiles.map((profile) => [profile?.wallet, profile]));
+    const config = configRes.ok && configRes.json && typeof configRes.json === "object" ? configRes.json : null;
+    const incrementRule = dibziIncrementRule(config?.increment);
+    // Prefer the site's own clock; a board deadline judged against our clock can
+    // disagree with theirs by enough to flip "open" to "closed".
+    const boardNowMs = Number.isFinite(Number(config?.flashSale?.serverNow)) ? Number(config.flashSale.serverNow) : Date.now();
+    const boardNow = new Date(boardNowMs).toISOString();
+    // Derived from the FULL response, not the DIBZI_NAME_LIMIT sample: the
+    // sample truncates below the current board size and would drop still-open
+    // auctions from the count and the bid floor.
+    const openRows = namesRes.json.filter((row) => {
+      const endsAtMs = dibziNumber(row?.endsAt);
+      return Number.isFinite(endsAtMs) && endsAtMs > boardNowMs;
+    });
+    const openAuctions = openRows.map((row) => {
+      const currentBidSol = lamportsToSol(row?.amount);
+      const endsAtMs = dibziNumber(row.endsAt);
+      const step = incrementRule.usable && currentBidSol !== null
+        ? Math.max(incrementRule.floorSol, currentBidSol * incrementRule.fraction)
+        : null;
+      return {
+        name: typeof row?.name === "string" ? row.name : null,
+        currentBidSol,
+        minNextBidSol: step === null || currentBidSol === null ? null : Math.round((currentBidSol + step) * 1e6) / 1e6,
+        endsAt: new Date(endsAtMs).toISOString(),
+        minutesLeft: Math.max(0, Math.round((endsAtMs - boardNowMs) / DIBZI_MINUTE_MS)),
+        bidCount: dibziNumber(row?.bidCount),
+        bidderCount: dibziNumber(row?.bidderCount),
+        leader: typeof row?.leader === "string" ? row.leader : null,
+        leaderUsername: profileByWallet.get(row?.leader)?.username || null,
+        morphed: row?.morphed === true,
+        morphStyle: dibziNumber(row?.morphStyle),
+      };
+    })
+      .filter((row) => row.name)
+      .sort((a, b) => (a.currentBidSol ?? Infinity) - (b.currentBidSol ?? Infinity) || a.minutesLeft - b.minutesLeft);
+    const openFloor = openAuctions[0] || null;
+    let morphedNamesTotal = 0;
+    const morphStyles = new Set();
+    for (const row of namesRes.json) {
+      if (row?.morphed !== true) continue;
+      morphedNamesTotal += 1;
+      const style = dibziNumber(row?.morphStyle);
+      if (style !== null) morphStyles.add(style);
+    }
     const allBids = [];
     const names = namesRes.json.slice(0, DIBZI_NAME_LIMIT).map((row) => {
       const amountLamports = dibziNumber(row?.amount);
@@ -2640,7 +2754,7 @@ export async function sniffDibzi() {
     Object.assign(value, {
       ok: true,
       status: 200,
-      config: configRes.ok && configRes.json ? configRes.json : { mode: "mainnet", programId: DIBZI_PROGRAM_ID },
+      config: config || { mode: "mainnet", programId: DIBZI_PROGRAM_ID },
       names,
       recentBids,
       topWallets,
@@ -2657,11 +2771,29 @@ export async function sniffDibzi() {
       bidsPerMinute60m: recentBidCount60m > 0 ? Math.round((recentBidCount60m / 60) * 1000) / 1000 : null,
       namesReported: namesRes.json.length,
       nameSampleTruncated: namesRes.json.length > names.length,
-       highestBidSol: highestCurrent?.amountSol ?? null,
-       highestBidName: highestCurrent?.name ?? null,
+      highestBidSol: highestCurrent?.amountSol ?? null,
+      highestBidName: highestCurrent?.name ?? null,
+      morphEnabled: config?.morphEnabled === true ? true : config?.morphEnabled === false ? false : null,
+      openingSol: lamportsToSol(config?.openingLamports),
+      incrementRule: incrementRule.raw,
+      incrementRuleParsed: incrementRule.usable,
+      flashSale: config?.flashSale && typeof config.flashSale === "object" ? {
+        exists: config.flashSale.exists === true,
+        active: config.flashSale.active === true,
+        endsAt: dibziDate(config.flashSale.endsAt),
+        serverNow: boardNow,
+      } : null,
+      openAuctions: openAuctions.slice(0, DIBZI_OPEN_BOARD_LIMIT),
+      openAuctionsTotal: openAuctions.length,
+      openFloorSol: openFloor?.currentBidSol ?? null,
+      openFloorName: openFloor?.name ?? null,
+      openFloorMinBidSol: openFloor?.minNextBidSol ?? null,
+      openSingleBidCount: openAuctions.filter((row) => row.bidCount === 1).length,
+      morphedNamesTotal,
+      morphStyles: [...morphStyles].sort((a, b) => a - b),
       profiles: profiles.length,
       ms: Date.now() - started,
-      note: "Current DIBZI names and bid rows from the public API. Snapshot values are not lifetime totals; bid amounts are reported bids, not necessarily settled spend. Bid velocity deduplicates transaction signatures and is limited to the collected name sample.",
+      note: "Current DIBZI names and bid rows from the public API. Snapshot values are not lifetime totals; bid amounts are reported bids, not necessarily settled spend. Bid velocity deduplicates transaction signatures and is limited to the collected name sample. The open-auction board, its count and its bid floor are computed from the FULL /api/names response (endsAt later than the site's serverNow) rather than the truncated sample, so they do not inherit the sample ceiling. minNextBidSol applies the site's published increment rule to the current bid; it is a computed next step, not a quoted price, and is null when the rule cannot be parsed. morphEnabled and morphStyles are the site's own flags, not an endorsement of any name.",
     });
   } catch (error) {
     value.reason = error?.message || String(error);
@@ -2736,6 +2868,132 @@ export async function sniffTrixBoxChain({ previous = null } = {}) {
   }
   return trixBoxChainInFlight;
 }
+/**
+ * Public, wallet-free view of TRIX's box *preorder* gate.
+ *
+ * TRIX publishes no anonymous "can this wallet order?" answer: /api/mkt/g is
+ * global and /api/mkt/g/eligibility is session-scoped. So this source reports
+ * only what is public -- whether the round can still be reserved, and which
+ * retired routes explain a missing remaining count -- and ships the
+ * button-gate table so a stuck label can be decoded instead of guessed at.
+ * It never infers a per-wallet verdict, because no public source can, and it
+ * makes no purchase-program claim, because no public route names one.
+ */
+export async function sniffTrixPreorder({ previous = null } = {}) {
+  if (!trixPreorderInFlight) {
+    trixPreorderInFlight = (async () => {
+      const started = Date.now();
+      const value = {
+        source: "trix.preorder",
+        optional: true,
+        ok: false,
+        stale: false,
+        status: 0,
+        sourceUrl: TRIX_PREORDER_STATE_URL,
+        programId: null,
+        programPublished: false,
+        reason: null,
+        saleOpen: null,
+        saleVerdict: null,
+        globalState: null,
+        maxOrderQty: null,
+        retiredRoutes: [],
+        eligibilityRoute: null,
+        corroboration: null,
+        gates: TRIX_PREORDER_GATES,
+        walletAnswerAvailable: false,
+        checkedAt: null,
+        ms: null,
+        note: "TRIX boxes are a wallet-scoped preorder, not an anonymous mint. saleVerdict is the GLOBAL round state from /api/mkt/g; it cannot say whether one address may order. That answer lives in the session-scoped /api/mkt/g/eligibility, which rejects anonymous reads, so this source reports walletAnswerAvailable false rather than guessing. No TRIX route we probed publishes the purchase program id, so this source asserts no program address and offers no chain-level purchase proof; the third-party box board credits a 'BuyPack minted counter' without naming a program. For on-chain evidence read trix.boxchain, which counts successful treasury signatures. gates is the shipped button-label table from the trix.market preorder bundle, in evaluation order; ORDERING and Loading are the two states that persist on their own and can look like an outage.",
+      };
+      const bool = (input) => input === true ? true : input === false ? false : null;
+      try {
+        const [stateRes, ...probes] = await Promise.all([
+          fetchJson(TRIX_PREORDER_STATE_URL, { timeoutMs: TRIX_TIMEOUT_MS }),
+          ...TRIX_PREORDER_RETIRED_ROUTES.map((route) => fetchJson(`${TRIX_BASE_URL}${route}`, { timeoutMs: TRIX_TIMEOUT_MS })),
+          ...TRIX_PREORDER_SCOPED_ROUTES.map((route) => fetchJson(`${TRIX_BASE_URL}${route}`, { timeoutMs: TRIX_TIMEOUT_MS })),
+          ...TRIX_PREORDER_ALIAS_ROUTES.map((route) => fetchJson(`${TRIX_BASE_URL}${route}`, { timeoutMs: TRIX_TIMEOUT_MS })),
+        ]);
+        value.status = stateRes.status;
+        const json = stateRes.json;
+        if (!stateRes.ok || !json || typeof json !== "object") {
+          value.reason = `Preorder state unavailable (HTTP ${stateRes.status || 0})`;
+        } else {
+          const canReserve = bool(json.canReserve);
+          const canOpen = bool(json.canOpen);
+          value.globalState = {
+            isGenesis: bool(json.isGenesis),
+            owned: trixNumber(json.owned),
+            opened: bool(json.opened),
+            canReserve,
+            canOpen,
+            maxOrderQty: trixNumber(json.maxOrderQty),
+            memeCreatorFees: trixNumber(json.memeCreatorFees),
+          };
+          value.maxOrderQty = value.globalState.maxOrderQty;
+          value.saleOpen = canReserve;
+          value.saleVerdict = canReserve === true
+            ? "open to reserve"
+            : canOpen === true
+              ? "round open but not reservable"
+              : canOpen === false
+                ? "closed / awaiting release"
+                : "global state unknown";
+        }
+        // Corroborate the verdict against an independent public route rather
+        // than trusting one endpoint; disagreement is reported, not averaged.
+        const aliasRes = probes[TRIX_PREORDER_RETIRED_ROUTES.length + TRIX_PREORDER_SCOPED_ROUTES.length];
+        const aliasJson = aliasRes?.json;
+        const agrees = aliasRes?.ok && aliasJson && typeof aliasJson === "object"
+          ? aliasJson.canReserve === json?.canReserve && aliasJson.canOpen === json?.canOpen
+          : null;
+        value.corroboration = {
+          route: TRIX_PREORDER_ALIAS_ROUTES[0],
+          status: aliasRes?.status ?? 0,
+          agrees,
+          note: agrees === true
+            ? "Second public route returns the same gate."
+            : agrees === false
+              ? "Second public route disagrees with /api/mkt/g; read the sale verdict with caution."
+              : "Alias route unavailable; verdict rests on /api/mkt/g alone.",
+        };
+        value.retiredRoutes = TRIX_PREORDER_RETIRED_ROUTES.map((route, index) => {
+          const status = probes[index]?.status ?? 0;
+          return {
+            route,
+            status,
+            retired: status === 404,
+            note: status === 404
+              ? "Retired. TRIX no longer publishes box remaining/minted totals here, which is why the box board's remaining figures are null rather than zero."
+              : `Unexpected status ${status}; treat as still published.`,
+          };
+        });
+        const scopedRes = probes[TRIX_PREORDER_RETIRED_ROUTES.length];
+        const scopedStatus = scopedRes?.status ?? 0;
+        value.eligibilityRoute = {
+          route: TRIX_PREORDER_SCOPED_ROUTES[0],
+          status: scopedStatus,
+          walletScoped: true,
+          note: scopedStatus === 401
+            ? "Rejects anonymous reads. The per-wallet answer (minimumLamportsPerItem, maxAffordable) is only available to a signed-in session, so no public read can substitute for it."
+            : `Returned status ${scopedStatus} without a session; treat any per-wallet reading as unverified.`,
+        };
+        value.ok = true;
+      } catch (error) {
+        value.reason = error?.message || String(error);
+      }
+      // Deliberately no RPC call here. Probing for a purchase program produced no
+      // published address, and guessing one would manufacture exactly the kind of
+      // false on-chain claim this dashboard exists to avoid. trix.boxchain carries
+      // the on-chain evidence, over an address TRIX does publish.
+      value.checkedAt = new Date().toISOString();
+      value.ms = Date.now() - started;
+      return retainFailedSource("trix.preorder", value, previous);
+    })().finally(() => { trixPreorderInFlight = null; });
+  }
+  return trixPreorderInFlight;
+}
+
 const TRIX_ARTWORK_WINDOW = 100; // /api/artworks hard cap; pagination params are ignored; values above ~100 return HTTP 500
 const TRIX_RECENT_MEME_LIMIT = 18; // newest memes shown in the grid; recent-activity feed itself caps at 12, so catalog fold-in fills the rest
 const TRIX_LEADERBOARD_WINDOW = 100; // /api/leaderboard returns one ranked page from the API
@@ -3906,6 +4164,8 @@ export async function sniffTrixBoxBoard({ previous = null } = {}) {
     collectors: [],
     rarities: [],
     cards: [],
+    maxObservedBoxesPerWallet: null,
+    capClaim: null,
     chain: null,
     publicState: null,
     kindTotals: {},
@@ -3988,6 +4248,7 @@ export async function sniffTrixBoxBoard({ previous = null } = {}) {
           kindWallets[kind] = (kindWallets[kind] || 0) + 1;
         }
       }
+      const maxObservedBoxesPerWallet = normalizedCollectors.reduce((max, row) => Math.max(max, row.boxes ?? 0), 0);
       Object.assign(value, {
         ok: true,
         dataUpdatedAt: trixDate(j.updatedAt),
@@ -4004,6 +4265,10 @@ export async function sniffTrixBoxBoard({ previous = null } = {}) {
         publicState: state,
         kindTotals,
         kindWallets,
+        maxObservedBoxesPerWallet: maxObservedBoxesPerWallet,
+        capClaim: normalizedCollectors.length === 0
+          ? "Collector sample unavailable, so no cap conclusion can be drawn."
+          : `No per-wallet box cap is published on any TRIX route we read, and the highest single-wallet count in this collector sample is ${maxObservedBoxesPerWallet}. That is an observation from a third-party sample, not proof that no cap exists: it cannot show what an unlisted wallet holds or what TRIX enforces server-side.`,
       });
     }
   } catch (error) {
@@ -5631,6 +5896,7 @@ function trixAttempts(previous) {
     ["trix.boxes", sniffTrixBoxes()],
     ["trix.boxboard", sniffTrixBoxBoard()],
     ["trix.boxchain", sniffTrixBoxChain()],
+    ["trix.preorder", sniffTrixPreorder({ previous: previous?.sources?.["trix.preorder"] || null })],
     ["trix.meme.market", sniffTrixMemeMarket()],
     ["trix.frontpage", sniffTrixFrontpage()],
     ["trix.tiers", sniffTrixTiers()],

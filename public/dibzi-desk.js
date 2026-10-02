@@ -35,6 +35,7 @@ export function renderDibziDesk(latest) {
   const walletRows = document.getElementById("dibziWalletRows");
   const bidRows = document.getElementById("dibziBidRows");
   const cashtagRows = document.getElementById("dibziCashtagRows");
+  const openRows = document.getElementById("dibziOpenRows");
   const salesRows = document.getElementById("dibziSalesRows");
   const sourceText = document.getElementById("dibziSourceText");
   if (!status || !summary || !walletRows || !bidRows || !cashtagRows || !salesRows) return;
@@ -54,18 +55,31 @@ export function renderDibziDesk(latest) {
     walletRows.innerHTML = `<div class="desk-empty"><span>[ - ]</span><span>DIBZI wallet activity unavailable. The desk does not retain invented balances.</span></div>`;
     bidRows.innerHTML = "";
     cashtagRows.innerHTML = "";
+    if (openRows) openRows.innerHTML = "";
     salesRows.innerHTML = "";
   } else {
     summary.innerHTML = [
       [fmt(src.namesTotal, 0), "all names · current snapshot"],
       [fmt(src.cashtagNames, 0), "cashtag names · current snapshot"],
       [fmt(src.activeNames, 0), "active auctions · current snapshot"],
+      [num(src.openAuctionsTotal) === null ? "--" : fmt(src.openAuctionsTotal, 0), "open auctions · full board, endsAt later than site clock"],
       [fmt(src.soldNames, 0), "sold names · current snapshot"],
       [fmt(src.uniqueWallets, 0), "wallets · current snapshot"],
       [sol(src.activeBoardSol), `current leading bids · ${num(src.bidsPerMinute60m) === null ? "bid velocity unavailable · no recent event rows" : `${fmt(src.bidsPerMinute60m, 3)} reported bids/min · last 60m`} · ${src.nameSampleTruncated ? `${fmt(src.names?.length, 0)}-name sample` : "all reported names"}`],
       [fmt(src.totalBids, 0), "bid rows · current snapshot"],
       [sol(src.highestBidSol), "highest current bid", src.highestBidName ? nameLink(src.highestBidName, `${sol(src.highestBidSol)} · ${src.highestBidName}`) : null],
     ].map(([value, label, target]) => `<span class="dibzi-stat"><b>${target || esc(value)}</b><small>${esc(label)}</small></span>`).join("");
+    const open = rows(src.openAuctions);
+    const openBody = open.map((row) => `<tr>
+      <td><b>${nameLink(row.name)}</b>${row.morphed ? ` <span class="desk-badge">morphed${num(row.morphStyle) === null ? "" : ` ${fmt(row.morphStyle, 0)}`}</span>` : ""}<small class="value-age">${row.leaderUsername ? esc(row.leaderUsername) : short(row.leader) || "--"} leading</small></td>
+      <td class="desk-number">${sol(row.currentBidSol)}</td>
+      <td class="desk-number" title="${esc(`Current bid plus the site's increment rule${src.incrementRule ? ` (${src.incrementRule})` : ""}. Computed, not a quoted price.`)}">${sol(row.minNextBidSol)}</td>
+      <td class="desk-number">${fmt(row.bidCount, 0)}</td>
+      <td>${row.minutesLeft <= 0 ? "closing" : row.minutesLeft >= 1440 ? `${fmt(Math.round(row.minutesLeft / 1440), 0)}d` : `${fmt(row.minutesLeft, 0)}m`}</td>
+    </tr>`).join("");
+    if (openRows) openRows.innerHTML = openBody
+      ? `<p class="desk-context">Cheapest open entry ${sol(src.openFloorSol)} at <b>${esc(src.openFloorName || "--")}</b>${src.incrementRule ? ` · step rule ${esc(src.incrementRule)}` : ""}${src.incrementRuleParsed === false ? " (unparsed, minimum bid withheld)" : ""}${num(src.openingSol) !== null ? ` · opening ${sol(src.openingSol)}` : ""} · ${fmt(src.openSingleBidCount, 0)} of ${fmt(src.openAuctionsTotal, 0)} still at their first bid${src.morphEnabled === true ? ` · morphing enabled, ${fmt(src.morphedNamesTotal, 0)} names morphed (styles ${esc((src.morphStyles || []).join(", ") || "none")})` : src.morphEnabled === false ? " · morphing disabled by the site" : ""}${src.flashSale?.active === true ? " · flash sale active" : src.flashSale?.exists === true ? ` · flash sale ended ${stamp(src.flashSale.endsAt)}` : ""}</p>` + table("DIBZI open auctions · cheapest first", [["Name"], ["Current bid", "desk-number"], ["Next bid ≥", "desk-number"], ["Bids", "desk-number"], ["Ends in"]], openBody)
+      : `<div class="desk-empty"><span>[ - ]</span><span>No open auctions reported: every name in the public response has an end time at or before the site's own clock.</span></div>`;
     const walletBody = wallets.map((wallet) => `<tr><td class="desk-number">${fmt(wallet.rank, 0)}</td><td><b>${esc(wallet.username || short(wallet.wallet))}</b><small class="value-age">${wallet.username ? walletLink(wallet.wallet) : ""}</small></td><td class="desk-number">${sol(wallet.totalBidSol)}</td><td class="desk-number">${fmt(wallet.bids, 0)}</td><td>${fmt(wallet.leading, 0)} lead${wallet.leading === 1 ? "" : "s"}</td></tr>`).join("");
     walletRows.innerHTML = walletBody ? table("DIBZI bidder wallets in current snapshot", [["#", "desk-number"], ["Wallet"], ["Reported bid rows", "desk-number"], ["Rows", "desk-number"], ["Leads"]], walletBody) : `<div class="desk-empty"><span>[ - ]</span><span>No bidder wallets reported.</span></div>`;
     const bidBody = bids.map((bid) => `<tr><td><b>${nameLink(bid.name)}</b><small class="value-age">${esc(bid.username || short(bid.wallet))}</small></td><td class="desk-number">${sol(bid.amountSol)}</td><td>${stamp(bid.at)}</td><td>${walletLink(bid.wallet)}</td><td>${txLink(bid.signature)}</td></tr>`).join("");

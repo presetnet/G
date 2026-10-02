@@ -2,7 +2,7 @@ import { sourceDescription } from "./provenance.js";
 
 const TABS = ["boxes", "coins", "activity", "points", "art", "money"];
 const STATUS = { coins: "coinSummary", boxes: "boxStatus", activity: "activityStatus", points: "pointsStatus", art: "artStatus", money: "moneyStatus" };
-const SOURCES = { coins: ["trix.meme.market", "trix.frontpage"], boxes: ["trix.boxes", "trix.boxboard", "trix.boxchain"], activity: ["trix.money"], points: ["trix.market", "trix.tiers"], art: ["trix.market"], money: ["trix.money", "trix.fee.config"] };
+const SOURCES = { coins: ["trix.meme.market", "trix.frontpage"], boxes: ["trix.boxes", "trix.boxboard", "trix.boxchain", "trix.preorder"], activity: ["trix.money"], points: ["trix.market", "trix.tiers"], art: ["trix.market"], money: ["trix.money", "trix.fee.config"] };
 const state = { tab: "boxes", view: "all", search: "", chain: "", limit: 20 };
 const htmlCache = new WeakMap();
 const brokenImages = new Set();
@@ -148,7 +148,36 @@ function renderCoins(catalog, frontpage) {
   }
 }
 
-function renderBoxes(official, board, chain) {
+/**
+ * Decode the preorder gate rather than implying we know why a wallet is stuck.
+ * The global verdict is public; the per-wallet answer is not, and this states
+ * that instead of guessing. Gate rows come from the shipped TRIX bundle, in the
+ * order the component evaluates them, so the first matching row is the cause.
+ */
+function renderPreorder(preorder) {
+  if (!good(preorder)) return "";
+  const corroboration = preorder.corroboration
+    ? preorder.corroboration.agrees === true
+      ? "confirmed by a second public route"
+      : preorder.corroboration.agrees === false
+        ? "SECOND PUBLIC ROUTE DISAGREES"
+        : "single route only"
+    : "";
+  const cap = number(preorder.maxOrderQty) !== null ? `max ${fmt(preorder.maxOrderQty, 0)} per order` : "per-order cap not published";
+  const retired = rows(preorder.retiredRoutes).filter((route) => route.retired);
+  const gateBody = rows(preorder.gates).map((gate) => `<tr>
+    <td class="desk-number">${fmt(gate.order, 0)}</td>
+    <td class="desk-secondary"><b>${esc(gate.label)}</b></td>
+    <td>${esc(gate.cause)}</td>
+    <td class="desk-secondary">${gate.walletScoped ? "per-wallet" : "global"}</td>
+  </tr>`).join("");
+  return `<h4 class="board-subhead">Preorder gate</h4>
+    <p class="desk-context">Global round: <b>${esc(preorder.saleVerdict || "unknown")}</b> · ${esc(cap)}${corroboration ? ` · ${esc(corroboration)}` : ""} · checked ${clock(preorder.checkedAt, "Preorder gate")}</p>
+    <p class="desk-context"><b>Whether YOUR wallet may order is not published.</b> ${esc(preorder.eligibilityRoute?.note || "The per-wallet eligibility route is session-scoped.")}${retired.length ? ` Retired routes: ${esc(retired.map((route) => `${route.route} (${fmt(route.status, 0)})`).join(", "))}.` : ""} No purchase program id is published, so this desk makes no on-chain purchase claim.</p>
+    ${gateBody ? table("TRIX preorder button states, in evaluation order", [["#", "desk-number"], ["Button", "desk-secondary"], ["What it means"], ["Scope", "desk-secondary"]], gateBody) : ""}`;
+}
+
+function renderBoxes(official, board, chain, preorder) {
   const fromBoard = good(board) && (board.collectors.length + board.boxes.length > 0);
   const src = fromBoard ? board : official;
   const stickerCount = fromBoard ? number(board.kindTotals?.sticker) : null;
@@ -186,6 +215,7 @@ function renderBoxes(official, board, chain) {
     const rarityChips = board.rarities.map((r) => `<span class="rarity-chip" title="${esc(`${r.type} odds from snapshot`)}">${esc(r.type)} ${fmt(r.oddsPct)}%</span>`).join("");
     const cardChips = board.cards.map((c) => `<span class="rarity-chip muted" title="${esc(`${c.type} shop card`)}">${esc(c.type)} ${fmt(c.multiplier)}x · ${sol(c.priceSol)}</span>`).join("");
     setHTML("boxRows", `${stamp}
+      ${renderPreorder(preorder)}
       <div class="box-type-grid">${boxTiles}</div>
       <h4 class="board-subhead">Most boxes · on-chain wallet scan</h4>
       ${collectorBody ? table("Most boxes per public wallet", [["#", "desk-number"], ["User"], ["Boxes", "desk-number"], ["Kinds"], ["Wallet", "desk-secondary"]], collectorBody) : empty("No collector rows reported.")}
@@ -204,7 +234,7 @@ function renderBoxes(official, board, chain) {
     ["Biggest pulls by rarity", [["Ripper"], ["Rarity"], ["Coin"], ["USD", "desk-number"]], official?.biggestPulls, (r) => `<td>${esc(r.ripper)}</td><td>${esc(r.rarity)}</td><td>${esc(r.coinSymbol)}</td><td class="desk-number">${usd(r.rewardUsd)}</td>`],
     ["Collectors", [["User"], ["Rips", "desk-number"], ["Mythics", "desk-number"], ["USD", "desk-number"]], official?.topCollectors, (r) => `<td>${esc(r.username)}</td><td class="desk-number">${fmt(r.rips)}</td><td class="desk-number">${fmt(r.mythics)}</td><td class="desk-number">${usd(r.earnedUsd)}</td>`],
   ];
-  setHTML("boxRows", `<div class="box-board-grid">${boards.map(([name, heads, raw, row]) => `<section><h3>${esc(name)}</h3>${rows(raw).length ? table(name, heads, rows(raw).slice(0, 20).map((r) => `<tr>${row(r)}</tr>`).join("")) : emptyRows(official, raw, "No entries reported.")}</section>`).join("")}</div>`);
+  setHTML("boxRows", `${renderPreorder(preorder)}<div class="box-board-grid">${boards.map(([name, heads, raw, row]) => `<section><h3>${esc(name)}</h3>${rows(raw).length ? table(name, heads, rows(raw).slice(0, 20).map((r) => `<tr>${row(r)}</tr>`).join("")) : emptyRows(official, raw, "No entries reported.")}</section>`).join("")}</div>`);
 }
 
 function renderActivity(money, geoff) {
@@ -342,7 +372,7 @@ export function renderTrixDesk(value) {
   if (!root) return;
   const sources = latest?.sources || {};
   renderCoins(sources["trix.meme.market"], sources["trix.frontpage"]);
-  renderBoxes(sources["trix.boxes"], sources["trix.boxboard"], sources["trix.boxchain"]);
+    renderBoxes(sources["trix.boxes"], sources["trix.boxboard"], sources["trix.boxchain"], sources["trix.preorder"]);
   const generations = renderActivity(sources["trix.money"], sources["trix.geoff"]);
   renderPoints(sources["trix.market"], sources["trix.tiers"]);
   renderArt(sources["trix.market"]);

@@ -58,6 +58,18 @@ let boxboardPayload = {
   public: { tcg: false, boxesMinted: 3874, boxesLeft: 4978, memesLeft: 4988, vaultBacked: true, stakedBoxes: 3874, snapshotAt: "2026-09-08T00:04:49.079Z", stale: false },
 };
 let tradeItems = [];
+let preorderGatePayload = {
+  isGenesis: true, owned: 0, opened: false, canReserve: true, canOpen: false,
+  maxOrderQty: 20, memeCreatorFees: 0,
+};
+let dibziNamesPayload = [];
+let dibziConfigPayload = {
+  mode: "mainnet", cluster: "mainnet",
+  programId: "3VQDLcMiUrqLHXhkinwj9AW9h5BHdqYkv4AY2cyTv7gS",
+  morphEnabled: true,
+  flashSale: { exists: true, endsAt: now - 3600_000, chainNow: now, checkedAt: now, active: false, serverNow: now, cluster: "mainnet" },
+  openingLamports: "69000000", increment: "max(0.03 SOL, 7.5%)",
+};
 const tokenHistories = new Map();
 let providerTransfers = [];
 let slowStacknet = false;
@@ -156,11 +168,35 @@ const context = vm.createContext({
     else if (url.pathname === "/api/treasury") json = { balance: 0, totalPoints: 0 };
     else if (url.pathname === "/api/activity") json = { items: [], hasMore: false };
     else if (url.pathname === "/api/leaderboard") json = { leaderboard: [{ rank: 1, points: 0 }] };
-    else if (url.pathname === "/api/mkt/leaderboard") {
-      assert.equal(url.hostname, "www.trix.market");
+    else if (url.pathname === "/api/mkt/leaderboard" && url.hostname === "www.trix.market") {
       assert.equal(url.search, "");
       json = boxesPayload;
     }
+    // The apex host retired this route; www still answers. Keying on host, not
+    // just path, so the preorder probe sees the retired 404 it gets in production.
+    else if (url.pathname === "/api/mkt/leaderboard") {
+      assert.equal(url.hostname, "trix.market");
+      return { ok: false, status: 404, url: String(url), headers: new Map(), text: async () => JSON.stringify({ message: "Not found" }), json: async () => ({ message: "Not found" }) };
+    }
+    else if (url.pathname === "/api/mkt/state") {
+      assert.equal(url.hostname, "trix.market");
+      return { ok: false, status: 404, url: String(url), headers: new Map(), text: async () => JSON.stringify({ message: "Not found" }), json: async () => ({ message: "Not found" }) };
+    }
+    else if (url.pathname === "/api/mkt/g" || url.pathname === "/api/mkt/preorder") {
+      assert.equal(url.hostname, "trix.market");
+      json = url.pathname === "/api/mkt/preorder" ? { ...preorderGatePayload } : preorderGatePayload;
+    }
+    else if (url.pathname === "/api/mkt/g/eligibility") {
+      assert.equal(url.hostname, "trix.market");
+      return { ok: false, status: 401, url: String(url), headers: new Map(), text: async () => JSON.stringify({ message: "Unauthorized" }), json: async () => ({ message: "Unauthorized" }) };
+    }
+    else if (url.hostname === "dibzi.ai" && url.pathname === "/api/names") {
+      json = url.searchParams.has("__limit")
+        ? dibziNamesPayload.slice(0, Number(url.searchParams.get("__limit")))
+        : dibziNamesPayload;
+    }
+    else if (url.hostname === "dibzi.ai" && url.pathname === "/api/profiles") json = [];
+    else if (url.hostname === "dibzi.ai" && url.pathname === "/api/config") json = dibziConfigPayload;
     else if (url.pathname === "/api/trix-boxes") {
       assert.equal(url.hostname, "doswapz.com");
       assert.equal(options.method || "GET", "GET");
@@ -255,6 +291,7 @@ const stubs = [...codes[0].matchAll(/(?:export )?async function (sniff\w+)\(/g)]
   .map((match) => match[1])
   .filter((name) => !name.startsWith("sniffTrix") && !name.startsWith("sniffPond0x") && ![
     "sniffStacknetMinute", "sniffStacknetHealth", "sniffStacknetRoot", "sniffStacknetNetwork", "sniffStacknetNode", "sniffStacknetModels",
+    "sniffDibzi", "sniffDibziAbout",
   ].includes(name))
   .map((name) => `${name} = async () => { throw new Error("unrelated collector fixture"); };`)
   .join("\n");
@@ -419,6 +456,81 @@ assert.equal(board.publicState.tcg, false);
 assert.equal(board.publicState.vaultBacked, true);
 assert.deepEqual(plain(board.rarities.map((r) => r.type)), ["MYTHIC", "COMMON", "VOID"]);
 assert.equal(board.cards[1].multiplier, 10);
+assert.equal(board.maxObservedBoxesPerWallet, 105);
+assert.match(board.capClaim, /105/);
+assert.match(board.capClaim, /not proof/i);
+
+// The open-auction board must come from the FULL response. A name that sorts
+// into the truncated tail must still count, or the board understates what is bidable.
+// Anchor the board to the site's published clock, not the drifting test clock:
+// the fixture clock advances on every fetch, so relative-to-`now` deadlines
+// would not mean what they appear to mean.
+const BOARD_NOW = Date.parse("2026-09-08T12:00:00Z");
+dibziConfigPayload = { ...dibziConfigPayload, flashSale: { ...dibziConfigPayload.flashSale, serverNow: BOARD_NOW, endsAt: BOARD_NOW - 3600_000 } };
+const openName = (name, endsInMinutes, amountSol, extra = {}) => ({
+  name, amount: Math.round(amountSol * 1e9), endsAt: BOARD_NOW + endsInMinutes * 60_000,
+  settled: false, owner: "owner-1", leader: "leader-1", bidCount: 1, bidderCount: 1,
+  morphed: false, bids: [], ...extra,
+});
+const settledName = (name, amountSol) => ({
+  name, amount: Math.round(amountSol * 1e9), endsAt: BOARD_NOW - 60_000, settled: true,
+  owner: "owner-1", leader: "leader-1", bidCount: 4, bidderCount: 2, bids: [],
+});
+dibziNamesPayload = [
+  openName("cheapname", 30, 0.069),
+  settledName("oldsold", 1.5),
+  openName("dearname", 600, 2.5, { bidCount: 9, bidderCount: 4, morphed: true, morphStyle: 2 }),
+  openName("boundary", 0, 0.5),
+];
+const dibzi = await api.sniffDibzi();
+assert.equal(dibzi.source, "dibzi.names");
+assert.equal(dibzi.ok, true);
+assert.equal(dibzi.morphEnabled, true);
+assert.equal(dibzi.openingSol, 0.069);
+assert.equal(dibzi.incrementRule, "max(0.03 SOL, 7.5%)");
+assert.equal(dibzi.incrementRuleParsed, true);
+assert.equal(dibzi.flashSale.active, false);
+// "boundary" ends exactly at the site clock, so it is NOT open: the comparison is
+// strict, and a deadline that has arrived must not be presented as bidable.
+assert.equal(dibzi.openAuctionsTotal, 2);
+assert.ok(dibzi.openAuctions.every((row) => row.name !== "boundary"));
+assert.equal(dibzi.openFloorName, "cheapname");
+assert.equal(dibzi.openFloorSol, 0.069);
+// Increment is max(floor 0.03, 7.5%): the floor wins at the opening price.
+assert.equal(dibzi.openFloorMinBidSol, 0.099);
+// Above the floor, the percentage takes over.
+assert.equal(dibzi.openAuctions.find((row) => row.name === "dearname").minNextBidSol, 2.6875);
+assert.equal(dibzi.openSingleBidCount, 1);
+assert.equal(dibzi.morphedNamesTotal, 1);
+assert.deepEqual(plain(dibzi.morphStyles), [2]);
+assert.ok(dibzi.openAuctions.every((row) => row.name !== "oldsold"));
+assert.equal(dibzi.openAuctions[0].name, "cheapname");
+
+// Truncation must not silently shrink the open board or move its floor.
+dibziNamesPayload = [...dibziNamesPayload, ...Array.from({ length: 2_600 }, (_, index) => settledName(`filler-${index}`, 0.2))];
+const truncatedDibzi = await api.sniffDibzi();
+assert.equal(truncatedDibzi.nameSampleTruncated, true);
+assert.equal(truncatedDibzi.openAuctionsTotal, 2);
+assert.equal(truncatedDibzi.openFloorName, "cheapname");
+assert.equal(truncatedDibzi.openFloorMinBidSol, 0.099);
+
+// An unparseable increment rule must withhold the computed next bid, not guess one.
+dibziConfigPayload = { ...dibziConfigPayload, increment: "site says whatever it likes" };
+const unparsedDibzi = await api.sniffDibzi();
+assert.equal(unparsedDibzi.incrementRuleParsed, false);
+assert.equal(unparsedDibzi.openAuctionsTotal, 2);
+for (const row of unparsedDibzi.openAuctions) assert.equal(row.minNextBidSol, null);
+assert.equal(unparsedDibzi.openFloorMinBidSol, null);
+dibziConfigPayload = { ...dibziConfigPayload, increment: "max(0.03 SOL, 7.5%)" };
+
+// No open auctions: the board says so instead of rendering an empty table.
+dibziNamesPayload = [settledName("allsold", 0.3)];
+const closedDibzi = await api.sniffDibzi();
+assert.equal(closedDibzi.openAuctionsTotal, 0);
+assert.equal(closedDibzi.openFloorName, null);
+assert.equal(closedDibzi.openAuctions.length, 0);
+dibziNamesPayload = [];
+
 boxboardStatus = 404;
 const boardDown = await api.sniffTrixBoxBoard({ previous: board });
 assert.equal(boardDown.ok, false);
@@ -426,6 +538,41 @@ assert.equal(boardDown.stale, true);
 assert.equal(boardDown.status, 404);
 assert.equal(boardDown.collectors[0].username, "boxwhale");
 boxboardStatus = 200;
+
+// Public, wallet-free preorder gate. The per-wallet answer is session-scoped, so
+// this source must report the GLOBAL state and admit it cannot answer for a wallet.
+const preorder = await api.sniffTrixPreorder();
+assert.equal(preorder.source, "trix.preorder");
+assert.equal(preorder.ok, true);
+assert.equal(preorder.saleOpen, true);
+assert.equal(preorder.saleVerdict, "open to reserve");
+assert.equal(preorder.globalState.isGenesis, true);
+assert.equal(preorder.globalState.canReserve, true);
+assert.equal(preorder.globalState.canOpen, false);
+assert.equal(preorder.maxOrderQty, 20);
+assert.equal(preorder.programId, null);
+assert.equal(preorder.programPublished, false);
+assert.equal(preorder.walletAnswerAvailable, false);
+assert.deepEqual(plain(preorder.retiredRoutes.map((route) => [route.route, route.status, route.retired])), [
+  ["/api/mkt/state", 404, true], ["/api/mkt/leaderboard", 404, true],
+]);
+assert.equal(preorder.eligibilityRoute.status, 401);
+assert.equal(preorder.eligibilityRoute.walletScoped, true);
+assert.match(preorder.eligibilityRoute.note, /anonymous/i);
+assert.equal(preorder.corroboration.route, "/api/mkt/preorder");
+assert.equal(preorder.corroboration.status, 200);
+assert.equal(preorder.corroboration.agrees, true);
+assert.ok(preorder.gates.length >= 9);
+for (const gate of preorder.gates) {
+  assert.equal(typeof gate.order, "number");
+  assert.ok(gate.label && gate.cause);
+}
+// A closed round must not be reported as open.
+preorderGatePayload = { ...preorderGatePayload, canReserve: false, canOpen: false };
+const closedPreorder = await api.sniffTrixPreorder();
+assert.equal(closedPreorder.saleOpen, false);
+assert.equal(closedPreorder.saleVerdict, "closed / awaiting release");
+preorderGatePayload = { ...preorderGatePayload, canReserve: true };
 
 // Live on-chain box events from the public RPC signature history.
 const chain = await api.sniffTrixBoxChain();
@@ -717,9 +864,11 @@ failures.clear();
 
 // Full/minute summaries use the same source contract, including coverage.
 const coldMinute = await api.runMinuteSniff();
-assert.equal(Object.keys(coldMinute.sources).length, 26);
-assert.equal(coldMinute.summary.totalSources, 26);
+assert.equal(Object.keys(coldMinute.sources).length, 27);
+assert.equal(coldMinute.summary.totalSources, 27);
 assert.equal(coldMinute.sources["trix.boxes"].status, 404);
+assert.equal(coldMinute.sources["trix.preorder"].ok, true);
+assert.equal(coldMinute.sources["trix.preorder"].walletAnswerAvailable, false);
 assert.equal(coldMinute.sources["trix.boxboard"].ok, true);
 assert.equal(coldMinute.sources["trix.boxchain"].ok, true);
 assert.equal(coldMinute.sources["pond0x.stats"].ok, true);
@@ -730,7 +879,8 @@ assert.equal(coldMinute.sources["pond0x.geoff"].paired, false);
 assert.equal(coldMinute.sources["pond0x.geoff"].chatEmbedded, true);
 assert.equal(coldMinute.sources["pond0x.geoff"].providerEmbedded, true);
 const full = service.preserveTrixHistory(null, await api.runSniff());
-assert.equal(Object.keys(full.sources).length, 51);
+assert.equal(Object.keys(full.sources).length, 52);
+assert.equal(full.sources["trix.preorder"].saleVerdict, "open to reserve");
 assert.equal(full.sources["trix.boxes"].status, 404);
 assert.equal(full.summary.trixBoxesOk, false);
 assert.equal(full.summary.trixBoxesStatus, 404);
@@ -794,7 +944,11 @@ launches[0].marketCap = 9500;
 const baselineJson = JSON.stringify(baseline);
 const minuteRequestStart = requests.length;
 const minute = service.preserveTrixHistory(baseline, await api.runMinuteSniff({ previous: baseline }));
-assert.equal(requests.slice(minuteRequestStart).filter((request) => new URL(request.url).pathname === "/api/mkt/leaderboard").length, 1);
+assert.equal(requests.slice(minuteRequestStart).filter((request) => new URL(request.url).pathname === "/api/mkt/leaderboard" && new URL(request.url).hostname === "www.trix.market").length, 1);
+// The preorder source probes the apex host's retired routes each run; it must not
+// be mistaken for the official www leaderboard read the boxes source makes.
+assert.equal(requests.slice(minuteRequestStart).filter((request) => new URL(request.url).pathname === "/api/mkt/leaderboard" && new URL(request.url).hostname === "trix.market").length, 1);
+assert.equal(requests.slice(minuteRequestStart).filter((request) => new URL(request.url).pathname === "/api/mkt/g/eligibility").length, 1);
 assert.equal(minute.sources["trix.boxes"].status, 404);
 assert.equal(minute.sources["trix.boxes"].topCoins, null);
 assert.notEqual(minute.sources["trix.boxes"].checkedAt, baseline.sources["trix.boxes"].checkedAt);
@@ -912,7 +1066,9 @@ await pending;
 assert.ok(timed);
 assert.ok(now - timeoutStart <= 18000, `minute took ${now - timeoutStart}ms`);
 assert.ok(timed.durationMs < 60000);
-assert.ok(requests.length - timedRequestStart <= 28);
+// Budget raised from 28 to 36: trix.preorder adds five public reads per run
+// (/api/mkt/g, two retired-route probes, eligibility, and the /api/mkt/preorder alias).
+assert.ok(requests.length - timedRequestStart <= 36);
 assert.ok(timeouts.every((timeout) => timeout <= 18000));
 for (const [name, source] of Object.entries(timed.sources)) {
   if (name.startsWith("trix.") || ["stacknet.health", "stacknet.root", "stacknet.network", "stacknet.node", "stacknet.models"].includes(name)) {

@@ -118,8 +118,14 @@ const previous = { sources: {
 } };
 const before = JSON.stringify(previous);
 const full = await api.runSniff({ previous });
-assert.equal(Object.keys(full.sources).length, 51);
+// 52 sources: the trix.preorder public-gate read joined the set.
+assert.equal(Object.keys(full.sources).length, 52);
 assert.equal(Object.keys(full.sources).some((key) => key.startsWith("source-")), false);
+// stubCollectors() fails every sniff* collector, so this source is a failure
+// entry here. The gate fields are asserted in scripts/trix-live-test.js instead;
+// what matters here is that the new source still ages like the others.
+assert.ok(full.sources["trix.preorder"].checkedAt, "trix.preorder carries a check time");
+assert.equal(full.sources["trix.preorder"].stale, true);
 for (const source of Object.values(full.sources)) assert.ok(source.checkedAt, source.source);
 assert.equal(full.sources["stacknet.health"].ok, true);
 assert.equal(full.sources["stacknet.root"].status, 503);
