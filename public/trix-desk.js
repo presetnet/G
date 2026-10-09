@@ -214,7 +214,10 @@ function renderBoxes(official, board, chain, preorder) {
     </tr>`).join("");
     const rarityChips = board.rarities.map((r) => `<span class="rarity-chip" title="${esc(`${r.type} odds from snapshot`)}">${esc(r.type)} ${fmt(r.oddsPct)}%</span>`).join("");
     const cardChips = board.cards.map((c) => `<span class="rarity-chip muted" title="${esc(`${c.type} shop card`)}">${esc(c.type)} ${fmt(c.multiplier)}x · ${sol(c.priceSol)}</span>`).join("");
-    setHTML("boxRows", `${stamp}
+    setHTML("boxRows", `<aside class="box-source-credit" aria-label="Community data credit">
+      <div><strong>Big thanks to DOSWAPZ</strong><p>The public box feed and collector census behind this board come from DOSWAPZ. Serious detective work for the community — go check out the full deep dive.</p></div>
+      <a href="https://doswapz.com/classic/pages/geoffwatch-box.html" target="_blank" rel="noopener noreferrer">Explore DOSWAPZ's box dashboard ↗</a>
+      </aside>${stamp}
       ${renderPreorder(preorder)}
       <div class="box-type-grid">${boxTiles}</div>
       <h4 class="board-subhead">Most boxes · on-chain wallet scan</h4>

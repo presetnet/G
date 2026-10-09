@@ -258,6 +258,11 @@
 .activity-void-total strong { color: var(--accent); font-variant-numeric: tabular-nums; }
 .flow-caption { margin: .35rem 0 .6rem; color: var(--muted); font-size: .62rem; font-style: italic; }
 .box-type-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .7rem; margin: .6rem 0 .9rem; }
+.box-source-credit { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.5rem; margin: 0 0 1rem; padding: 1rem; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; background: #17171a; }
+.box-source-credit > div { flex: 1 1 260px; min-width: 0; }
+.box-source-credit strong { color: var(--accent); font: 600 .85rem var(--font-ui); }
+.box-source-credit p { margin: .35rem 0 0; color: var(--muted); font: .68rem/1.6 var(--font-mono); }
+.trix-desk .box-source-credit a { color: var(--accent); font: 500 .72rem/1.5 var(--font-mono); text-decoration: underline; text-underline-offset: 3px; }
 .box-tile { border: 1px solid var(--line); border-radius: 8px; background: #17171a; padding: .85rem; min-width: 0; border-top: 3px solid var(--box-hex, #444); }
 .box-tile.in-round { border-color: #3a3a40; }
 .box-tile > b { display: block; font: 600 .82rem var(--font-ui); }
