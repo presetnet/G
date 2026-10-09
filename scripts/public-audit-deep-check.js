@@ -1,0 +1,16 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { Interface } from 'ethers';
+const dir=new URL('../data/public-audit-2026-10-09/',import.meta.url);
+const read=async n=>JSON.parse(await readFile(new URL(n+'.json',dir),'utf8'));
+const out={checkedAt:new Date().toISOString(),publicReads:[]};
+const urls={simFormulas:'https://sim.tech/api/mainnet/formulas',simCollection:'https://sim.tech/api/mainnet/collection',simCounts:'https://sim.tech/api/mainnet/gallery-counts',simEntry:'https://sim.tech/assets/nft.entry-L4YGLPEU.js',trixPreorder:'https://www.trix.market/assets/m-CcU2PTff.js',miningPayment:'https://www.pond0x.com/_next/static/chunks/21416-d80318679a5e9f4c.js',stackPile:'https://stacknet.magma-rpc.com/api/v2/node-keys/pile',stackKeySale:'https://stacknet.magma-rpc.com/api/v2/node-keys/pricing'};
+for(const[name,url]of Object.entries(urls))try{const r=await fetch(url,{signal:AbortSignal.timeout(20000)});const raw=await r.text();const text=raw.replace(/([?&](?:api[-_]?key|token|secret)=)[^\s"'<>\\&]+/gi,'$1[REDACTED]');const ext=r.headers.get('content-type')?.includes('json')?'json':'js';await writeFile(new URL(name+'.'+ext,dir),text);out.publicReads.push({name,url,status:r.status,bytes:text.length,...ext==='json'?{data:JSON.parse(text)}:{hints:[...text.matchAll(/\b4500\b|4,500|\b4\.5e3\b|\b8000\b|8,000|\b8e3\b/g)].map(m=>text.slice(Math.max(0,m.index-80),m.index+180))}});}catch(e){out.publicReads.push({name,url,error:e.message});}
+const follow=await read('followup'),abi=new Interface((await read('simContract')).abi),url='https://eth.drpc.org';
+async function rpc(method,params){const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal:AbortSignal.timeout(15000)});const j=await r.json();if(j.error)throw Error(j.error.message);return j.result;}
+out.history=[];
+for(const[window,dist]of [['1h',300],['6h',1800],['24h',7200]])try{const block='0x'+(follow.simChain.block-dist).toString(16);const b=await rpc('eth_getBlockByNumber',[block,false]);const values={};for(const method of ['totalSupply','nextTokenId'])values[method]=Number(abi.decodeFunctionResult(method,await rpc('eth_call',[{to:'0xc3706195ff60658585b58716717ee7acc5ebca60',data:abi.encodeFunctionData(method,[])},block]))[0]);out.history.push({window,block:Number(BigInt(block)),at:new Date(Number(BigInt(b.timestamp))*1000).toISOString(),...values});}catch(e){out.history.push({window,error:e.message});}
+const cfg=Buffer.from(follow.packConfig.value.data[0],'base64');
+out.packConfigRawChecks={bytes:cfg.length,matches7030:[],matches8000:[],note:'Byte occurrences only; no verified IDL field names are inferred.'};
+for(let i=8;i<=cfg.length-8;i++){const v=cfg.readBigUInt64LE(i);if(v===7030n)out.packConfigRawChecks.matches7030.push(i);if(v===8000n)out.packConfigRawChecks.matches8000.push(i);}
+out.sourceHealth={};const prod=await read('productionStatus');const srcs=Object.values(prod.latest.sources);out.sourceHealth={total:srcs.length,ok:srcs.filter(s=>s.ok).length,failed:srcs.filter(s=>!s.ok).map(s=>s.source),sharedMeta:prod.sharedMeta};
+await writeFile(new URL('deep.json',dir),JSON.stringify(out,null,2));console.log(JSON.stringify(out,null,2));
