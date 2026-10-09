@@ -445,7 +445,7 @@ assert.equal(board.boxesLeft, 4978);
 assert.equal(board.dataUpdatedAt, "2026-09-08T05:12:09.669Z");
 assert.equal(board.fallbackReason, "Trix HTTP 404 https://trix.market/api/mkt/state");
 assert.equal(board.boxes.length, 5);
-assert.deepEqual(plain(board.boxes[0]), { id: "base", type: "BASE BOX", color: "WHITE", hex: "#f4f4f4", minted: 3874, left: 4978, inRound: true, priceUsd: 35.1, priceSol: 0.34, artUrl: "https://trix.market/atomic/base.png" });
+assert.deepEqual(plain(board.boxes[0]), { id: "base", type: "BASE BOX", color: "WHITE", hex: "#f4f4f4", minted: 3874, left: 4978, inRound: true, stale: false, priceUsd: 35.1, priceSol: 0.34, artUrl: "https://trix.market/atomic/base.png" });
 assert.deepEqual(plain(board.collectors[0]), { rank: 1, username: "boxwhale", wallet: "A".repeat(32), boxes: 105, rips: 0, mythics: 0, earnedUsd: 0, verified: true, kinds: { base: 105 }, lastAt: "2026-09-07T00:00:00.000Z" });
 assert.deepEqual(plain(board.collectors[2].kinds), { base: 4, viral: 3, sticker: 2 });
 assert.deepEqual(plain(board.kindTotals), { base: 170, viral: 3, sticker: 2 });
@@ -459,6 +459,19 @@ assert.equal(board.cards[1].multiplier, 10);
 assert.equal(board.maxObservedBoxesPerWallet, 105);
 assert.match(board.capClaim, /105/);
 assert.match(board.capClaim, /not proof/i);
+const legacyBoardPayload = boxboardPayload;
+boxboardPayload = { ...boxboardPayload, mintedTotal: 7030, boxesLeft: null,
+  chain: { engine: "receipts", receipts: 7030, packMinted: 7030, walletsScanned: 708,
+    program: "HTrrq6C6j9NYySUrpSLn9nDjFbKNBD6pS3xBuLppfW4F", packConfig: "AZxmdJhmHLYg3tufFjUq6Ujm41VBFZ2DAjQGb14Qoou" },
+  boxes: [{ ...boxboardPayload.boxes[0], minted: null, left: null, stale: true }],
+};
+const receiptBoard = await api.sniffTrixBoxBoard();
+assert.equal(receiptBoard.chain.receipts, 7030);
+assert.equal(receiptBoard.chain.packMinted, 7030);
+assert.equal(receiptBoard.chain.program, boxboardPayload.chain.program);
+assert.equal(receiptBoard.boxesLeft, null);
+assert.equal(receiptBoard.boxes[0].stale, true, "fresh top-level feed does not freshen historical box rows");
+boxboardPayload = legacyBoardPayload;
 
 // The open-auction board must come from the FULL response. A name that sorts
 // into the truncated tail must still count, or the board understates what is bidable.
@@ -573,6 +586,10 @@ const closedPreorder = await api.sniffTrixPreorder();
 assert.equal(closedPreorder.saleOpen, false);
 assert.equal(closedPreorder.saleVerdict, "closed / awaiting release");
 preorderGatePayload = { ...preorderGatePayload, canReserve: true };
+const usableGate = preorderGatePayload;
+preorderGatePayload = {};
+assert.equal((await api.sniffTrixPreorder()).ok, false, "successful ancillary probes cannot turn a malformed primary gate healthy");
+preorderGatePayload = usableGate;
 
 // Live on-chain box events from the public RPC signature history.
 const chain = await api.sniffTrixBoxChain();

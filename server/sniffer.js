@@ -2416,9 +2416,8 @@ let trixBoxChainInFlight = null;
 
 // TRIX sells boxes as a wallet-scoped *preorder* against its BuyPack program,
 // not as a plain NFT mint. /api/mkt/g is the only public (wallet-free) gate.
-// TRIX publishes no purchase program id on any public route we probed, so this
-// source asserts no program address and makes no chain-level purchase claim;
-// see trix.boxchain for the treasury-signature evidence instead.
+// This first-party gate does not identify or verify purchase receipts. The
+// separate DOSWAPZ box-board source carries its attributed program and census.
 const TRIX_PREORDER_STATE_URL = `${TRIX_BASE_URL}/api/mkt/g`;
 // A second public route that returns the same global gate; probing it lets the
 // source corroborate the verdict instead of trusting one endpoint.
@@ -2877,7 +2876,7 @@ export async function sniffTrixBoxChain({ previous = null } = {}) {
  * retired routes explain a missing remaining count -- and ships the
  * button-gate table so a stuck label can be decoded instead of guessed at.
  * It never infers a per-wallet verdict, because no public source can, and it
- * makes no purchase-program claim, because no public route names one.
+ * makes no purchase-program claim from the gate response alone.
  */
 export async function sniffTrixPreorder({ previous = null } = {}) {
   if (!trixPreorderInFlight) {
@@ -2904,7 +2903,7 @@ export async function sniffTrixPreorder({ previous = null } = {}) {
         walletAnswerAvailable: false,
         checkedAt: null,
         ms: null,
-        note: "TRIX boxes are a wallet-scoped preorder, not an anonymous mint. saleVerdict is the GLOBAL round state from /api/mkt/g; it cannot say whether one address may order. That answer lives in the session-scoped /api/mkt/g/eligibility, which rejects anonymous reads, so this source reports walletAnswerAvailable false rather than guessing. No TRIX route we probed publishes the purchase program id, so this source asserts no program address and offers no chain-level purchase proof; the third-party box board credits a 'BuyPack minted counter' without naming a program. For on-chain evidence read trix.boxchain, which counts successful treasury signatures. gates is the shipped button-label table from the trix.market preorder bundle, in evaluation order; ORDERING and Loading are the two states that persist on their own and can look like an outage.",
+        note: "TRIX boxes are a wallet-scoped preorder. saleVerdict is the GLOBAL round state from /api/mkt/g, not an individual eligibility answer. The session-scoped eligibility route rejects anonymous reads. This source does not verify purchases; trix.boxboard separately carries DOSWAPZ's attributed BuyPack program and receipt census, while trix.boxchain counts treasury signatures, not boxes. gates describes shipped button labels; it is not a diagnosis of a specific wallet.",
       };
       const bool = (input) => input === true ? true : input === false ? false : null;
       try {
@@ -2978,14 +2977,12 @@ export async function sniffTrixPreorder({ previous = null } = {}) {
             ? "Rejects anonymous reads. The per-wallet answer (minimumLamportsPerItem, maxAffordable) is only available to a signed-in session, so no public read can substitute for it."
             : `Returned status ${scopedStatus} without a session; treat any per-wallet reading as unverified.`,
         };
-        value.ok = true;
+        value.ok = stateRes.ok && typeof json?.canReserve === "boolean" && typeof json?.canOpen === "boolean";
+        if (!value.ok && !value.reason) value.reason = "Preorder state missing usable reserve/open flags";
       } catch (error) {
         value.reason = error?.message || String(error);
       }
-      // Deliberately no RPC call here. Probing for a purchase program produced no
-      // published address, and guessing one would manufacture exactly the kind of
-      // false on-chain claim this dashboard exists to avoid. trix.boxchain carries
-      // the on-chain evidence, over an address TRIX does publish.
+      // This source is the gate check; receipt provenance stays with boxboard.
       value.checkedAt = new Date().toISOString();
       value.ms = Date.now() - started;
       return retainFailedSource("trix.preorder", value, previous);
@@ -4186,6 +4183,7 @@ export async function sniffTrixBoxBoard({ previous = null } = {}) {
         minted: count(row.minted),
         left: count(row.left),
         inRound: row.inRound === true,
+        stale: row.stale === true,
         priceUsd: trixNumber(row.priceUsd),
         priceSol: trixNumber(row.priceSol),
         artUrl: trixString(row.remoteArtUrl) || (typeof row.artUrl === "string" ? new URL(row.artUrl, "https://doswapz.com/").href : null),
@@ -4224,6 +4222,10 @@ export async function sniffTrixBoxBoard({ previous = null } = {}) {
         treasury: trixString(j.chain.treasury),
         walletsScanned: count(j.chain.walletsScanned),
         boxEvents: count(j.chain.boxEvents),
+        receipts: count(j.chain.receipts),
+        packMinted: count(j.chain.packMinted),
+        program: trixString(j.chain.program),
+        packConfig: trixString(j.chain.packConfig),
         updatedAt: trixDate(j.chain.updatedAt),
       } : null;
       const state = j.public && typeof j.public === "object" ? {
@@ -5774,14 +5776,12 @@ async function sniffSimEthRail({ previous = {}, cfg = {} }) {
 
 // MAGMA — "The Simulation" (SIM) ERC-721 collection mint-rate counter on
 // Ethereum mainnet (contract "SimulationTypes"). Two cheap Blockscout GETs per
-// check (token meta + counters). No campaign window: the collection mints live
-// and supply only grows, so the rail reports supply / holders / transfers plus
-// the delta minted since the previous read. A throttle must never print zeros
-// for a live collection — the catch carries the last observed counters.
+// check (token meta + counters). Collapses burn inputs and issue one output:
+// outstanding supply can FALL. A supply delta is net change, not gross mints.
+// Version 2 discards the old peak-held baseline and preserves failed-read age.
 export async function sniffMagmaEth({ previous = {} } = {}) {
   const started = Date.now();
-  const prevSupply = Number.isFinite(previous?.magmaSupply) ? previous.magmaSupply : null;
-  const prevCheckedAt = typeof previous?.checkedAt === "string" ? Date.parse(previous.checkedAt) : null;
+  const prevSupply = previous?.magmaSupplyVersion === 2 && Number.isFinite(previous?.magmaSupply) ? previous.magmaSupply : null;
   const prev = previous?.fingerprint ?? null;
   let supply = prevSupply;
   let holders = Number.isFinite(previous?.magmaHolders) ? previous.magmaHolders : null;
@@ -5794,16 +5794,15 @@ export async function sniffMagmaEth({ previous = {} } = {}) {
     ]);
     const meta = metaRes?.json && typeof metaRes.json === "object" ? metaRes.json : null;
     const counters = countersRes?.json && typeof countersRes.json === "object" ? countersRes.json : null;
-    const rawSupply = Number(meta?.total_supply);
+    const rawSupply = meta?.total_supply == null ? NaN : Number(meta.total_supply);
     const rawHolders = Number(meta?.holders_count ?? counters?.token_holders_count);
     const rawTransfers = Number(counters?.transfers_count);
-    if (!meta || !Number.isFinite(rawSupply) || rawSupply <= 0) {
+    if (!metaRes.ok || !meta || !Number.isSafeInteger(rawSupply) || rawSupply < 0) {
       throw new Error("Blockscout returned no readable The Simulation token meta");
     }
-    // Minting only adds supply; a Blockscout snapshot can momentarily regress
-    // (reorg / index lag), so never report a drop — hold the peak observed.
-    supply = Math.max(rawSupply, prevSupply ?? rawSupply);
-    holders = Number.isFinite(rawHolders) ? rawHolders : holders;
+    supply = rawSupply;
+    // An index claiming more nonzero holders than live NFTs is not reconciled.
+    holders = Number.isInteger(rawHolders) && rawHolders >= 0 && rawHolders <= supply ? rawHolders : null;
     transfers = Number.isFinite(rawTransfers) ? rawTransfers : transfers;
   } catch (error) {
     return {
@@ -5819,13 +5818,16 @@ export async function sniffMagmaEth({ previous = {} } = {}) {
       magmaContract: MAGMA_CONTRACT_DISPLAY,
       magmaOpenseaUrl: MAGMA_OPENSEA_URL,
       magmaSupply: supply,
+      magmaSupplyVersion: 2,
+      magmaDataAt: previous?.magmaSupplyVersion === 2 ? previous?.magmaDataAt ?? null : null,
       magmaHolders: holders,
       magmaTransfers: transfers,
       magmaPrevSupply: prevSupply,
-      magmaMintedSincePrev:
-        prevSupply !== null && supply !== null ? Math.max(0, supply - prevSupply) : null,
-      magmaActive:
-        prevSupply !== null && supply !== null && supply > prevSupply,
+      magmaNetChange: null,
+      magmaMintedSincePrev: null,
+      magmaMintedPerHour: null,
+      magmaActive: null,
+      stale: true,
       magmaFirstSeenAt: firstSeenAt,
       fingerprint:
         prevSupply !== null && supply !== null && supply !== prevSupply ? simpleHash(JSON.stringify({ supply })) : prev,
@@ -5833,18 +5835,11 @@ export async function sniffMagmaEth({ previous = {} } = {}) {
     };
   }
   const checkedAt = new Date().toISOString();
-  const elapsedSec =
-    prevCheckedAt && Number.isFinite(prevCheckedAt) ? (Date.now() - prevCheckedAt) / 1000 : null;
-  const mintedSincePrev = prevSupply !== null ? Math.max(0, supply - prevSupply) : 0;
-  const mintedPerHour =
-    elapsedSec && elapsedSec > 60 && mintedSincePrev > 0
-      ? (mintedSincePrev * 3600) / elapsedSec
-      : null;
-  const usable = Number.isFinite(holders) && holders > 0;
+  const netChange = prevSupply !== null ? supply - prevSupply : null;
   return {
     source: "magma.eth",
-    ok: usable,
-    status: usable ? 200 : 0,
+    ok: true,
+    status: 200,
     ms: Date.now() - started,
     checkedAt,
     sourceUrl: MAGMA_SOURCE_URL,
@@ -5854,15 +5849,19 @@ export async function sniffMagmaEth({ previous = {} } = {}) {
     magmaContract: MAGMA_CONTRACT_DISPLAY,
     magmaOpenseaUrl: MAGMA_OPENSEA_URL,
     magmaSupply: supply,
+    magmaSupplyVersion: 2,
+    magmaDataAt: checkedAt,
     magmaHolders: holders,
     magmaTransfers: transfers,
     magmaPrevSupply: prevSupply,
-    magmaMintedSincePrev: mintedSincePrev,
-    magmaMintedPerHour: mintedPerHour,
-    magmaActive: mintedSincePrev > 0,
+    magmaNetChange: netChange,
+    magmaMintedSincePrev: null,
+    magmaMintedPerHour: null,
+    magmaActive: netChange === null ? null : netChange !== 0,
     magmaFirstSeenAt: firstSeenAt,
     fingerprint: simpleHash(JSON.stringify({ supply, holders, transfers })),
-    reason: usable ? null : "collection has no holders yet",
+    reason: null,
+    note: "Current explorer-reported outstanding supply, including burns; net change is not gross mint count. Unreconciled holder counts are withheld. The supply-watch panel separately verifies live supply, lifetime issuance and burns at a pinned Ethereum block.",
   };
 }
 

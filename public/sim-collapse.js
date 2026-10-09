@@ -14,7 +14,7 @@ let pulseBusy = false;
 let pulseTimer = null;
 let clockTimer = null;
 
-const num = (value) => Number(value).toLocaleString();
+const num = (value) => Number(value).toLocaleString("en-US");
 const eth = (value) => `${esc(value)} ETH`;
 const when = (value) => Number.isFinite(Date.parse(value))
   ? new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
@@ -70,11 +70,11 @@ async function refreshRecipes() {
   finally { recipeBusy = false; button.disabled = false; button.textContent = "Reload recipes"; }
 }
 
-function leftText(at) {
+export function leftText(at) {
   const time = Date.parse(at || "");
   if (!Number.isFinite(time)) return "projection unavailable";
   const left = time - Date.now();
-  if (left <= 0) return "6,000 reached";
+  if (left <= 0) return "Projection elapsed — awaiting a new chain read";
   const minutes = Math.floor(left / 60000);
   const days = Math.floor(minutes / 1440);
   const hours = Math.floor((minutes % 1440) / 60);
@@ -90,8 +90,9 @@ function startClock() {
   if (clockTimer !== null) return;
   clockTimer = setInterval(tickClocks, 1000);
 }
-function supplyCard(s) {
-  if (!s.ok) return `<article class="sc-card sc-card-wide"><h5>Supply watch · 6,000</h5><p class="sc-error">Supply read failed: ${esc(s.error)}</p></article>`;
+export function supplyCard(s) {
+  if (!s.ok) return `<article class="sc-card sc-card-wide"><h5>Supply watch</h5><p class="sc-error">Supply read failed: ${esc(s.error)}</p></article>`;
+  const target = num(s.target);
   const good = s.windows.filter((w) => w.ok);
   const base = s.windows.find((w) => w.label === "24h" && w.ok) || good.at(-1);
   const span = base ? base.supplyBefore - s.target : 0;
@@ -100,32 +101,34 @@ function supplyCard(s) {
     ? `<tr><td>${esc(w.label)}</td><td>${num(w.supplyBefore)} → ${num(w.supplyNow)}</td><td>${w.netReduction >= 0 ? "−" : "+"}${num(Math.abs(w.netReduction))} net</td><td>${num(w.minted)} minted · ${num(w.burned)} burned</td></tr>`
     : `<tr><td>${esc(w.label)}</td><td colspan="3" class="sc-muted">unavailable — ${esc(w.error)}</td></tr>`).join("");
   const projection = s.projection
-    ? `<p class="sc-clockline"><span class="sc-label">Pace projection</span><b id="scCountdown">${esc(leftText(s.projection.at))}</b><small>reaching 6,000 around ${esc(when(s.projection.at))} at the observed ${esc(s.projection.basis)} net rate of ${s.projection.netPerHour.toFixed(1)}/h</small></p>`
-    : `<p class="sc-clockline"><span class="sc-label">Pace projection</span><b>—</b><small>net supply is flat or rising in the measured windows, so no date is projected</small></p>`;
+    ? `<p class="sc-clockline"><span class="sc-label">Pace projection</span><b id="scCountdown">${esc(leftText(s.projection.at))}</b><small>reaching ${target} around ${esc(when(s.projection.at))} if the observed ${esc(s.projection.basis)} net rate of ${s.projection.netPerHour.toFixed(1)}/h continues</small></p>`
+    : `<p class="sc-clockline"><span class="sc-label">Pace projection</span><b>—</b><small>${s.current <= s.target ? "Supply is at or below the watch target; this does not establish an unlock." : "No positive, usable net-contraction rate in the projection window; no date is projected."}</small></p>`;
   const alt = s.shortProjection && s.shortProjection.at !== s.projection?.at
     ? `<p class="sc-note">Same math on the last hour alone: <b id="scCountdownAlt">${esc(leftText(s.shortProjection.at))}</b> (around ${esc(when(s.shortProjection.at))}).</p>` : "";
   return `<article class="sc-card sc-card-wide">
-    <h5>Supply watch · 6,000 target</h5>
-    <div class="sc-headline"><div><b>${num(s.current)}</b><small>live supply now</small></div><div><b>${num(s.remaining)}</b><small>to go before 6,000</small></div><div><b>${num(s.mintedLifetime)}</b><small>minted · ${num(s.burnedLifetime)} burned</small></div></div>
-    <div class="sc-progress" role="img" aria-label="${pct.toFixed(0)} percent of the last window's distance to 6,000 closed"><i style="width:${pct.toFixed(1)}%"></i></div>
-    <p class="sc-note">${base ? `${pct.toFixed(0)}% of the last ${esc(base.label)}'s distance from ${num(base.supplyBefore)} to 6,000 is closed.` : "No historical window available for a progress bar."} Supply is read on chain; mints and collapses both move it.</p>
+    <h5>Supply watch · ${target} target</h5>
+    <div class="sc-headline"><div><b>${num(s.current)}</b><small>live supply at the sampled block</small></div><div><b>${num(s.remaining)}</b><small>net reductions to ${target}</small></div><div><b>${num(s.mintedLifetime)}</b><small>issued lifetime · ${num(s.burnedLifetime)} burned</small></div></div>
+    <div class="sc-progress" role="img" aria-label="${pct.toFixed(0)} percent of the last window's distance to ${target} closed"><i style="width:${pct.toFixed(1)}%"></i></div>
+    <p class="sc-note">${base ? `${pct.toFixed(0)}% of the last ${esc(base.label)}'s distance from ${num(base.supplyBefore)} to ${target} is closed.` : "No historical window available for a progress bar."} Supply is read on chain; mints and collapses both move it. Block ${num(s.block)} · ${esc(stamp(s.blockAt))}.</p>
     ${projection}${alt}
     ${s.paceUnstable ? '<p class="sc-warning">The measured rate is not stable — the last hour and the last six hours disagree by more than 2×, so treat the date as a rough pace, not a schedule.</p>' : ""}
     <div class="sc-table-wrap"><table class="sc-table"><thead><tr><th>Window</th><th>Supply</th><th>Net</th><th>Activity</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="sc-note">${esc(s.note)}</p>
   </article>`;
 }
-function marketCard(m) {
+export function marketCard(m) {
   if (!m.ok) return `<article class="sc-card"><h5>Paid prices on chain</h5><p class="sc-error">Sale read failed: ${esc(m.error)}</p></article>`;
   const stat = (label, value) => `<div><b>${value}</b><small>${esc(label)}</small></div>`;
-  const rows = m.sales.slice(0, 8).map((s) => `<tr><td>${s.typeId ? esc(s.name || `TYPE ${s.typeId}`) : '<span class="sc-muted">TYPE unread</span>'}</td><td>#${esc(s.tokenId)}</td><td>${eth(s.amountEth)}</td><td>${link(s.source, s.tx.slice(0, 10) + "…")}</td></tr>`).join("");
+  const rows = m.sales.slice(0, 8).map((s) => `<tr><td>${s.typeId ? esc(s.name || `TYPE ${s.typeId}`) : '<span class="sc-muted">TYPE unread</span>'}</td><td>#${esc(s.tokenId)}</td><td>${eth(s.amountEth)}</td><td>${esc(stamp(s.at))}</td><td>${link(s.source, s.tx.slice(0, 10) + "…")}</td></tr>`).join("");
   const skipped = Object.entries(m.skipped || {}).filter(([, n]) => n > 0);
   return `<article class="sc-card">
     <h5>Paid prices on chain</h5>
+    <p class="sc-note">Checked against block time ${esc(stamp(m.observedAt))}. ${m.latestSaleAt ? `Newest verified sale in this sample: ${esc(stamp(m.latestSaleAt))}.` : "No verified sale timestamp in this sample."}</p>
+    ${m.recentStats ? `<p class="sc-note"><b>${num(m.recentStats.count)} verified fills in the last 24h sample · median ${eth(m.recentStats.medianEth)}</b></p>` : '<p class="sc-warning">No verified fills from the last 24h in this bounded sample. Older receipts below are historical prices, not a live quote.</p>'}
     <div class="sc-headline">${m.stats
-      ? `${stat("median paid", eth(m.stats.medianEth))}${stat("low → high", `${esc(m.stats.lowEth)} → ${esc(m.stats.highEth)} ETH`)}${m.originals ? stat("median · originals", eth(m.originals.medianEth)) : ""}${m.upgraded ? stat("median · upgraded", eth(m.upgraded.medianEth)) : ""}`
+      ? `${stat("median · all sampled receipts", eth(m.stats.medianEth))}${stat("sample low → high", `${esc(m.stats.lowEth)} → ${esc(m.stats.highEth)} ETH`)}${m.originals ? stat("sample median · originals", eth(m.originals.medianEth)) : ""}${m.upgraded ? stat("sample median · upgraded", eth(m.upgraded.medianEth)) : ""}`
       : '<p class="sc-note">No comparable single-NFT ETH/WETH fills in the inspected sample.</p>'}</div>
-    ${rows ? `<div class="sc-table-wrap"><table class="sc-table"><thead><tr><th>TYPE</th><th>Token</th><th>Paid</th><th>Receipt</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}
+    ${rows ? `<div class="sc-table-wrap"><table class="sc-table"><thead><tr><th>TYPE</th><th>Token</th><th>Paid</th><th>Sale time</th><th>Receipt</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}
     <p class="sc-note">${m.inspectedTransactions} recent transfers inspected · ${m.stats ? `${m.stats.count} verified sale${m.stats.count === 1 ? "" : "s"}` : "no verified sales"}${skipped.length ? ` · skipped ${skipped.map(([k, n]) => `${esc(k)} (${n})`).join(", ")}` : ""}${m.failures.length ? ` · ${m.failures.length} receipt${m.failures.length === 1 ? "" : "s"} unread` : ""}.</p>
     ${m.capped ? '<p class="sc-note">Discovery stopped at the read cap, so this is a sample of recent sales, not a market-wide floor or full history.</p>' : ""}
     <p class="sc-note">${esc(m.note)}</p>
@@ -149,7 +152,7 @@ function renderPulse(error = null) {
     return;
   }
   const p = pulseData;
-  target.innerHTML = `${error ? `<p class="sc-error">Refresh failed: ${esc(error)}. The figures below are the previous snapshot.</p>` : ""}<div class="sc-cards">${supplyCard(p.supply)}${marketCard(p.market)}${changesCard(p.changes)}</div><p class="sc-note">Block-pinned snapshot ${esc(stamp(p.checkedAt))} · block ${num(p.block)} · updates every minute · ${link(p.source, "read the contract")}</p>`;
+  target.innerHTML = `${error ? `<p class="sc-error">Refresh failed: ${esc(error)}. The figures below are the previous snapshot.</p>` : ""}<div class="sc-cards">${supplyCard(p.supply)}${marketCard(p.market)}${changesCard(p.changes)}</div><p class="sc-note">Last completed read ${esc(stamp(p.checkedAt))} · block ${num(p.block)} · ${p.cached ? "cached response ≤ 60s" : "fresh RPC read"} · automatic refresh attempted every minute · ${link(p.source, "read the contract")}</p>`;
   tickClocks();
 }
 async function refreshPulse() {
@@ -158,7 +161,7 @@ async function refreshPulse() {
   const button = root.querySelector("#scPulseRefresh");
   if (button) { button.disabled = true; button.textContent = "Reading…"; }
   try {
-    const response = await fetch(`/api/sim-collapse?view=pulse${pulseData ? "&refresh=1" : ""}`, { signal: AbortSignal.timeout(55_000) });
+    const response = await fetch(`/api/sim-collapse?view=pulse${pulseData ? "&refresh=1" : ""}`, { cache: "no-store", signal: AbortSignal.timeout(55_000) });
     const data = await response.json();
     if (!response.ok || data.error) throw new Error(data.error || `HTTP ${response.status}`);
     pulseData = data;

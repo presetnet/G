@@ -2,7 +2,7 @@
 // measure net contraction; Seaport receipts measure paid prices, not listings.
 import { Interface, formatEther } from "ethers";
 
-export const SUPPLY_TARGET = 6000;
+export const SUPPLY_TARGET = 4500;
 export const SEAPORT = "0x0000000000000068f116a894984e2db1123eb395";
 export const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 const ZERO = "0x0000000000000000000000000000000000000000";
@@ -48,7 +48,7 @@ export function buildSupplyPulse(now, history) {
     remaining, state: now.supply > SUPPLY_TARGET ? "above" : now.supply === SUPPLY_TARGET ? "at" : "below",
     block: now.block, blockAt: stamp(now.timestamp), windows, projection, shortProjection,
     paceUnstable: ratio !== null && (ratio < 0.5 || ratio > 2),
-    note: "6,000 is a community watch target. No automatic 6,000-supply trigger exists in the reviewed SimulationTypes contract. Counts include originals and upgraded NFTs." };
+    note: "4,500 is a user-supplied watch target, not an automatic contract unlock. Counts include originals and upgraded NFTs; owner minting and collapses can both change supply." };
 }
 
 export async function readSupplyPulse(s, block) {
@@ -173,9 +173,18 @@ export async function readSalesPulse(s, { contract, block }) {
     }
   }));
   sales.sort((a, b) => b.block - a.block || a.key.localeCompare(b.key));
+  // A successful discovery request is not a successful sale read when every
+  // receipt failed. Never turn a provider outage into "no sales".
+  ensure(!chosen.length || failures.length < chosen.length, "All discovered transaction receipts were unreadable; sale activity is unknown");
+  const snapshot = await s.rpc("eth_getBlockByNumber", [block, false]);
+  ensure(snapshot && BigInt(snapshot.number) === BigInt(block), "Sale snapshot block mismatch");
+  const observedAt = stamp(integer(snapshot.timestamp));
+  const recent = sales.filter((sale) => Date.parse(sale.at) >= Date.parse(observedAt) - 86400_000);
   return { sales, stats: saleStats(sales), originals: saleStats(sales.filter((s) => Number(s.typeId) >= 1 && Number(s.typeId) <= 8)),
     upgraded: saleStats(sales.filter((s) => Number(s.typeId) > 8)), pages, transferRows: rows, candidateTransactions: candidates.size,
     inspectedTransactions: chosen.length, capped: more || candidates.size > chosen.length, skipped, failures,
+    observedAt, latestSaleAt: sales[0]?.at ?? null, oldestSaleAt: sales.at(-1)?.at ?? null,
+    recentStats: saleStats(recent), recentWindowHours: 24,
     note: "Sample of recent Seaport 1.6 single-NFT ETH/WETH fills. Gross order amounts include fee/royalty shares, exclude gas. Bundles and other venues/currencies are omitted. Paid prices are not current asks or executable bids; trades are not screened for wash trading." };
 }
 

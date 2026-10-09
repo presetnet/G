@@ -35,6 +35,8 @@ let v2Empty = false;
 let ethMainnetV2Empty = false;
 let v1Empty = false;
 let v2Withheld = false;
+let magmaSupply = "5131";
+let magmaStatus = 200;
 
 const readOnlyStore = {
   loadMiningSurfaceCache: async () => null,
@@ -166,6 +168,8 @@ const context = vm.createContext({
       return respond(200, { items, next_page_params: null });
     }
     if (url.origin === "https://eth.blockscout.com") {
+      if (url.pathname.startsWith("/api/v2/tokens/")) return respond(magmaStatus,
+        url.pathname.endsWith("/counters") ? { transfers_count: "22368" } : { total_supply: magmaSupply, holders_count: "8590" });
       if (url.searchParams.get("module") === "account") {
         return respond(200, {
           status: "1", message: "OK",
@@ -200,7 +204,7 @@ const snifferCode = await readFile(new URL("../server/sniffer.js", import.meta.u
 const translatorCode = await readFile(new URL("../server/translator.js", import.meta.url), "utf8");
 const stubs = [...snifferCode.matchAll(/(?:export )?async function (sniff\w+)\(/g)]
   .map((match) => match[1])
-  .filter((name) => !name.startsWith("sniffSim") && !name.startsWith("sniffAzy"))
+  .filter((name) => !name.startsWith("sniffSim") && !name.startsWith("sniffAzy") && name !== "sniffMagmaEth")
   .map((name) => `${name} = async () => { throw new Error("unrelated collector fixture"); };`)
   .join("\n");
 modules.set("sniffer.js", new vm.SourceTextModule(`${snifferCode}\nexport function stubUnrelated() { ${stubs} }`, { context }));
@@ -215,6 +219,32 @@ await sniffer.evaluate();
 const api = modules.get("sniffer.js").namespace;
 const translate = modules.get("translator.js").namespace.translate;
 api.stubUnrelated();
+
+// A burnable collection must never retain its old peak as current supply.
+const migratedMagma = await api.sniffMagmaEth({ previous: { magmaSupply: 9619 } });
+assert.equal(migratedMagma.ok, true);
+assert.equal(migratedMagma.magmaSupply, 5131);
+assert.equal(migratedMagma.magmaNetChange, null, "old peak-held baseline is not a measured burn window");
+assert.equal(migratedMagma.magmaHolders, null, "more holders than live NFTs is unreconciled");
+magmaSupply = "5126";
+const burnedMagma = await api.sniffMagmaEth({ previous: migratedMagma });
+assert.equal(burnedMagma.magmaSupply, 5126);
+assert.equal(burnedMagma.magmaNetChange, -5);
+assert.equal(burnedMagma.magmaMintedSincePrev, null, "net supply change cannot establish gross mint count");
+magmaStatus = 503;
+const failedMagma = await api.sniffMagmaEth({ previous: burnedMagma });
+assert.equal(failedMagma.ok, false);
+assert.equal(failedMagma.stale, true);
+assert.equal(failedMagma.magmaDataAt, burnedMagma.magmaDataAt);
+assert.equal(failedMagma.magmaNetChange, null);
+const legacyFailure = await api.sniffMagmaEth({ previous: { magmaSupply: 9619 } });
+assert.equal(legacyFailure.magmaSupply, null, "a failed refresh cannot revive the known-invalid legacy peak");
+magmaStatus = 200;
+magmaSupply = "0";
+assert.equal((await api.sniffMagmaEth()).magmaSupply, 0, "zero outstanding supply is valid");
+magmaSupply = null;
+assert.equal((await api.sniffMagmaEth()).ok, false, "missing supply is not zero");
+magmaSupply = "5131";
 
 // 1. Site settings source: version, sections, rate ladder, configured session, fingerprint.
 const site = await api.sniffSimSite();

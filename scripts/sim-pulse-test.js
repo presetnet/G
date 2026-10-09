@@ -3,7 +3,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Interface, parseEther } from "ethers";
 import { SIM_ABI, SIM_CONTRACT, createCollapseReader } from "../server/sim-collapse.js";
-import { SEAPORT, WETH, SUPPLY_TARGET, SEAPORT_ABI, buildSupplyPulse, supplyWindow, decodeSeaportSales, saleStats } from "../server/sim-pulse.js";
+import { SEAPORT, WETH, SUPPLY_TARGET, SEAPORT_ABI, buildSupplyPulse, supplyWindow, decodeSeaportSales, saleStats, readSalesPulse } from "../server/sim-pulse.js";
+import { supplyCard, marketCard, leftText } from "../public/sim-collapse.js";
 import handler from "../api/sim-collapse.js";
 
 const RENDERER = "0x2222222222222222222222222222222222222222";
@@ -131,8 +132,9 @@ test("supply pulse projects only above-target gaps, labels an unstable pace, and
     { ok: false, label: "24h", error: "pruned" },
   ]);
   assert.equal(pulse.target, SUPPLY_TARGET);
+  assert.equal(pulse.target, 4500, "the user's current watch target must reach the API");
   assert.equal(pulse.current, 6387);
-  assert.equal(pulse.remaining, 387);
+  assert.equal(pulse.remaining, 1887);
   assert.equal(pulse.burnedLifetime, 11070 - 6387);
   assert.deepEqual(pulse.windows.map((w) => w.ok), [true, true, false]);
   assert.equal(pulse.windows[1].burned, 236);
@@ -142,7 +144,7 @@ test("supply pulse projects only above-target gaps, labels an unstable pace, and
   assert.throws(() => buildSupplyPulse(sample(9000, 1, 6387, 100), []), /disagree/);
   const flat = buildSupplyPulse(now, [{ ok: true, label: "6h", sample: sample(7200, 12 * 7200, 6387, 11070) }]);
   assert.equal(flat.projection, null, "a flat supply gets no date");
-  const below = buildSupplyPulse(sample(9000, 12 * 9000, 5900, 11070), []);
+  const below = buildSupplyPulse(sample(9000, 12 * 9000, 4400, 11070), []);
   assert.equal(below.remaining, 0); assert.equal(below.state, "below");
 });
 test("Seaport fills are priced from the order, and every unsupported shape is skipped with a reason", () => {
@@ -188,7 +190,7 @@ test("pulse view reads supply, verified sales, and recipe changes, and caches a 
   const p = await reader.pulse();
   assert.equal(p.supply.ok, true);
   assert.equal(p.supply.current, 6387);
-  assert.equal(p.supply.remaining, 387);
+  assert.equal(p.supply.remaining, 1887);
   assert.equal(p.supply.projection.basis, "6h");
   assert.equal(p.supply.paceUnstable, true);
   assert.equal("history" in p.supply, false, "historical samples are not shipped to the browser");
@@ -206,6 +208,9 @@ test("pulse view reads supply, verified sales, and recipe changes, and caches a 
   assert.equal(p.market.failures.length, 0);
   assert.equal(p.market.capped, false);
   assert.equal(p.market.inspectedTransactions, 5, "mints and other collections are filtered before receipt reads");
+  assert.equal(p.market.recentStats.count, 2);
+  assert.equal(p.market.latestSaleAt, new Date(8800 * 12 * 1000).toISOString());
+  assert.equal(p.market.observedAt, new Date(NOW * 12 * 1000).toISOString());
   assert.equal(p.changes.ok, true);
   assert.equal(p.changes.previousCount, 9);
   assert.equal(p.changes.currentCount, 11);
@@ -245,6 +250,38 @@ test("a supply read failure is reported without becoming a cached success", asyn
   const again = await broken.pulse();
   assert.equal(again.cached, false, "a failed supply read is never served as a fresh success");
   await assert.rejects(() => reader.pulse({ fresh: true }).then(() => { throw new Error("expected the healthy reader to succeed"); }), /succeed/);
+});
+test("the rendered watch uses the API target, and an elapsed projection never claims a threshold crossing", () => {
+  const supply = { ok: true, ...buildSupplyPulse(sample(9000, 108000, 5131, 11448), []) };
+  const html = supplyCard(supply);
+  assert.match(html, /Supply watch · 4,500 target/);
+  assert.match(html, /631/);
+  assert.doesNotMatch(html, /6,000/);
+  assert.match(supplyCard({ ...supply, target: 4200 }), /4,200 target/, "labels follow the payload rather than a separate hardcoded target");
+  assert.match(leftText("2000-01-01T00:00:00Z"), /Projection elapsed/);
+  assert.doesNotMatch(leftText("2000-01-01T00:00:00Z"), /reached/);
+});
+test("old verified sales remain dated historical receipts, not fresh 24h prices", async () => {
+  const market = await readSalesPulse({
+    json: async () => ({ items: [feed[0]], next_page_params: null }),
+    call: async (method) => method === "renderer" ? [RENDERER] : [8n],
+    typeName: async () => "UNDEFINED",
+    rpc: async (method, params) => method === "eth_getTransactionReceipt" ? RECEIPTS[TX_ASK]
+      : { number: params[0], hash: RECEIPTS[TX_ASK].blockHash, timestamp: hex(params[0] === hex(NOW) ? 300000 : 100000) },
+  }, { contract: SIM_CONTRACT, block: hex(NOW) });
+  assert.equal(market.stats.count, 1);
+  assert.equal(market.recentStats, null);
+  const html = marketCard({ ok: true, ...market });
+  assert.match(html, /historical prices, not a live quote/);
+  assert.match(html, /Sale time/);
+  assert.match(html, /Newest verified sale in this sample/);
+});
+test("receipt outages must not be displayed as an absence of sales", async () => {
+  await assert.rejects(readSalesPulse({
+    json: async () => ({ items: [feed[0]], next_page_params: null }),
+    call: async () => [RENDERER],
+    rpc: async () => { throw new Error("RPC unavailable"); },
+  }, { contract: SIM_CONTRACT, block: hex(NOW) }), /receipts were unreadable/);
 });
 test("API rejects an unknown view instead of silently serving recipes", async () => {
   const res = { headers: {}, setHeader(k, v) { this.headers[k] = v; }, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };

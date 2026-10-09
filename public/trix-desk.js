@@ -173,7 +173,7 @@ function renderPreorder(preorder) {
   </tr>`).join("");
   return `<h4 class="board-subhead">Preorder gate</h4>
     <p class="desk-context">Global round: <b>${esc(preorder.saleVerdict || "unknown")}</b> · ${esc(cap)}${corroboration ? ` · ${esc(corroboration)}` : ""} · checked ${clock(preorder.checkedAt, "Preorder gate")}</p>
-    <p class="desk-context"><b>Whether YOUR wallet may order is not published.</b> ${esc(preorder.eligibilityRoute?.note || "The per-wallet eligibility route is session-scoped.")}${retired.length ? ` Retired routes: ${esc(retired.map((route) => `${route.route} (${fmt(route.status, 0)})`).join(", "))}.` : ""} No purchase program id is published, so this desk makes no on-chain purchase claim.</p>
+    <p class="desk-context"><b>Whether YOUR wallet may order is not published.</b> ${esc(preorder.eligibilityRoute?.note || "The per-wallet eligibility route is session-scoped.")}${retired.length ? ` Retired routes: ${esc(retired.map((route) => `${route.route} (${fmt(route.status, 0)})`).join(", "))}.` : ""} This gate read does not verify purchases; the DOSWAPZ receipt census is attributed separately below.</p>
     ${gateBody ? table("TRIX preorder button states, in evaluation order", [["#", "desk-number"], ["Button", "desk-secondary"], ["What it means"], ["Scope", "desk-secondary"]], gateBody) : ""}`;
 }
 
@@ -184,26 +184,27 @@ function renderBoxes(official, board, chain, preorder) {
   const hasData = fromBoard || [official?.topCoins, official?.biggestPulls, official?.topCollectors].some((list) => rows(list).length);
   const chainLive = good(chain) && number(chain.eventsSinceLaunch) !== null;
   status("boxes", src, hasData, fromBoard
-    ? `Round ${fmt(board.round, 0)} ${esc(board.roundStatus || "warming")} · ${chainLive ? `${fmt(chain.eventsSinceLaunch, 0)} on-chain events` : `${fmt(board.mintedTotal, 0)} minted`} · snapshot ${fmt(board.mintedTotal, 0)}`
+    ? `Round ${fmt(board.round, 0)} ${esc(board.roundStatus || "warming")} · ${fmt(board.mintedTotal, 0)} boxes reported by DOSWAPZ`
     : !good(official) && hasData ? unavailable(official, "Last-known box results") : "Official box leaderboard");
   if (fromBoard) {
-    const delta = chainLive && number(board?.chain?.boxEvents) !== null ? chain.eventsSinceLaunch - board.chain.boxEvents : null;
     const chainStamp = chainLive
-      ? `On-chain box events ${fmt(chain.eventsSinceLaunch, 0)} · newest ${clock(chain.newestAt, "Newest box event")}${delta !== null ? ` · ${delta >= 0 ? "+" : ""}${fmt(delta, 0)} since Sep 6 scan` : ""} · treasury ${short(chain.treasury)}`
-      : `On-chain count unavailable${chain?.reason ? ` · ${esc(chain.reason)}` : ""}`;
-    const snapshotStamp = `TRIX snapshot ${fmt(board.mintedTotal, 0)} minted · ${fmt(board.boxesLeft, 0)} left · last published before /api/mkt/state retired — left is not provable live · taken ${clock(board.dataUpdatedAt, "Aggregator snapshot")}${board.fallbackReason ? ` · TRIX source ${esc(board.fallbackReason)}` : ""}`;
+      ? `Treasury signatures ${fmt(chain.eventsSinceLaunch, 0)} · newest ${clock(chain.newestAt, "Newest treasury event")} · treasury ${short(chain.treasury)} · signatures are not a box count`
+      : `Separate treasury read unavailable${chain?.reason ? ` · ${esc(chain.reason)}` : ""}`;
+    const snapshotStamp = `DOSWAPZ reports ${fmt(board.mintedTotal, 0)} boxes · remaining allocation ${number(board.boxesLeft) === null ? "not published" : fmt(board.boxesLeft, 0)} · feed updated ${clock(board.dataUpdatedAt, "DOSWAPZ feed")}${board.fallbackReason ? ` · upstream ${esc(board.fallbackReason)}` : ""}`;
     const chainBit = board.chain?.walletsScanned != null
-      ? `Aggregator scan · ${fmt(board.chain.walletsScanned, 0)} wallets · ${fmt(board.chain.boxEvents, 0)} events`
+      ? `DOSWAPZ census · ${fmt(board.chain.walletsScanned, 0)} wallets · ${fmt(board.chain.receipts, 0)} receipts · ${clock(board.chain.updatedAt, "Receipt census")}`
       : "";
     const stickerWallets = number(board.kindWallets?.sticker);
     const stickerBit = stickerCount !== null
       ? ` · ${fmt(stickerCount, 0)} stickers in wallet scan${stickerWallets !== null ? ` · ${fmt(stickerWallets, 0)} wallet${stickerWallets === 1 ? "" : "s"}` : ""}`
       : "";
     const stamp = `<p class="desk-context">${chainStamp} · ${snapshotStamp}${chainBit ? ` · ${chainBit}` : ""}${stickerBit}</p>`;
+    const count = number(board.chain?.packMinted) ?? number(board.mintedTotal);
+    const watch = `<h4 class="board-subhead">Box watch · 8,000 target</h4><p class="desk-context"><b>${count === null ? "Count unavailable" : `${fmt(count, 0)} reported · ${fmt(Math.max(0, 8000 - count), 0)} to 8,000`}</b> · ${good(preorder) ? preorder.globalState?.canOpen === true ? "opening enabled" : preorder.globalState?.canOpen === false ? "opening still disabled" : "opening status unknown" : "opening status unavailable"}. User-supplied watch target, not a verified unlock condition.</p>${board.chain?.program ? `<p class="desk-context">Program attributed by DOSWAPZ: ${link("https://solscan.io/account/", board.chain.program, short(board.chain.program))} · account layout and release trigger are not verified by this feed reader.</p>` : ""}`;
     const boxTiles = board.boxes.map((b) => `<section class="box-tile${b.inRound ? " in-round" : ""}" style="--box-hex:${esc(b.hex || "#444")}">
       <b>${esc(b.type)}</b><span class="box-color">${esc(b.color)}</span>
       <dl><dt>Minted · snap</dt><dd>${fmt(b.minted, 0)}</dd><dt>Left · snap</dt><dd title="Last published by TRIX before the state API retired; not verifiable now">${fmt(b.left, 0)}</dd><dt>Price · snap</dt><dd>${usd(b.priceUsd)} · ${sol(b.priceSol)}</dd></dl>
-      <span class="desk-badge">${b.inRound ? "In round" : "Not in round"}</span>
+      <span class="desk-badge">${b.stale ? "Historical row · not live" : b.inRound ? "Reported in round" : "Reported out of round"}</span>
     </section>`).join("");
     const collectorBody = board.collectors.slice(0, 50).map((c) => `<tr>
       <td class="desk-number">${fmt(c.rank, 0)}</td>
@@ -217,7 +218,7 @@ function renderBoxes(official, board, chain, preorder) {
     setHTML("boxRows", `<aside class="box-source-credit" aria-label="Community data credit">
       <div><strong>Big thanks to DOSWAPZ</strong><p>The public box feed and collector census behind this board come from DOSWAPZ. Serious detective work for the community — go check out the full deep dive.</p></div>
       <a href="https://doswapz.com/classic/pages/geoffwatch-box.html" target="_blank" rel="noopener noreferrer">Explore DOSWAPZ's box dashboard ↗</a>
-      </aside>${stamp}
+      </aside>${watch}${stamp}
       ${renderPreorder(preorder)}
       <div class="box-type-grid">${boxTiles}</div>
       <h4 class="board-subhead">Most boxes · on-chain wallet scan</h4>
