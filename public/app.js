@@ -893,6 +893,7 @@ function closeProof() {
 let pwHistoryCache = { at: 0, series: [] };
 
 async function fetchPaperworkHistory(force = false) {
+  if (!els.paperworkUsd && !els.paperworkMeta) return;
   if (!force && Date.now() - pwHistoryCache.at < 5 * 60 * 1000) return pwHistoryCache.series;
   try {
     const res = await fetch("/api/paperwork-history", { cache: "no-store" });
@@ -1346,6 +1347,7 @@ function renderTraffic(traffic) {
 }
 
 async function refreshTraffic() {
+  if (!els.trafficMini) return;
   try {
     const res = await fetch("/api/traffic", { cache: "no-store" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
