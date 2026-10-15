@@ -169,15 +169,17 @@
 .sim-leader li { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr) auto auto; gap: .5rem; align-items: baseline; color: #8da5a2; font: .6rem var(--font-mono); }
 .sim-leader li b { color: #f3d88a; font-weight: 500; }
 .sim-liveprice { color: #7fe8d8; font: .58rem/1.5 var(--font-mono); }
-.audio-lab { margin-top: 1rem; }
-.audio-lab-copy { max-width: 72rem; margin: .75rem 0 0; color: var(--muted); font: .76rem/1.55 var(--font-mono); }
-.audio-lab-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: 1rem; color: var(--muted); font: .68rem var(--font-mono); }
-.audio-lab-button { border: 1px solid #32785f; border-radius: 4px; padding: .55rem .7rem; color: #9be7d5; background: #15241f; font: inherit; cursor: pointer; }
-.audio-lab-button:hover, .audio-lab-button:focus-visible { border-color: #c9f5e9; background: #1b332b; }
-.audio-lab-player { width: min(100%, 34rem); margin-top: .85rem; }
-.audio-lab-meta { min-height: 1.2rem; margin-top: .65rem; color: #9be7d5; font: .68rem var(--font-mono); }
-.audio-lab-foot { margin: .75rem 0 0; color: var(--muted); font: .66rem/1.5 var(--font-mono); }
-.audio-lab-foot a { color: #9be7d5; }
+.enterprise-section { margin: 1.25rem 0; border: 1px solid var(--line); border-radius: 12px; background: #121214; overflow: hidden; }
+.enterprise-section > summary { cursor: pointer; padding: 1rem 1.25rem; font: 600 .95rem var(--font-ui); color: var(--ink); display: flex; align-items: center; gap: .75rem; list-style: none; }
+.enterprise-section > summary::-webkit-details-marker { display: none; }
+.enterprise-section > summary .section-num { color: var(--accent); font: 500 .7rem var(--font-mono); letter-spacing: .1em; }
+.enterprise-section > summary .section-title { flex: 1; }
+.enterprise-section > summary .section-hint { color: var(--muted); font: .68rem var(--font-mono); }
+.enterprise-section > summary .section-status { font: .62rem var(--font-mono); padding: .2rem .5rem; border-radius: 4px; }
+.enterprise-section > summary .section-status.live { color: #9fe0b4; background: #12241a; }
+.enterprise-section > summary .section-status.partial { color: #ffd7a1; background: #2a2013; }
+.enterprise-section > summary .section-status.dead { color: #f0a8a8; background: #2a1414; }
+.enterprise-section > .section-body { padding: 0 1.25rem 1rem; }
 .desk-header { padding: 1.15rem 1.25rem .9rem; display: flex; gap: 1rem; justify-content: space-between; align-items: center; }
 .desk-header h2 { margin: 0; font: 600 1.45rem var(--font-ui); letter-spacing: -.035em; }
 .desk-status { font: .68rem var(--font-mono); color: var(--muted); text-align: right; }

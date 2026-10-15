@@ -10,10 +10,12 @@ import { initTrixDesk, renderTrixDesk } from "./trix-desk.js";
 import { renderDibziDesk } from "./dibzi-desk.js";
 import { renderSimDesk } from "./sim-desk.js";
 import { initOverview, renderOverview } from "./overview.js";
+import { initWorkspace, renderWorkspace } from "./workspace.js";
+import { filterEvidence } from "./evidence.js";
 import { initAssetViewer, renderAssetViewer } from "./asset-viewer.js";
 import { initSimListing, renderSimListing } from "./sim-listing.js";
 import { initSimCollapse } from "./sim-collapse.js";
-import { createChebyshevTone } from "./chebyshev-audio.js";
+
 import {
   buildHeatmapGrid,
   mergeDailyActivity,
@@ -261,7 +263,7 @@ const els = {
   lanesCue: document.getElementById("lanesCue"),
   lanesCueLink: document.getElementById("lanesCueLink"),
   probeMeta: document.getElementById("probeMeta"),
-  probeLog: document.getElementById("probeLog"),
+
   maxCue: document.getElementById("maxCue"),
   maxCueLink: document.getElementById("maxCueLink"),
   story: document.getElementById("story"),
@@ -285,13 +287,7 @@ const els = {
   hpBrains: document.getElementById("hpBrains"),
   hpTools: document.getElementById("hpTools"),
   hpBlocked: document.getElementById("hpBlocked"),
-  skillsRolloutMeta: document.getElementById("skillsRolloutMeta"),
-  skillsRolloutBody: document.getElementById("skillsRolloutBody"),
-  audioLabPlay: document.getElementById("audioLabPlay"),
-  audioLabDownload: document.getElementById("audioLabDownload"),
-  audioLabStatus: document.getElementById("audioLabStatus"),
-  audioLabPlayer: document.getElementById("audioLabPlayer"),
-  audioLabMeta: document.getElementById("audioLabMeta"),
+
   priceHeadline: document.getElementById("priceHeadline"),
   priceMeta: document.getElementById("priceMeta"),
   priceSentence: document.getElementById("priceSentence"),
@@ -1048,10 +1044,10 @@ function renderMetrics(latest) {
   if (els.stackLoad) els.stackLoad.textContent = loadBits.length ? loadBits.join(" · ") : "load —";
   if (s.availableVramGb != null && s.vramGb != null) {
     if (els.vramText) els.vramText.textContent = `${s.availableVramGb}/${s.vramGb} GB`;
-    els.vramBar.style.width = `${s.vramAvailablePct ?? 0}%`;
+    if (els.vramBar) els.vramBar.style.width = `${s.vramAvailablePct ?? 0}%`;
   } else {
-    els.vramText.textContent = "—";
-    els.vramBar.style.width = "0%";
+    if (els.vramText) els.vramText.textContent = "—";
+    if (els.vramBar) els.vramBar.style.width = "0%";
   }
   if (els.modelCount) els.modelCount.textContent = s.models != null ? String(s.models) : "—";
   if (els.apiModelCount) els.apiModelCount.textContent =
@@ -1431,41 +1427,6 @@ function recordProbeSample(latest) {
     note: route.note || "Geoff",
   }));
   memory.probeSamples = [{ at, routes }, ...(memory.probeSamples || [])].slice(0, 3);
-}
-
-function renderProbeLog() {
-  if (!els.probeLog) return;
-  const order = ["video", "image", "music", "explore", "home"];
-  const rows = (memory.probeSamples || []).flatMap((sample) =>
-    [...(sample.routes || [])]
-      .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
-      .map((route) => ({ ...route, at: sample.at })),
-  );
-  if (!rows.length) {
-    els.probeLog.innerHTML = '<tr><td colspan="7">waiting for first surface probe…</td></tr>';
-    return;
-  }
-  const live = rows.slice(0, 5).filter((route) => route.status === 200).length;
-  if (els.probeMeta) els.probeMeta.textContent = `${live}/5 live · ${memory.probeSamples.length} cycles`;
-  els.probeLog.innerHTML = rows
-    .map((route) => {
-      const time = new Date(route.at).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
-      const statusClass = route.status === 200 ? "ok" : "bad";
-      return `<tr>
-        <td>${escapeHtml(time)}</td>
-        <td>${escapeHtml(route.label)}</td>
-        <td class="probe-status ${statusClass}">${escapeHtml(route.status)}</td>
-        <td>${route.ms == null ? "—" : escapeHtml(route.ms)}</td>
-        <td>${Number(route.bytes || 0).toLocaleString()}</td>
-        <td><code>${escapeHtml(route.hash || "—")}</code></td>
-        <td>${escapeHtml(route.note || "Geoff")}</td>
-      </tr>`;
-    })
-    .join("");
 }
 
 function renderMaxCue(latest, events = []) {
@@ -1896,44 +1857,23 @@ function renderHorsepower(hp) {
     : `<p class="empty soft">Nothing extra marked unavailable — public lanes above are the live map.</p>`;
 }
 
-function renderSkillsRollout(latest) {
-  if (!els.skillsRolloutBody) return;
-  const source = latest?.sources?.["geoff.product.lanes"];
-  const lane = source?.routes?.find((route) => route.id === "skills");
-  if (!lane) {
-    els.skillsRolloutMeta.textContent = "No public Skills lane observation";
-    els.skillsRolloutBody.innerHTML = `<span class="skill-rollout-pill warn">UNOBSERVED</span><span>Public catalog and rollout state are not independently available.</span>`;
-    return;
+function renderSimSupplyWatch(latest) {
+  const el = document.getElementById("simSupplyWatch");
+  const meta = document.getElementById("simSupplyMeta");
+  if (!el || !meta) return;
+  const magma = latest?.sources?.["magma.eth"];
+  if (magma?.ok && magma?.magmaSupplyVersion === 2 && Number.isFinite(magma?.magmaSupply)) {
+    const supply = magma.magmaSupply;
+    const target = 4500;
+    const remaining = Math.max(0, supply - target);
+    el.textContent = supply.toLocaleString();
+    meta.textContent = supply <= target ? "at or below target" : `${remaining.toLocaleString()} to 4,500`;
+    meta.style.color = supply <= target ? "#9fe0b4" : "#ffd7a1";
+  } else {
+    el.textContent = "—";
+    meta.textContent = "awaiting live supply";
+    meta.style.color = "";
   }
-  const live = lane.live === true;
-  const gated = lane.toConnect === true;
-  els.skillsRolloutMeta.textContent = `${lane.status ?? "—"} · checked ${source.checkedAt ? new Date(source.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}`;
-  els.skillsRolloutBody.innerHTML = `
-    <span class="skill-rollout-pill ${live ? "on" : "warn"}">${live ? "LIVE LANE" : "NOT CONFIRMED"}</span>
-    <span class="skill-rollout-pill ${gated ? "gated" : "warn"}">${gated ? "CONNECT-GATED" : "PUBLIC RESPONSE"}</span>
-    <span class="skill-rollout-note">${gated ? "Route exists; public skill inventory is not exposed by this probe." : "Route returned a public response; inventory still requires verification."}</span>`;
-}
-
-function initAudioLab() {
-  if (!els.audioLabPlay) return;
-  let objectUrl = null;
-  els.audioLabPlay.addEventListener("click", () => {
-    const { blob, metadata } = createChebyshevTone();
-    if (objectUrl) URL.revokeObjectURL(objectUrl);
-    objectUrl = URL.createObjectURL(blob);
-    els.audioLabPlayer.src = objectUrl;
-    els.audioLabPlayer.volume = 0.18;
-    els.audioLabPlayer.hidden = false;
-    els.audioLabDownload.href = objectUrl;
-    els.audioLabDownload.hidden = false;
-    els.audioLabStatus.textContent = "Generated · local browser audio · no API call";
-    els.audioLabMeta.textContent = `peak ${metadata.peak.toFixed(3)} · normalization ${metadata.normalization.toFixed(3)} · ${metadata.harmonicCount} harmonics · ${metadata.suppressed} gated samples`;
-    els.audioLabPlayer.play().then(() => {
-      els.audioLabStatus.textContent = "Playing · local browser audio · no API call";
-    }).catch(() => {
-      els.audioLabStatus.textContent = "Generated · press play on the audio control · no API call";
-    });
-  });
 }
 
 function cellMark(level) {
@@ -2399,7 +2339,7 @@ function applyPayload(payload) {
   saveMemory();
 
   const briefing = payload.briefing;
-  const latest = payload.latest || null;
+  const latest = filterEvidence(payload.latest || null);
   const pollCount = payload.state?.pollCount ?? memory.pollCount ?? 0;
   const feedEvents = eventsInTrackWindow(memory.events || []);
   renderOverview(latest, payload.events || []);
@@ -2409,11 +2349,10 @@ function applyPayload(payload) {
   renderStory(briefing, payload.temperature);
   renderCoverage(briefing?.coverage || null);
   renderHorsepower(briefing?.horsepower || null);
-  renderSkillsRollout(latest);
-  renderTokenPlan(briefing?.tokenPlan || null);
+  renderSimSupplyWatch(latest);
+  renderTokenPlan(latest?.sources?.["geoff.docs.pricing"]?.ok === true ? briefing?.tokenPlan || null : null);
   renderDocsCue(briefing?.docsBoard || null, feedEvents);
   renderLanesCue(briefing?.lanesBoard || null, latest, feedEvents);
-  renderProbeLog();
   renderMaxCue(latest, feedEvents);
   renderAgentDesk(payload.agentDesk || briefing?.agentDesk || null);
   renderPumpTape(feedEvents, memory.agentSamples || []);
@@ -2421,8 +2360,8 @@ function applyPayload(payload) {
   renderPieces(briefing?.pieces || []);
   renderCapGroups(briefing?.capabilityGroups || []);
   renderFeed(feedEvents, { pollCount });
-  renderModelCards(briefing?.models || latest?.sources?.["stacknet.models"]?.models || []);
-  renderWidgets(briefing?.widgets || latest?.sources?.["stacknet.widgets"]?.widgets || []);
+  renderModelCards(latest?.sources?.["stacknet.models"]?.models || []);
+  renderWidgets(latest?.sources?.["stacknet.widgets"]?.widgets || []);
   renderGlossary(briefing?.glossary || []);
   renderNetworkModels(
     latest?.sources?.["stacknet.network"]?.models || [],
@@ -2431,6 +2370,7 @@ function applyPayload(payload) {
 
   setTrust(payload);
   renderSync(payload);
+  renderWorkspace(payload.latest, feedEvents);
 }
 
 async function pollNow() {
@@ -2447,6 +2387,7 @@ async function pollNow() {
   } catch (error) {
     renderOverview(null, []);
     renderMetrics(null);
+    renderWorkspace(null, []);
     setConnection("error", "reconnecting");
     const status = document.getElementById("syncStatus");
     if (status) {
@@ -2518,10 +2459,9 @@ initOverview();
 initAssetViewer();
 initSimListing();
 initSimCollapse();
-initAudioLab();
+initWorkspace();
 renderProvenance(memory.latest);
 hydrateIcons();
-startMatrix();
 // Paint the value sheet immediately — don't wait on a cold sniff.
 renderTokenPlan(null);
 renderHeatmap(memory.dailyActivity || []);

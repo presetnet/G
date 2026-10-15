@@ -1,0 +1,74 @@
+/* Progressive disclosure: current facts first, source evidence one click away. */
+:root { --accent: #b5d1ff; --heat: #62c7a2; }
+html { scroll-padding-top: 115px; }
+body { background: #0d1118; }
+.matrix,.atmosphere,.scanlines { display:none; }
+.topbar { background:#101722; border-bottom:1px solid #293345; box-shadow:none; }
+.shell { max-width:1400px; }
+.desk-intro { padding:1.2rem 0; }
+.desk-intro h2 { letter-spacing:-.035em; }
+#workspaceNav { display:flex; flex-wrap:wrap; gap:.4rem; margin:0 0 1.2rem; padding:.6rem; background:#141c28; border:1px solid #2b374a; border-radius:10px; }
+#workspaceNav a { padding:.5rem .8rem; color:#ced9eb; text-decoration:none; font:500 .78rem var(--font-ui); border-radius:6px; }
+#workspaceNav a:hover,#workspaceNav a:focus-visible { background:#24334b; color:#fff; }
+#workspaceHealth { display:flex; flex-wrap:wrap; align-items:center; gap:.7rem 1.5rem; margin-bottom:1rem; color:#a8b8cf; font:.75rem var(--font-ui); }
+#workspaceHealth strong { color:#ecf2ff; font-size:1.1rem; }
+#workspaceHealth a { margin-left:auto; }
+#glance .quick-facts { grid-template-columns:repeat(3,minmax(0,1fr)); }
+#glance article { background:#151d29; border-color:#2b374a; padding:1rem 1.1rem; }
+#glance h3 { color:#edf2fb; font-size:.9rem; }
+#glance a { color:#b5d1ff; }
+#glance small { color:#a9b7cd; }
+#glance .glance-value { font:600 1.15rem/1.4 var(--font-ui); color:#f0f5ff; margin:.5rem 0; font-variant-numeric:tabular-nums; }
+#glance .glance-drill { display:inline-block; margin-top:.8rem; font:500 .75rem var(--font-ui); text-decoration:none; }
+#glance .glance-drill:hover { text-decoration:underline; }
+#quickChanges { grid-template-columns:repeat(3,minmax(0,1fr)); margin-bottom:1.5rem; }
+#quickChanges article { border-left:3px solid #779cd5; }
+.workspace-section { background:#121a26; border-color:#2b374a; scroll-margin-top:1rem; }
+.workspace-section > summary { padding:1.1rem 1.25rem; }
+.workspace-section > summary:hover { background:#182335; }
+.workspace-section > summary small { display:block; margin-top:.35rem; color:#9baec8; font:400 .74rem/1.5 var(--font-ui); }
+.workspace-chevron { color:#9aafcc; transition:transform .15s; }
+.workspace-section[open] > summary .workspace-chevron { transform:rotate(180deg); }
+.workspace-section > .section-body { padding-top:.8rem; }
+.workspace-section .overview-fold { margin:.6rem 0; }
+.workspace-section .overview-fold > summary { font:500 .86rem var(--font-ui); color:#cbd9ed; }
+.workspace-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:1rem; margin:.5rem 0 1rem; }
+.workspace-heading h3 { margin:0; font:600 1.2rem var(--font-ui); }
+.workspace-heading a,.workspace-section a { color:#b5d1ff; }
+.workspace-heading label { font:.75rem var(--font-ui); color:#b5c2d5; }
+.workspace-heading select { margin-left:.5rem; padding:.4rem; background:#182335; color:#eef3fa; border:1px solid #465774; border-radius:5px; }
+.workspace-kpis { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.8rem; }
+.workspace-kpis > div { background:#182333; padding:1rem; border:1px solid #2d3c52; border-radius:8px; }
+.workspace-kpis strong { display:block; font:600 1.5rem var(--font-ui); color:#edf3ff; font-variant-numeric:tabular-nums; }
+.workspace-kpis span { display:block; margin-top:.4rem; color:#b2c0d4; font:.72rem/1.5 var(--font-ui); }
+.workspace-note { color:#a5b5cc; font:.76rem/1.7 var(--font-ui); }
+.workspace-drill { border-top:1px solid #2a3648; padding:.8rem 0; }
+.workspace-drill > summary { cursor:pointer; padding:.4rem 0; font:500 .85rem var(--font-ui); color:#d8e3f3; }
+.workspace-drill > p,.workspace-drill > div > p { font:.8rem/1.6 var(--font-ui); }
+#docsPages { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem 1.5rem; padding-top:.6rem; }
+.docs-group h4 { color:#8faacc; font:600 .68rem var(--font-ui); text-transform:uppercase; letter-spacing:.09em; }
+.docs-page { display:flex; justify-content:space-between; align-items:baseline; gap:1rem; padding:.65rem 0; border-bottom:1px solid #253246; text-decoration:none; font:.78rem var(--font-ui); }
+.docs-page small { white-space:nowrap; font-size:.65rem; }
+.docs-page:hover span { text-decoration:underline; }
+.is-current { color:#80d4b2; }
+.is-unavailable { color:#ecc493; }
+.docs-event { margin:.7rem 0; padding:.85rem; background:#192434; border-radius:6px; }
+.docs-event time { display:block; margin-top:.3rem; color:#9fb2cd; font:.68rem var(--font-mono); }
+.docs-event p { font:.78rem/1.6 var(--font-ui); }
+.workspace-table { overflow:auto; max-height:480px; }
+.workspace-table table { width:100%; border-collapse:collapse; font:.73rem/1.5 var(--font-ui); }
+.workspace-table th { text-align:left; background:#1a273a; color:#aebfd8; position:sticky; top:0; }
+.workspace-table th,.workspace-table td { padding:.7rem; border-bottom:1px solid #29374b; vertical-align:top; }
+.workspace-table td:last-child { max-width:45ch; overflow-wrap:anywhere; color:#aebfd8; }
+.source-badge { white-space:nowrap; font-size:.68rem; }
+#sourceStrip { margin:1rem 0; grid-template-columns:repeat(3,minmax(0,1fr)); }
+#sourceStrip article { padding:.8rem; background:#182333; border:1px solid #29384f; border-radius:8px; }
+#sourceStrip h3 { margin:0 0 .5rem; font-size:.85rem; }
+#sourceStrip small { display:block; margin:.35rem 0; color:#a5b5cc; font-size:.7rem; }
+#sourceStrip details { font-size:.72rem; }
+.workspace-section .panel { box-shadow:none; }
+#workspaceServices { margin-top:1rem; grid-template-columns:repeat(3,minmax(0,1fr)); }
+button:focus-visible,a:focus-visible,summary:focus-visible,select:focus-visible { outline:2px solid #b5d1ff; outline-offset:4px; }
+@media(max-width:900px) { #glance .quick-facts,#quickChanges { grid-template-columns:repeat(2,minmax(0,1fr)); } .topbar .gauge-inline { display:none; } }
+@media(max-width:600px) { .shell { padding:.8rem; } #glance .quick-facts,#quickChanges,#docsPages,#sourceStrip { grid-template-columns:1fr; } .workspace-kpis { grid-template-columns:1fr; } .workspace-section > summary { padding:.9rem; } .workspace-section > .section-body { padding:.5rem .8rem 1rem; } #workspaceServices { grid-template-columns:1fr; } #workspaceHealth a { margin-left:0; } .docs-page { gap:.5rem; } .workspace-table { max-height:360px; } }
+@media(prefers-reduced-motion:reduce) { .workspace-chevron { transition:none; } }

@@ -15,8 +15,8 @@ test("overview rejects legacy peak-held supply and separates NFT supply from Sol
     } };
     renderOverview(latest);
     assert.doesNotMatch(nodes.quickFacts.innerHTML, /9,619/);
-    assert.match(nodes.quickFacts.innerHTML, /old peak-held counts withheld/);
-    assert.match(nodes.quickFacts.innerHTML, /Solana SIM token supply 9,999,313/);
+    assert.match(nodes.quickFacts.innerHTML, /Old peak-held counts withheld/);
+    assert.doesNotMatch(nodes.quickFacts.innerHTML, /9,999,313/, "fungible supply must not compete with the NFT watch summary");
     assert.match(nodes.quickFacts.innerHTML, /1 open · 3,303 reported names/);
     assert.doesNotMatch(nodes.quickFacts.innerHTML, /2500 total|2,500 total/);
     latest.sources["magma.eth"] = { ...latest.sources["magma.eth"], magmaSupplyVersion: 2, magmaSupply: 5131 };

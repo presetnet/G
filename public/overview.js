@@ -2,7 +2,10 @@ import { evidenceState, EVIDENCE_WINDOW } from "./evidence.js";
 const esc = (v) => String(v ?? "—").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const groups = [["Geoff","geoff.","https://www.geoff.ai/"],["StackNet","stacknet.","https://stacknet.magma-rpc.com/health"],["TRIX","trix.","https://trix.market/"],["DIBZI","dibzi.","https://dibzi.ai/"],["SIM","sim.","https://sim.tech/"],["AZY","azy.","https://azy.life/"],["MAGMA","magma.","https://opensea.io/collection/the-simulation-958481099"]];
 const link = (url, label) => `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`;
-const age = (at) => Number.isFinite(Date.parse(at)) ? `${Math.max(0, Math.floor((Date.now() - Date.parse(at)) / 60000))}m ago` : "age unknown";
+const age = (at) => {
+  const minutes = (Date.now() - Date.parse(at)) / 60000;
+  return !Number.isFinite(minutes) || minutes < 0 ? "age unknown" : minutes < 1 ? "just checked" : minutes < 60 ? `${Math.floor(minutes)}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ago` : `${Math.floor(minutes / 1440)}d ago`;
+};
 export function initOverview() {
   document.querySelector(".desk-intro").insertAdjacentHTML("afterend", '<section id="glance" aria-label="Public visibility overview"><div id="sourceStrip" class="source-strip"></div><div id="quickFacts" class="quick-facts"></div><h3>What changed · last 24 hours</h3><div id="quickChanges"></div></section>');
   for (const [selector,title] of [[".metrics","Public network measurements"],["#trixDesk","TRIX · open full market desk"],["#dibziDesk","DIBZI · open full auction desk"],[".dibzi-about","About DIBZI · editorial brief"],[".dibzi-sales","Top sales · historical ranking"],["#simDesk","SIM · open the simulation desk"],[".audio-lab","Experiments · local audio synthesizer"]]) {
@@ -27,14 +30,17 @@ export function renderOverview(latest, events = []) {
   const nft = sources["magma.eth"];
   const nftUsable = nft?.magmaSupplyVersion === 2 && ["CURRENT", "DELAYED"].includes(evidenceState(nft));
   const fmt = (n, digits = 0) => Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: digits }) : "unread";
-  document.getElementById("quickFacts").innerHTML = `
-    <article><h3>DIBZI auctions</h3><p>${usable ? `${fmt(d.openAuctionsTotal)} open · ${fmt(d.namesReported)} reported names` : "Values unavailable"}</p>
-      <p>${usable && d.openFloorName ? link(`https://dibzi.ai/name/${encodeURIComponent(d.openFloorName)}`, `${fmt(d.openFloorSol, 4)} SOL · cheapest open ${d.openFloorName}`) : "No open-auction floor reported"}</p><small>Full-response board · observed ${age(d?.checkedAt)} · not a sales total</small></article>
-    <article><h3>TRIX activity</h3><p>${link("https://trix.market/", "Inspect market")}</p><small>Market: ${evidenceState(sources["trix.market"])} · ${age(sources["trix.market"]?.checkedAt)}<br>Generations: ${evidenceState(sources["trix.geoff"])} · ${age(sources["trix.geoff"]?.checkedAt)}</small><p>8,000-box watch and DOSWAPZ receipt census in the full desk below.</p></article>
-    <article><h3>SIM · sim.tech</h3><p>${link("https://sim.tech/", "Inspect sim.tech")}</p><small>Site v${esc(sources["sim.site"]?.siteVersion ?? "?")} · public configuration<br>Solana SIM token supply ${fmt(sources["sim.chain"]?.simSupply)} · ${age(sources["sim.chain"]?.checkedAt)}<br>This is a separate fungible token, not the Ethereum NFT supply.<br>Campaign SOL intake ${fmt(sources["sim.chain"]?.solDepositsSol, 4)} SOL · Ethereum mainnet intake ${fmt(sources["sim.ethm"]?.ethDepositsEth, 4)} ETH<br>Sepolia testnet intake ${fmt(sources["sim.eth"]?.ethDepositsEth, 4)} test ETH</small><p>Live Ethereum NFT supply and the 4,500 watch are in the supply panel.</p></article>
-    <article><h3>AZY · azy.life</h3><p>${link("https://azy.life/", "Inspect azy.life")}</p><small>SOL intake ${fmt(sources["azy.chain"]?.azySolDepositsSol, 4)} SOL · ${fmt(sources["azy.chain"]?.azyDepositCount)} deposits · ${fmt(sources["azy.chain"]?.azyUniquePayers)} retained payers<br>Campaign-only SOL walk · custody ${esc(sources["azy.chain"]?.destWallet ?? "…")} · last ${age(sources["azy.chain"]?.destLatestAt)}</small></article>
-    <article><h3>Ethereum NFTs · The Simulation</h3><p>${link("https://opensea.io/collection/the-simulation-958481099", "Inspect OpenSea")} · ${link("https://eth.blockscout.com/token/0xc3706195ff60658585b58716717ee7acc5ebca60", "Blockscout")}</p>
-      <small>${nftUsable ? `Outstanding supply ${fmt(nft.magmaSupply)} · ${fmt(nft.magmaHolders)} holders · ${fmt(nft.magmaTransfers)} transfers<br>Observed ${age(nft.magmaDataAt || nft.checkedAt)} · explorer index; supply can fall through burns` : "Awaiting corrected supply snapshot — old peak-held counts withheld. The live supply panel reads Ethereum directly."}</small></article>`;
+  const current = (s) => ["CURRENT", "DELAYED"].includes(evidenceState(s));
+  const docs = sources["geoff.docs.surface"], boxes = sources["trix.boxboard"], mining = sources["surface.mining"], azy = sources["azy.chain"];
+  const card = (title, value, note, src, target, action) => `<article><h3>${esc(title)}</h3><p class="glance-value">${esc(value)}</p><small>${esc(note)}</small><small>${evidenceState(src)} · ${age(src?.dataUpdatedAt || src?.checkedAt)}</small><a class="glance-drill" href="#${target}">${action} ↓</a></article>`;
+  document.getElementById("quickFacts").innerHTML = [
+    card("Geoff documentation", current(docs) ? `${docs.scraped}/${docs.total} pages responding` : "Snapshot unavailable", "Tracked sample · fingerprints, not release confirmations", docs, "docsDesk", "Inspect docs & changes"),
+    card("TRIX boxes", current(boxes) ? `${fmt(boxes.mintedTotal)} reported` : "Count unavailable", "8,000 watch target · DOSWAPZ census, not an unlock promise", boxes, "trixDesk", "Inspect box watch"),
+    card("The Simulation · NFTs", nftUsable ? `Outstanding supply ${fmt(nft.magmaSupply)}` : "Awaiting corrected supply", nftUsable ? `${fmt(Math.max(0, nft.magmaSupply - 4500))} to 4,500 · Ethereum NFTs` : "Old peak-held counts withheld · direct chain reads in the panel", nft, "simCollapse", "Inspect supply & sales"),
+    card("DIBZI auctions", usable ? `${fmt(d.openAuctionsTotal)} open · ${fmt(d.namesReported)} reported names` : "Snapshot unavailable", "Full-response count · auctions, not settled sales", d, "dibziDesk", "Inspect auctions"),
+    card("Mining payouts", current(mining) ? `${fmt(mining.miners60m)} paid recipients / 60m` : "Payout read unavailable", current(mining) ? `Latest payout ${age(mining.payoutLatestAt)} · not active rig count` : "Prepaid entitlement and productive mining require separate evidence", mining, "miningWorkspace", "Inspect payout evidence"),
+    card("AZY activity", current(azy) ? `${fmt(azy.azySolDepositsSol, 4)} SOL observed` : "Intake unavailable", "Campaign-only intake · not a separate Geoff node-key revenue stream", azy, "simDesk", "Inspect campaign records"),
+  ].join("");
   const seen = new Set();
   const changes = events.filter(e => { const delta=Date.now()-Date.parse(e.at); return delta>=0 && delta<=EVIDENCE_WINDOW && !["agent","baseline"].includes(e.kind); }).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)).filter(e => {
     const key = `${e.kind}:${e.title}`;

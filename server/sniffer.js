@@ -1789,6 +1789,7 @@ const DOCS_SURFACE_PAGES = [
   // API Reference: one representative page per published category.
   { id: "api-reference", path: "/api-reference/overview", label: "API Reference" },
   { id: "api-text", path: "/api-reference/text/openai-api", label: "OpenAI-compatible API" },
+  { id: "api-text-chat", path: "/api-reference/text/chat", label: "Text Chat" },
   { id: "api-speech", path: "/api-reference/speech/t2a-http", label: "Speech API" },
   { id: "api-training", path: "/api-reference/training/image-lora", label: "Training API" },
   { id: "api-video", path: "/api-reference/video/text-to-video", label: "Video API" },
@@ -1800,7 +1801,6 @@ const DOCS_SURFACE_PAGES = [
   { id: "token-overview", path: "/token-plan/overview", label: "Token Plan Overview" },
   { id: "usage", path: "/token-plan/usage", label: "Usage & Limits" },
 ];
-const DOCS_LINKED_PAGE_COUNT = 70;
 
 /** Prefer main/article/prose body so shared docs chrome doesn't fake-move every page. */
 function extractDocsBodyText(html = "") {
@@ -2263,7 +2263,7 @@ async function sniffGeoffSubscription() {
   };
 }
 
-async function sniffGeoffDocsSurface() {
+export async function sniffGeoffDocsSurface() {
   const started = Date.now();
   const settled = await Promise.allSettled(
     DOCS_SURFACE_PAGES.map((page) =>
@@ -2274,8 +2274,11 @@ async function sniffGeoffDocsSurface() {
   );
 
   const pages = [];
-  for (const row of settled) {
-    if (row.status !== "fulfilled") continue;
+  for (const [index, row] of settled.entries()) {
+    if (row.status !== "fulfilled") {
+      pages.push({ ...DOCS_SURFACE_PAGES[index], ok: false, status: 0, reason: row.reason?.message || "Read failed" });
+      continue;
+    }
     const { page, res } = row.value;
     if (!res.ok || !res.text) {
       pages.push({
@@ -2312,7 +2315,7 @@ async function sniffGeoffDocsSurface() {
     ms: Date.now() - started,
     scraped: okPages.length,
     total: DOCS_SURFACE_PAGES.length,
-    linkedPageCount: DOCS_LINKED_PAGE_COUNT,
+    linkedPageCount: null,
     representativeWatch: true,
     publishedModelLayers,
     checkedAt: new Date().toISOString(),

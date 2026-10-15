@@ -380,7 +380,7 @@ function pieceDocs(summary, docsSrc = null) {
     tone: scraped > 0 ? "good" : "muted",
     meaning: "Body fingerprints on watched pages — What’s changing lights when copy moves. No fake changelog.",
     facts: [
-      linked ? `${linked} live linked pages inventoried` : "Live docs inventory pending",
+      linked ? `${linked} linked pages in the reported inventory` : "Full linked-page inventory is not measured by this representative watch",
       modelLayers.length ? `Published model layers: ${modelLayers.join(" · ")}` : "Model layers pending",
       "Geoff Code watched: MCP · plugins · hooks · skills · subagents · ACP",
       "API categories watched: text · speech · training · video · image · music · code · files",

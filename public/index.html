@@ -6,7 +6,7 @@
     <title>Geoff Thermometer</title>
     <meta
       name="description"
-      content="The peoples Ai. Go Turbo. Quick-learn desk for live Geoff / Stacknet vitals — create, learn, build, play."
+      content="Independent Geoff intelligence dashboard. Documentation changes, service visibility and on-chain activity, with source timestamps."
     />
     <meta name="theme-color" content="#0b0b0e" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -32,6 +32,7 @@
     <link rel="stylesheet" href="/styles.css?v=desk2" />
     <link rel="stylesheet" href="/provenance.css?v=desk2" />
     <link rel="stylesheet" href="/dashboard.css?v=desk2" />
+    <link rel="stylesheet" href="/workspace.css?v=1" />
   </head>
   <body>
     <canvas id="matrix" class="matrix" aria-hidden="true"></canvas>
@@ -89,7 +90,7 @@
 
     <main class="shell">
       <section class="desk-intro" aria-label="Dashboard overview">
-        <div><p class="eyebrow">GEOFF / STACKNET / TRIX / DIBZI / SIM</p><h2>Signals. Not noise.</h2></div>
+        <div><p class="eyebrow">INDEPENDENT INTELLIGENCE / PUBLIC SOURCES</p><h2>Your ecosystem, at a glance.</h2></div>
         <div class="sync-readout" role="status" aria-live="polite"><span id="syncStatus">Connecting</span><small id="syncMeta">Checking the shared desk</small></div>
       </section>
       <details class="data-disclosure"><summary>Public data. Independently observed, not guaranteed.</summary><p>Source-reported values may include development or test activity. Collection time is not event time. Open a source to inspect its age and limitations; verify material conclusions against the source and current network.</p></details>
@@ -105,38 +106,7 @@
           <strong id="stackVersion">—</strong>
           <em id="stackHealth">—</em>
         </article>
-        <article class="metric" style="--i:1">
-          <div class="metric-top">
-            <span class="ico-wrap" data-icon="cpu"></span>
-            <span class="k">Nodes / GPUs</span>
-          </div>
-          <strong id="stackNodes">—</strong>
-          <em id="stackLoad">load —</em>
-        </article>
-        <article class="metric" style="--i:2">
-          <div class="metric-top">
-            <span class="ico-wrap" data-icon="memory"></span>
-            <span class="k">VRAM free</span>
-          </div>
-          <strong id="vramText">—</strong>
-          <div class="bar"><i id="vramBar"></i></div>
-        </article>
         <article class="metric" style="--i:3">
-          <div class="metric-top">
-            <span class="ico-wrap" data-icon="tag"></span>
-            <span class="k">Paperwork ledger</span>
-          </div>
-          <strong id="paperworkUsd">—</strong>
-          <em id="paperworkMeta">—</em>
-        </article>
-        <article class="metric" style="--i:3.1">
-          <div class="metric-top">
-            <span class="ico-wrap" data-icon="layers"></span>
-            <span class="k">PAPER supply <span class="pill as-reported">on-chain</span></span>
-          </div>
-          <strong id="paperSupply">—</strong>
-        </article>
-        <article class="metric" style="--i:3.2">
           <div class="metric-top">
             <span class="ico-wrap" data-icon="image"></span>
             <span class="k">GEOFF generations</span>
@@ -144,14 +114,6 @@
           <strong id="trixGeoffCount">—</strong>
           <em id="trixGeoffMeta">waiting for paid generations</em>
           <a id="trixGeoffReceipt" class="metric-receipt" href="https://trix.market/" target="_blank" rel="noopener noreferrer" hidden>payment receipt ↗</a>
-        </article>
-        <article id="keySale" data-proof="keySale" class="metric" style="--i:3.25">
-          <div class="metric-top">
-            <span class="ico-wrap" data-icon="tag"></span>
-            <span class="k">Node-key sale <span class="pill as-reported">as reported</span></span>
-          </div>
-          <strong id="keysoldUsd">—</strong>
-          <em id="keysoldMeta">waiting on sale ticker</em>
         </article>
         <article class="metric" style="--i:11">
           <div class="metric-top">
@@ -161,7 +123,7 @@
           <strong id="pileValue">—</strong>
           <em id="pileMeta">unredeemed key earnings</em>
         </article>
-        <article id="key9g" data-proof="key9g" class="metric" style="--i:12">
+        <article class="metric" style="--i:12">
           <div class="metric-top">
             <span class="ico-wrap" data-icon="network"></span>
             <span class="k">9G inflows · 14d</span>
@@ -188,11 +150,19 @@
         <article id="miningTile" data-proof="mining" class="metric" style="--i:15">
           <div class="metric-top">
             <span class="ico-wrap" data-icon="layers"></span>
-            <span class="k">Paid miners / 60m</span>
+            <span class="k">Paid recipients / 60m</span>
           </div>
           <strong id="miningMiners">—</strong>
           <em id="miningMeta">waiting on payout ledger</em>
           <a id="miningReceipt" class="metric-receipt" href="https://mining.aisp.live" target="_blank" rel="noopener noreferrer" hidden>miner desk ↗</a>
+        </article>
+        <article class="metric" style="--i:16">
+          <div class="metric-top">
+            <span class="ico-wrap" data-icon="tag"></span>
+            <span class="k">SIM supply watch</span>
+          </div>
+          <strong id="simSupplyWatch">—</strong>
+          <em id="simSupplyMeta">4,500 target</em>
         </article>
       </section>
 
@@ -247,20 +217,6 @@
           <section class="sim-chain"><div class="desk-toolbar"><h3>Movement</h3><p id="simChainStatus">Deposits, payers, velocity · Solana RPC + Ethereum mainnet explorer</p></div><div id="simChainRows"></div></section>
         </div>
         <details class="desk-source"><summary>Sources &amp; limits</summary><pre id="simSourceText"></pre></details>
-      </section>
-
-      <section class="skills-rollout" aria-label="Skills rollout status">
-        <div class="skills-rollout-head"><div><span class="hp-layer-label"><span>04</span> Skills rollout</span><p id="skillsRolloutMeta">Watching the public Skills lane</p></div><a id="skillsRolloutLink" href="https://www.geoff.ai/skills" target="_blank" rel="noopener noreferrer">open Skills ↗</a></div>
-        <div id="skillsRolloutBody" class="skills-rollout-body"></div>
-      </section>
-
-      <section class="panel audio-lab" aria-labelledby="audioLabTitle">
-        <header class="desk-header"><div><p class="eyebrow">04 / DSP HYPOTHESIS</p><h2 id="audioLabTitle">Chebyshev audio signal</h2></div><span class="desk-status">LOCAL / NOT GEOFF-RUN</span></header>
-        <p class="audio-lab-copy">A local playable interpretation of the DSP hint: oscillator → Chebyshev harmonics → Nyquist fadeout. This panel does not call Geoff, Trix, Jimmy, or DIBZI and is not proof of an official feature.</p>
-        <div class="audio-lab-controls"><button id="audioLabPlay" class="audio-lab-button" type="button">Generate &amp; play tone</button><a id="audioLabDownload" class="desk-link" download="chebyshev-tone.wav" hidden>download WAV</a><span id="audioLabStatus">Ready · 220 Hz · 48 kHz · four harmonics</span></div>
-        <audio id="audioLabPlayer" class="audio-lab-player" controls preload="none" hidden></audio>
-        <div id="audioLabMeta" class="audio-lab-meta" aria-live="polite"></div>
-        <p class="audio-lab-foot">Related public surfaces: <a href="https://docs.geoff.ai/geoff-code/skills" target="_blank" rel="noopener noreferrer">Skills docs</a> · <a href="https://docs.geoff.ai/api-reference/music/generate" target="_blank" rel="noopener noreferrer">Music API docs</a></p>
       </section>
 
       <details class="section-fold signal-details"><summary><span class="section-fold-num">05</span><span class="section-fold-title">Network detail</span><span class="section-fold-hint">open</span></summary><div class="fold-body">
@@ -324,33 +280,13 @@
         </section>
       </section>
 
-      <section class="panel probe-panel" aria-label="Public Geoff surface probe log">
-        <div class="panel-head">
-          <div class="panel-title">
-            <span class="ico-wrap sm" data-icon="activity"></span>
-            <h2>Public surface probe log</h2>
-          </div>
-          <p id="probeMeta">home · explore · music · image · video</p>
-        </div>
-        <p class="feed-hint">HTTP response watch · latest three polling cycles</p>
-        <div class="probe-table-wrap">
-          <table class="probe-table">
-            <thead>
-              <tr><th>Time</th><th>Page</th><th>ST</th><th>MS</th><th>Bytes</th><th>Hash</th><th>Note</th></tr>
-            </thead>
-            <tbody id="probeLog"><tr><td colspan="7">waiting for first surface probe…</td></tr></tbody>
-          </table>
-        </div>
-        <p class="probe-note">Note = target host is www.geoff.ai. A 200 and stable hash confirm a served response only; they do not prove ownership, integration, or partnership. The MFT post is contextual material; this probe does not test MFT, MetaVault, or Trix.</p>
-      </section>
-
       <p class="deck-label">Activity history</p>
       <div class="signal-deck">
-        <section class="panel pump-panel" aria-label="24 hour pump tape">
+        <section class="panel pump-panel" aria-label="24 hour public change activity">
           <div class="panel-head">
             <div class="panel-title">
               <span class="ico-wrap sm" data-icon="activity"></span>
-              <h2>24h pump tape</h2>
+              <h2>24h change activity</h2>
             </div>
             <p id="pumpMeta">building…</p>
           </div>
@@ -370,11 +306,11 @@
           </div>
         </section>
 
-        <section class="panel heat-panel" aria-label="Two month activity heatmap">
+        <section class="panel heat-panel" aria-label="Retained activity history">
           <div class="panel-head">
             <div class="panel-title">
               <span class="ico-wrap sm" data-icon="activity"></span>
-              <h2>2-month map</h2>
+              <h2>Retained activity map</h2>
             </div>
             <p id="heatMeta">collecting…</p>
           </div>
@@ -391,7 +327,7 @@
                 <span>Fri</span>
                 <span></span>
               </div>
-              <div id="heatGrid" class="heat-grid" role="img" aria-label="Sixty day activity heatmap"></div>
+              <div id="heatGrid" class="heat-grid" role="img" aria-label="Retained daily activity"></div>
             </div>
             <div class="heat-scale">
               <span>Less</span>
@@ -518,7 +454,7 @@
       <details class="raw-drawer">
         <summary>
           <span class="ico-wrap sm" data-icon="layers"></span>
-          Source inventory
+          Diagnostics &amp; source inventory
         </summary>
         <div id="pieces" class="pieces"></div>
         <div id="capGroups" class="cap-groups" hidden></div>
