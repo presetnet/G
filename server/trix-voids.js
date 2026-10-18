@@ -12,6 +12,12 @@ const SAMPLE_WINDOW = 600;
 const KEY_WINDOW = 20000;
 const PENDING_LIMIT = 400;
 const ACCOUNT_LIMIT = 1500;
+// A keyed provider serves the historical scan far faster than the shared public
+// endpoint, which answers in bursts and then returns HTTP 429. The collector
+// still honours its own deadline; only the per-tick budget changes.
+const RPC_TIER = process.env.HELIUS_API_KEY || process.env.SOLANA_RPC_URL
+  ? { receiptBatch: 60, receiptParallel: 6, accountQueue: 48 }
+  : { receiptBatch: 24, receiptParallel: 3, accountQueue: 12 };
 const assert = (ok, message) => { if (!ok) throw new Error(message); };
 const rawAmount = (value) => { assert(/^\d+$/.test(String(value)), "Invalid transfer amount"); return BigInt(value); };
 
@@ -227,7 +233,7 @@ async function discoverTreasuryHistory(ledger, rpc, fetchJson, now) {
     ledger.chainAccounts.sort((a, b) => Number(b.mint === SHOCKER_MINT) - Number(a.mint === SHOCKER_MINT));
     ledger.chainInventoryAt = now;
   }
-  if (ledger.chainPending.length >= 12) return;
+  if (ledger.chainPending.length >= RPC_TIER.accountQueue) return;
   const account = ledger.chainAccounts.find((a) => !a.complete);
   if (!account) return;
   if (!account.named) {
@@ -357,8 +363,8 @@ export async function collectVoids({ previous, fetchJson, rpc, now = new Date().
       failures.push(`Receipt evidence: ${record.reason}`);
     }
   }));
-  const chainBatch = (ledger.chainPending || []).sort((a, b) => a.attempts - b.attempts).slice(0, 24);
-  for (let offset = 0; offset < chainBatch.length; offset += 3) await Promise.all(chainBatch.slice(offset, offset + 3).map(async (entry) => {
+  const chainBatch = (ledger.chainPending || []).sort((a, b) => a.attempts - b.attempts).slice(0, RPC_TIER.receiptBatch);
+  for (let offset = 0; offset < chainBatch.length; offset += RPC_TIER.receiptParallel) await Promise.all(chainBatch.slice(offset, offset + RPC_TIER.receiptParallel).map(async (entry) => {
     if (Date.now() >= deadline) return;
     entry.attempts++;
     try {
@@ -381,7 +387,7 @@ export async function collectVoids({ previous, fetchJson, rpc, now = new Date().
   }));
   return { source: "trix.voids", ok: recentOk || (ledger.verifiedCount || 0) > 0 || ledger.records.length > 0, stale: !recentOk, status: recentOk ? 200 : 0,
     checkedAt: now, dataUpdatedAt: ledger.lastFeedAt || null, treasury: VOID_TREASURY, sourceUrl: VOID_FEED,
-    ...summarizeVoids(ledger), ledger, proofSamples: SAMPLE_WINDOW, pagesRead, partial: true,
+    ...summarizeVoids(ledger), ledger, proofSamples: SAMPLE_WINDOW, receiptBatch: RPC_TIER.receiptBatch, pagesRead, partial: true,
     reason: failures.length ? [...new Set(failures)].join("; ") : null,
     note: "Receipt-verified treasury deposits discovered from TRIX's void feed and the treasury's SPL-token account histories, including zero-balance accounts. Individual holdings never determine inclusion. Direct transfers may not have TRIX points attached and are not token burns. Coin symbols and creator names come from TRIX's launch catalog, so a creator stays attributed even after selling out; a coin with no verified treasury deposit is absent here, not excluded. Chain coverage starts with SHOCKER and advances across discovered treasury accounts; closed accounts absent from inventory, Token-2022 histories, unsupported transfer forms and unread receipts can be missing. Rankings remain partial while historical scans run." };
 }
