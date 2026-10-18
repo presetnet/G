@@ -18,19 +18,57 @@ export function rankVoiders(rows, asset = "") {
   });
 }
 
+// One box finds a coin, its creator, or a wallet. A coin match ranks those rows
+// first so the answer is at the top, not buried in fifty rows.
+export function filterVoiders(rows, query = "") {
+  const needle = String(query || "").trim().toLowerCase();
+  if (!needle) return { rows, coinMatches: 0 };
+  const coin = [], rest = [];
+  for (const row of rows) {
+    const coinHit = Object.values(row.assets || {}).some((a) => `${a.symbol} ${a.mint} ${a.creator || ""} ${a.name || ""}`.toLowerCase().includes(needle));
+    const walletHit = `${row.username || ""} ${row.wallet}`.toLowerCase().includes(needle);
+    if (coinHit) coin.push(row);
+    else if (walletHit) rest.push(row);
+  }
+  return { rows: [...coin, ...rest], coinMatches: coin.length };
+}
+
+// The payload ranks 50 wallets overall and 50 per coin. Searching has to see the
+// union, or a wallet that only ranks inside its own coin would look absent.
+export function mergeVoidRows(rows) {
+  const byWallet = new Map();
+  for (const row of rows || []) {
+    const seen = byWallet.get(row.wallet);
+    if (!seen) { byWallet.set(row.wallet, { ...row, assets: { ...row.assets } }); continue; }
+    seen.transactions = Math.max(seen.transactions, row.transactions || 0);
+    for (const [mint, asset] of Object.entries(row.assets || {})) seen.assets[mint] = { ...(seen.assets[mint] || {}), ...asset };
+  }
+  return [...byWallet.values()];
+}
+
 export function renderVoidBoard(source) {
-  const root = document.getElementById("voidRows"), select = document.getElementById("voidAsset");
+  const root = document.getElementById("voidRows"), select = document.getElementById("voidAsset"), search = document.getElementById("voidSearch");
   if (!root || !select) return;
-  if (!source?.ok || !source.ledger) {
+  if (!source?.ok || !source?.ledger) {
     root.innerHTML = `<p class="desk-context">${esc(source?.reason || "The collector is discovering historical void events and verifying receipts. No holdings are required to appear here.")} Stored credits are retained across refreshes; an unavailable read is not zero activity.</p>`;
     return;
+  }
+  if (search && !search.dataset.bound) {
+    search.dataset.bound = "1";
+    search.addEventListener("input", () => renderVoidBoard(source));
   }
   const selected = select.value;
   const options = '<option value="">Most verified void deposits</option>' + source.assets.map((a) => `<option value="${esc(a.mint)}">Amount · ${esc(a.symbol)}${a.mint !== "SOL" ? ` · ${esc(short(a.mint))}` : ""}</option>`).join("");
   if (select.innerHTML !== options) { select.innerHTML = options; select.value = source.assets.some((a) => a.mint === selected) ? selected : ""; }
   select.onchange = () => renderVoidBoard(source);
   const boardRows = select.value && source.assetLeaderboards ? source.assetLeaderboards[select.value] || [] : source.leaderboard;
-  const ranked = rankVoiders(boardRows, select.value);
+  const query = search?.value || "";
+  const corpus = query.trim() && source.assetLeaderboards ? mergeVoidRows([...(source.leaderboard || []), ...Object.values(source.assetLeaderboards).flat()]) : boardRows;
+  const found = filterVoiders(rankVoiders(corpus, select.value), query);
+  const ranked = found.rows;
+  const matchNote = query.trim()
+    ? `<p class="desk-context"><b>Search "${esc(query.trim())}":</b> ${ranked.length} row${ranked.length === 1 ? "" : "s"}${found.coinMatches ? `, ${found.coinMatches} credited that coin or its creator` : ""}${ranked.length ? "" : " in this ranking"}. A wallet or coin outside the current ranking has no verified deposit yet — it is not ranked as zero.</p>`
+    : "";
   const rows = ranked.slice(0, 50).map((row, index) => {
     if (select.value && row.assets[select.value]?.latestAt) row = { ...row, latestAt: row.assets[select.value].latestAt };
     const amounts = Object.values(row.assets).filter((a) => !select.value || a.mint === select.value);
@@ -41,12 +79,12 @@ export function renderVoidBoard(source) {
   const accounts = l.chainAccountCount ?? l.chainAccounts?.length ?? 0;
   const queued = l.chainPendingCount ?? l.chainPending?.length ?? 0;
   const complete = l.chainCompleteCount ?? l.chainAccounts?.filter((a) => a.complete).length ?? 0;
-  root.innerHTML = `${source.stale ? '<p class="desk-context"><b>Collection is not current. Showing stored receipt-verified history.</b></p>' : ""}<p class="desk-context"><b>${source.totalWallets ?? source.leaderboard.length} wallets · ${source.verifiedEvents} verified asset transfers</b> · ${source.pendingEvents} awaiting feed receipt checks · ${source.unverifiedEvents} feed receipts did not verify.</p>
+  root.innerHTML = `${matchNote}${source.stale ? '<p class="desk-context"><b>Collection is not current. Showing stored receipt-verified history.</b></p>' : ""}<p class="desk-context"><b>${source.totalWallets ?? source.leaderboard.length} wallets · ${source.verifiedEvents} verified asset transfers</b> · ${source.pendingEvents} awaiting feed receipt checks · ${source.unverifiedEvents} feed receipts did not verify.</p>
     <p class="desk-context">${l.historyComplete && !l.recentGapBefore ? "Reached the end of the public feed's available history." : "Historical backfill in progress."} Every verified receipt is rolled into permanent per-wallet, per-asset totals; only the most recent ${source.proofSamples ?? source.retainedProofs ?? 250} receipts are kept as inline proof. Oldest feed page: ${esc(stamp(l.historyOldestAt))}. Last feed check: ${esc(stamp(source.dataUpdatedAt))}.${l.coverageGaps ? " High-volume gaps were detected; coverage is incomplete." : ""} This is an observed, bounded leaderboard—not a complete all-time ranking.</p>
     ${Number.isFinite(source.catalogTotal) ? `<p class="desk-context"><b>Coin coverage:</b> ${source.catalogCovered} of ${source.catalogTotal} coins in TRIX's launch catalog have a receipt-verified treasury deposit. A coin missing here has no verified deposit yet, not an excluded holder. Names and creators come from that catalog${source.catalogAt ? ` (read ${esc(stamp(source.catalogAt))})` : ""}, so a creator is still credited after selling out.</p>` : ""}
     <p class="desk-context"><b>Direct chain history:</b> ${accounts} treasury token accounts discovered · ${l.chainReceiptsChecked || 0} historical receipts inspected · ${queued} queued · ${l.chainUnverified || 0} historical transfer checks unresolved · ${complete} account histories paginated to the end. ${l.chainInventoryCapped ? "Account inventory cap reached." : ""} SHOCKER is scanned first, up to 24 historical receipts per collector run. Pagination completion is not the same as completing receipt verification.</p>
     <p class="desk-context">Top 50 per ranking. Default rows show up to four assets per wallet; choose an asset for its amount ranking. Inline receipts are a bounded recent sample. ${source.rankingsLimited ? "Some asset rankings are omitted from this compact response; missing rows do not imply zero credit." : ""}</p>
     <p class="desk-context">Current holdings do not affect inclusion. Discovery uses both TRIX's feed and treasury token-account history, including accounts with zero balances. Receipts verify transfers into ${explorer("account", source.treasury, "the TRIX treasury")}, not token burning or awarded points. Direct deposits can be included even without a TRIX feed entry. Token-void SOL fees are excluded. Percentages use on-chain supply at the displayed sample time, not a wallet's current holding percentage. Closed treasury accounts absent from inventory and Token-2022 history are not covered by the direct scan.</p>
     ${source.reason ? `<p class="desk-context">Partial verification: ${esc(source.reason)}</p>` : ""}
-    ${rows ? `<div class="desk-table-scroll"><table class="desk-table"><caption class="sr-only">Top VOIDers — observed receipt-verified transfers</caption><thead><tr><th>#</th><th>VOIDer</th><th>Verified deposits</th><th>Amounts verified so far</th><th>Latest void</th><th>Receipts</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="desk-context">No verified rows yet for this view. Pending or failed checks are not counted as credits.</p>'}`;
+    ${rows ? `<div class="desk-table-scroll"><table class="desk-table"><caption class="sr-only">Top VOIDers — observed receipt-verified transfers</caption><thead><tr><th>#</th><th>VOIDer</th><th>Verified deposits</th><th>Amounts verified so far</th><th>Latest void</th><th>Receipts</th></tr></thead><tbody>${rows}</tbody></table></div>` : query.trim() ? '<p class="desk-context">No verified row matches that search in this response. The scan is still running, so a coin or wallet can appear later without anything changing.</p>' : '<p class="desk-context">No verified rows yet for this view. Pending or failed checks are not counted as credits.</p>'}`;
 }

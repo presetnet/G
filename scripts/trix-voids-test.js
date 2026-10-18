@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { voidCandidate, verifyVoidTransfer, collectVoids, summarizeVoids, restoreVoidHistory, candidatesFromTreasuryReceipt, publicVoidSource, VOID_TREASURY, SHOCKER_MINT } from "../server/trix-voids.js";
-import { rankVoiders, voidAmount } from "../public/trix-void-board.js";
+import { rankVoiders, voidAmount, filterVoiders, mergeVoidRows } from "../public/trix-void-board.js";
 import { normalizeBundle } from "../server/shared-store.js";
 import { filterEvidence } from "../public/evidence.js";
 
@@ -114,6 +114,25 @@ test("asset-specific ranking is exact and never sums different coins", () => {
   assert.equal(rankVoiders(rows)[0].wallet, "b");
   assert.equal(rankVoiders(rows, mint)[0].wallet, "a");
   assert.equal(voidAmount("9007199254740993", 6), "9,007,199,254.740993");
+});
+
+test("search finds a coin, its creator or a wallet, and coin matches rank first", () => {
+  const OTHER_MINT = "F".repeat(32);
+  const rows = [
+    { wallet: "w1", username: "UmpaLumpa", transactions: 9, assets: { [mint]: { mint, symbol: "CRACK", creator: "burgher", amountRaw: "1", decimals: 6, transactions: 3 } } },
+    { wallet: "w2", username: null, transactions: 5, assets: { [mint]: { mint, symbol: "SELLER", creator: "JLEE", amountRaw: "2", decimals: 6, transactions: 2 } } },
+    { wallet: "w3", username: "burgher", transactions: 1, assets: { [OTHER_MINT]: { mint: OTHER_MINT, symbol: "RLL", amountRaw: "3", decimals: 6, transactions: 1 } } }];
+  assert.equal(filterVoiders(rows, "jlee").rows[0].wallet, "w2", "a creator name finds the creator's row even with no username");
+  assert.equal(filterVoiders(rows, "jlee").coinMatches, 1);
+  assert.equal(filterVoiders(rows, "seller").rows[0].username, null, "an unnamed wallet is still found by its coin");
+  assert.equal(filterVoiders(rows, "burgher").rows.length, 2, "creator of CRACK and the wallet named burgher both match");
+  assert.equal(filterVoiders(rows, "w1").rows[0].username, "UmpaLumpa");
+  assert.equal(filterVoiders(rows, OTHER_MINT).rows[0].wallet, "w3", "a full mint is searchable");
+  assert.equal(filterVoiders(rows, "").rows.length, 3, "an empty query keeps the full ranking");
+  assert.equal(filterVoiders(rows, "not-here").rows.length, 0);
+  const merged = mergeVoidRows([{ wallet: "w1", transactions: 9, assets: { [mint]: { symbol: "CRACK" } } }, { wallet: "w1", transactions: 9, assets: { [OTHER_MINT]: { symbol: "RLL" } } }]);
+  assert.equal(merged.length, 1);
+  assert.deepEqual(Object.keys(merged[0].assets).sort(), [mint, OTHER_MINT].sort(), "per-coin rankings merge back into one wallet row");
 });
 
 test("direct treasury history recovers a depositor missing from both feed and holder lists", async () => {
