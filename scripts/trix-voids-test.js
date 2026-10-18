@@ -74,15 +74,27 @@ test("deduped credits survive later sales, empty feeds and RPC outages", async (
 
 test("pending receipts retry after outages and history cursor advances without duplicate credits", async () => {
   const urls = [];
-  const fetchJson = async (url) => { urls.push(url); return url.includes("before=") ? json([event]) : json([event], 1790812000000); };
+  const fetchJson = async (url) => {
+    urls.push(url);
+    if (url.includes("/api/launches")) return { ok: true, json: { total: 1, items: [{ mintAddress: mint, symbol: "SHOCKER", name: "Shocker", creator: { username: "JLEE", walletAddress: wallet } }] } };
+    return url.includes("before=") ? json([event]) : json([event], 1790812000000);
+  };
   const first = await collectVoids({ fetchJson, rpc: async () => { throw Error("429"); } });
   assert.equal(first.pendingEvents, 1);
   assert.equal(first.verifiedEvents, 0);
   assert.equal(first.ledger.historyComplete, true);
-  assert.equal(urls.length, 2);
+  assert.equal(urls.filter((u) => u.includes("/api/launches")).length, 1, "the launch catalog is read once per refresh, not per page");
+  assert.equal(urls.filter((u) => u.includes("feed/trades")).length, 2);
   const next = await collectVoids({ previous: first, fetchJson, rpc: async () => receipt() });
   assert.equal(next.verifiedEvents, 1);
   assert.equal(next.pendingEvents, 0);
+  // Creator attribution survives an empty catalog refresh and a wallet that holds nothing.
+  assert.equal(next.ledger.verifiedCount, 1);
+  assert.equal(next.catalogTotal, 1);
+  assert.equal(next.catalogCovered, 1);
+  assert.equal(next.assets[0].creator, "JLEE");
+  const emptyCatalog = await collectVoids({ previous: next, fetchJson: async (u) => u.includes("/api/launches") ? { ok: true, json: { total: 1, items: [] } } : (u.includes("before=") ? json([event]) : json([event], 1790812000000)), rpc: async () => { throw Error("429"); } });
+  assert.equal(emptyCatalog.ledger.verifiedCount, 1, "a failed catalog refresh never drops verified credits");
 });
 
 test("ledger backup outlives the display snapshot's 24h expiry", () => {
@@ -135,4 +147,42 @@ test("direct treasury history recovers a depositor missing from both feed and ho
   assert.equal(projected.assetLeaderboards[SHOCKER_MINT][0].assets[SHOCKER_MINT].supplyPct, 5);
   assert.equal(s.ledger.chainAccounts.length, 1, "projection must not remove persisted scan state");
   assert.ok(Buffer.byteLength(JSON.stringify(projected)) < 600000);
+});
+
+test("a ledger that reached the old retention cap keeps every credit and resumes discovery", async () => {
+  // The pre-rollup ledger stored one row per receipt and stopped the entire scan
+  // at 2500 rows. That silently truncated every all-time ranking from there on.
+  const legacy = { version: 1, capped: true, records: [], before: null, historyComplete: true };
+  const base58 = (i) => "ABCDEFGHJKLMNPQRSTUVWXYZ"[i % 24];
+  const pair = (i) => base58(Math.floor(i / 24) % 24) + base58(Math.floor(i / 576)) + base58(i);
+  const sig = (i) => `3${pair(i)}`.repeat(16);
+  const who = (i) => `A${pair(i)}${"A".repeat(28)}`;
+  const txFor = (s, w) => {
+    const tx = receipt();
+    tx.transaction.signatures = [s];
+    tx.transaction.message.accountKeys[0] = { pubkey: w, signer: true };
+    tx.transaction.message.instructions[0].parsed.info.authority = w;
+    tx.meta.preTokenBalances[0].owner = w;
+    return tx;
+  };
+  for (let i = 0; i < 2500; i++) legacy.records.push(verifyVoidTransfer(voidCandidate({ ...event, txSignature: sig(i), walletAddress: who(i) }), txFor(sig(i), who(i))));
+  const freshSig = "7".repeat(64), freshWho = "C".repeat(32);
+  const fresh = { ...event, txSignature: freshSig, walletAddress: freshWho };
+  const out = await collectVoids({
+    previous: { ledger: legacy },
+    fetchJson: async (url) => url.includes("/api/launches")
+      ? { ok: true, json: { total: 1, items: [{ mintAddress: mint, symbol: "SHOCKER", creator: { username: "JLEE", walletAddress: freshWho } }] } }
+      : json([fresh], null),
+    rpc: async () => txFor(freshSig, freshWho),
+  });
+  assert.equal(out.ledger.migratedFrom, 2500);
+  assert.equal(out.verifiedEvents, 2501, "the capped ledger's credits are kept and discovery continues past the old limit");
+  assert.equal(out.ledger.capped, false, "the retention cap no longer stops discovery");
+  assert.equal(out.ledger.records.filter((r) => r.status === "verified").length, 0, "verified receipts roll up instead of occupying the queue");
+  assert.equal(out.ledger.keys.length, 2501, "dedup keys survive retention so overlap never double-counts");
+  assert.ok(out.ledger.samples.length <= 600 && out.ledger.samples.length > 0, "receipts are kept as a bounded recent proof sample");
+  assert.equal(out.leaderboard.length, 2501);
+  // Creator attribution comes from the catalog, not from current holdings.
+  assert.equal(out.leaderboard.find((r) => r.wallet === freshWho).username, "JLEE");
+  assert.equal(out.catalogTotal, 1);
 });

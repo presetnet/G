@@ -975,7 +975,9 @@ assert.equal(minute.summary.trixBoxesStatus, 404);
 assert.equal(minute.summary.trixBoxesTopCoins, null);
 assert.equal(minute.summary.trixBoxesReason, minute.sources["trix.boxes"].reason);
 assert.equal(minute.summary.coverage.find((source) => source.source === "trix.boxes").ok, false);
-assert.equal(requests.slice(minuteRequestStart).filter((request) => new URL(request.url).pathname === "/api/launches").length, 2);
+// Two readers of the launch catalog (meme market, boxes) plus the VOIDer scan's
+// creator-attribution read. Each must fetch once per run, never once per page.
+assert.equal(requests.slice(minuteRequestStart).filter((request) => new URL(request.url).pathname === "/api/launches").length, 3);
 for (const source of ["trix.geoff", "trix.fee.config", "stacknet.health"]) {
   assert.equal(minute.sources[source].ok, false, source);
   assert.equal(minute.sources[source].stale, true, source);
