@@ -53,6 +53,7 @@ const NAMES = {
   "trix.privacy": "TRIX Privacy Policy",
   "trix.boxboard": "DOSWAPZ public box board",
   "trix.preorder": "TRIX preorder gates",
+  "trix.voids": "TRIX void feed + verified treasury transfers",
   "trix.meme.market": "TRIX launch ranking",
   "geoff.keys.9g": "Solana 9G wallet RPC",
   "geoff.subscription": "Geoff public route probes",

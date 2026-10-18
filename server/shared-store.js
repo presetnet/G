@@ -54,6 +54,7 @@ function emptyBundle() {
   return {
     updatedAt: null,
     latest: null,
+    voidLedger: null,
     events: [],
     dailyActivity: [],
     pond0x: emptyPond0x(),
@@ -101,6 +102,7 @@ export function normalizeBundle(raw) {
   return {
     updatedAt: raw.updatedAt || null,
     latest: freshLatest(raw.latest),
+    voidLedger: raw.latest?.sources?.["trix.voids"]?.ledger || raw.voidLedger || null,
     events: pruneEvents(raw.events || []),
     dailyActivity: pruneDailyActivity(raw.dailyActivity || [], config.heatmapDays),
     pond0x: prunePond0x(raw.pond0x || null, config.heatmapDays),

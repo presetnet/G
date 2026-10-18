@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import * as crypto from "node:crypto";
 import * as tokenPlan from "../server/token-plan.js";
+import * as trixVoids from "../server/trix-voids.js";
 
 let now = Date.parse("2026-09-04T12:00:00Z");
 const iso = () => new Date(now).toISOString();
@@ -49,6 +50,7 @@ context.nowAdvance = () => { now += 1000; };
 await module.link(async (specifier) => {
   const exports = specifier === "node:crypto" ? crypto
     : specifier === "./token-plan.js" ? tokenPlan
+    : specifier === "./trix-voids.js" ? trixVoids
     : specifier === "./config.js" ? { config: {} }
     : {
       loadMiningSurfaceCache: async () => persisted,
@@ -118,8 +120,8 @@ const previous = { sources: {
 } };
 const before = JSON.stringify(previous);
 const full = await api.runSniff({ previous });
-// 52 sources: the trix.preorder public-gate read joined the set.
-assert.equal(Object.keys(full.sources).length, 52);
+// Includes the receipt-backed void leaderboard source.
+assert.equal(Object.keys(full.sources).length, 53);
 assert.equal(Object.keys(full.sources).some((key) => key.startsWith("source-")), false);
 // stubCollectors() fails every sniff* collector, so this source is a failure
 // entry here. The gate fields are asserted in scripts/trix-live-test.js instead;

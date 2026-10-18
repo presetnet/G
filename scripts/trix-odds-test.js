@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import * as crypto from "node:crypto";
 import * as tokenPlan from "../server/token-plan.js";
+import * as trixVoids from "../server/trix-voids.js";
 
 const context = vm.createContext({
   process: { env: {} },
@@ -14,6 +15,7 @@ const module = new vm.SourceTextModule(code, { context });
 await module.link(async (specifier) => {
   const exports = specifier === "node:crypto" ? crypto
     : specifier === "./token-plan.js" ? tokenPlan
+    : specifier === "./trix-voids.js" ? trixVoids
     : specifier === "./config.js" ? { config: {} }
     : { loadMiningSurfaceCache: async () => null, saveMiningSurfaceCache: async () => {} };
   return new vm.SyntheticModule(Object.keys(exports), function () {

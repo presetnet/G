@@ -1,4 +1,5 @@
 import { config } from "../server/config.js";
+import { restoreVoidHistory } from "../server/trix-voids.js";
 import { upsertDailyActivity } from "../server/daily-activity.js";
 import {
   acquireSharedLock,
@@ -67,6 +68,7 @@ export default async function handler(req, res) {
       return;
     }
     const previous = await loadSharedBundle();
+    const baseline = restoreVoidHistory(previous.latest, previous.voidLedger);
 
     let snapshot;
     if (profile === "full") {
@@ -74,13 +76,13 @@ export default async function handler(req, res) {
         previous.latest,
         preserveLastKnownTokenPress(
           previous.latest,
-          await runSniff({ previous: previous.latest }),
+          await runSniff({ previous: baseline }),
         ),
       );
     } else {
       snapshot = preserveTrixHistory(
         previous.latest,
-        await runMinuteSniff({ previous: previous.latest }),
+        await runMinuteSniff({ previous: baseline }),
       );
     }
     const newEvents = translate(previous.latest, snapshot);
@@ -92,6 +94,7 @@ export default async function handler(req, res) {
     const saved = await saveSharedBundle(
       normalizeBundle({
         latest: snapshot,
+        voidLedger: previous.voidLedger,
         events,
         dailyActivity,
         state: {

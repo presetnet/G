@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import * as crypto from "node:crypto";
 import * as tokenPlan from "../server/token-plan.js";
+import * as trixVoids from "../server/trix-voids.js";
 
 const requests = [];
 let now = Date.parse("2026-09-08T12:00:00Z");
@@ -62,6 +63,7 @@ const modules = new Map();
 for (const [key, exports] of Object.entries({
   "node:crypto": crypto,
   "token-plan.js": tokenPlan,
+  "trix-voids.js": trixVoids,
   "config.js": { config: { stacknetBaseUrl: "https://stacknet.fixture", pollIntervalMs: 60000 } },
   "store.js": readOnlyStore,
 })) {

@@ -171,6 +171,7 @@
           <button type="button" id="tab-boxes" role="tab" data-desk-tab="boxes" aria-controls="desk-boxes" aria-selected="true"><span data-icon="layers"></span>Boxes</button>
           <button type="button" id="tab-coins" role="tab" data-desk-tab="coins" aria-controls="desk-coins" aria-selected="false" tabindex="-1"><span data-icon="coins"></span>Coins</button>
           <button type="button" id="tab-activity" role="tab" data-desk-tab="activity" aria-controls="desk-activity" aria-selected="false" tabindex="-1"><span data-icon="activity"></span>Activity</button>
+          <button type="button" id="tab-voiders" role="tab" data-desk-tab="voiders" aria-controls="desk-voiders" aria-selected="false" tabindex="-1">Top VOIDers</button>
           <button type="button" id="tab-points" role="tab" data-desk-tab="points" aria-controls="desk-points" aria-selected="false" tabindex="-1"><span data-icon="trophy"></span>Points</button>
           <button type="button" id="tab-art" role="tab" data-desk-tab="art" aria-controls="desk-art" aria-selected="false" tabindex="-1"><span data-icon="image"></span>Art</button>
           <button type="button" id="tab-money" role="tab" data-desk-tab="money" aria-controls="desk-money" aria-selected="false" tabindex="-1"><span data-icon="tag"></span>Money</button>
@@ -188,6 +189,7 @@
           <div id="coinRows"></div><button id="coinMore" class="desk-more" type="button" hidden>Show more</button>
         </div>
         <div id="desk-activity" class="desk-panel" role="tabpanel" aria-labelledby="tab-activity" tabindex="0" hidden><div class="desk-toolbar"><h3>Recent feed events</h3><p id="activityStatus"></p></div><div id="activityRows"></div><details class="activity-breakdown"><summary>Flow by coin <small>up to 50 feed events, not 24h volume</small></summary><div id="activityFlow"></div></details></div>
+        <div id="desk-voiders" class="desk-panel" role="tabpanel" aria-labelledby="tab-voiders" tabindex="0" hidden><div class="desk-toolbar"><h3>Top VOIDers</h3><p id="voidStatus">Receipt-backed history · current holdings do not affect rank</p><label for="voidAsset">Rank by</label><select id="voidAsset"><option value="">Most verified void transactions</option></select></div><div id="voidRows"></div></div>
         <div id="desk-points" class="desk-panel" role="tabpanel" aria-labelledby="tab-points" tabindex="0" hidden><div class="desk-toolbar"><h3>User points</h3><p id="pointsStatus"></p></div><div id="pointsRows"></div></div>
         <div id="desk-art" class="desk-panel" role="tabpanel" aria-labelledby="tab-art" tabindex="0" hidden><div class="desk-toolbar"><h3>Artwork sample</h3><p id="artStatus"></p></div><div id="artRows"></div></div>
         <div id="desk-money" class="desk-panel" role="tabpanel" aria-labelledby="tab-money" tabindex="0" hidden><div class="desk-toolbar"><h3>Treasury &amp; flows</h3><p id="moneyStatus"></p></div><div id="moneyRows"></div></div>

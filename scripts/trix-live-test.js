@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import * as crypto from "node:crypto";
 import * as tokenPlan from "../server/token-plan.js";
+import * as trixVoids from "../server/trix-voids.js";
 
 let now = Date.parse("2026-09-08T12:00:00Z");
 const iso = () => new Date(now).toISOString();
@@ -262,6 +263,7 @@ const noWrite = async () => { throw new Error("Unexpected store write"); };
 const dependencies = {
   "node:crypto": crypto,
   "token-plan.js": tokenPlan,
+  "trix-voids.js": trixVoids,
   "config.js": { config },
   "store.js": {
     loadMiningSurfaceCache: async () => null, saveMiningSurfaceCache: noWrite,
@@ -881,8 +883,8 @@ failures.clear();
 
 // Full/minute summaries use the same source contract, including coverage.
 const coldMinute = await api.runMinuteSniff();
-assert.equal(Object.keys(coldMinute.sources).length, 27);
-assert.equal(coldMinute.summary.totalSources, 27);
+assert.equal(Object.keys(coldMinute.sources).length, 28);
+assert.equal(coldMinute.summary.totalSources, 28);
 assert.equal(coldMinute.sources["trix.boxes"].status, 404);
 assert.equal(coldMinute.sources["trix.preorder"].ok, true);
 assert.equal(coldMinute.sources["trix.preorder"].walletAnswerAvailable, false);
@@ -896,7 +898,7 @@ assert.equal(coldMinute.sources["pond0x.geoff"].paired, false);
 assert.equal(coldMinute.sources["pond0x.geoff"].chatEmbedded, true);
 assert.equal(coldMinute.sources["pond0x.geoff"].providerEmbedded, true);
 const full = service.preserveTrixHistory(null, await api.runSniff());
-assert.equal(Object.keys(full.sources).length, 52);
+assert.equal(Object.keys(full.sources).length, 53);
 assert.equal(full.sources["trix.preorder"].saleVerdict, "open to reserve");
 assert.equal(full.sources["trix.boxes"].status, 404);
 assert.equal(full.summary.trixBoxesOk, false);
@@ -1083,9 +1085,9 @@ await pending;
 assert.ok(timed);
 assert.ok(now - timeoutStart <= 18000, `minute took ${now - timeoutStart}ms`);
 assert.ok(timed.durationMs < 60000);
-// Budget raised from 28 to 36: trix.preorder adds five public reads per run
-// (/api/mkt/g, two retired-route probes, eligibility, and the /api/mkt/preorder alias).
-assert.ok(requests.length - timedRequestStart <= 36);
+// The hung fixture adds one void-feed read; no history/receipt request follows
+// a failed discovery page without carried work.
+assert.ok(requests.length - timedRequestStart <= 37);
 assert.ok(timeouts.every((timeout) => timeout <= 18000));
 for (const [name, source] of Object.entries(timed.sources)) {
   if (name.startsWith("trix.") || ["stacknet.health", "stacknet.root", "stacknet.network", "stacknet.node", "stacknet.models"].includes(name)) {

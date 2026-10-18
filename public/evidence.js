@@ -15,6 +15,10 @@ export function filterEvidence(snapshot, now = Date.now()) {
   const sources = Object.fromEntries(Object.entries(snapshot.sources || {}).map(([id, source]) => {
     const state = evidenceState(source, now);
     if (["CURRENT", "DELAYED"].includes(state)) return [id, source];
+    if (id === "trix.voids" && source.ledger?.version === 1 && Array.isArray(source.ledger.records)) {
+      return [id, { ...source, stale: true, evidenceState: state,
+        reason: source.reason || `${state}: collection is not current; stored historical receipts are retained.` }];
+    }
     return [id, {
       source: id, ok: false, status: source.status, checkedAt: source.checkedAt,
       dataUpdatedAt: source.dataUpdatedAt, sourceUrl: source.sourceUrl,

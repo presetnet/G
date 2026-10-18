@@ -200,6 +200,11 @@
 .desk-toolbar input, .desk-toolbar select { min-width: 0; max-width: 100%; border: 1px solid #34343a; color: var(--ink); background: #19191c; border-radius: 6px; padding: .55rem .65rem; font: .73rem var(--font-ui); min-height: 36px; }
 .desk-toolbar input { width: 170px; }
 .desk-toolbar select { width: 140px; }
+#voidAsset { width: min(100%, 320px); }
+#voidRows td { overflow-wrap: anywhere; }
+#voidRows td small { display: block; margin-top: .3rem; color: var(--muted); }
+#voidRows details { min-width: 130px; }
+#voidRows summary { cursor: pointer; }
 /* ---- asset viewer ---- */
 .asset-fold > summary { color: #d7b4ff; }
 .asset-fold .fold-body, .asset-viewer { padding: 0 .2rem .8rem; }

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { config } from "./config.js";
+import { collectVoids } from "./trix-voids.js";
 import { loadMiningSurfaceCache, saveMiningSurfaceCache } from "./store.js";
 import {
   TOKEN_PLAN_URLS,
@@ -3899,6 +3900,10 @@ export async function sniffTrixMarket({ previous = null } = {}) {
  * treasury and the distinct geoff leg. All values are resilient (null on failure)
  * so a partial read never breaks the dashboard.
  */
+export async function sniffTrixVoids({ previous = null } = {}) {
+  return collectVoids({ previous, fetchJson, rpc: solanaRpc });
+}
+
 export async function sniffTrixMoney({ previous = null } = {}) {
   const started = Date.now();
   const endpoints = {
@@ -5895,6 +5900,7 @@ function trixAttempts(previous) {
     ["trix.geoff", sniffTrixGeoff({ previous: previous?.sources?.["trix.geoff"] || null })],
     ["trix.market", sniffTrixMarket()],
     ["trix.money", sniffTrixMoney()],
+    ["trix.voids", sniffTrixVoids({ previous: previous?.sources?.["trix.voids"] })],
     ["trix.boxes", sniffTrixBoxes()],
     ["trix.boxboard", sniffTrixBoxBoard()],
     ["trix.boxchain", sniffTrixBoxChain()],

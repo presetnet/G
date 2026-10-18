@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { restoreVoidHistory } from "./trix-voids.js";
 import { compileBriefing } from "./briefing.js";
 import { upsertDailyActivity } from "./daily-activity.js";
 import { upsertPond0x } from "./pond0x.js";
@@ -166,7 +167,7 @@ export async function getStoredPayload() {
     loadDailyActivity(),
   ]);
   return withBriefing({
-    latest,
+    latest: restoreVoidHistory(latest, state.voidLedger),
     events,
     dailyActivity,
     pond0x: null,
@@ -182,7 +183,7 @@ export async function getStoredPayload() {
  */
 export async function getSharedPayload({ sniffLive = true, forceMiningSurface = false } = {}) {
   const shared = await loadSharedBundle();
-  let latest = shared.latest;
+  let latest = restoreVoidHistory(shared.latest, shared.voidLedger);
   let newEvents = [];
   let events = shared.events || [];
   let dailyActivity = shared.dailyActivity || [];
@@ -195,7 +196,7 @@ export async function getSharedPayload({ sniffLive = true, forceMiningSurface = 
       shared.latest,
       preserveLastKnownTokenPress(
         shared.latest,
-        await runSniff({ forceMiningSurface, previous: shared.latest }),
+        await runSniff({ forceMiningSurface, previous: restoreVoidHistory(shared.latest, shared.voidLedger) }),
       ),
     );
     newEvents = translate(shared.latest, snapshot);
@@ -215,6 +216,7 @@ export async function getSharedPayload({ sniffLive = true, forceMiningSurface = 
         const temperature = computeTemperature(events, snapshot);
         await saveSharedBundle({
           latest: snapshot,
+          voidLedger: shared.voidLedger,
           events,
           dailyActivity,
           pond0x,
@@ -277,7 +279,7 @@ export async function pollAndTranslate({
   const startedState = persist ? await loadState() : { startedAt: null, pollCount: 0 };
   if (!startedState.startedAt) startedState.startedAt = new Date().toISOString();
 
-  const baseline = previous ?? (persist ? await loadLatestSnapshot() : null);
+  const baseline = restoreVoidHistory(previous ?? (persist ? await loadLatestSnapshot() : null), startedState.voidLedger);
   const snapshot = preserveTrixHistory(
     baseline,
     preserveLastKnownTokenPress(
@@ -298,6 +300,7 @@ export async function pollAndTranslate({
   const temperature = computeTemperature(events, snapshot);
   const state = {
     ...startedState,
+    voidLedger: snapshot.sources?.["trix.voids"]?.ledger || startedState.voidLedger || null,
     lastPollAt: snapshot.takenAt,
     lastError: null,
     pollCount: (startedState.pollCount || 0) + 1,
