@@ -16,8 +16,9 @@ const ACCOUNT_LIMIT = 1500;
 // endpoint, which answers in bursts and then returns HTTP 429. The collector
 // still honours its own deadline; only the per-tick budget changes.
 const RPC_TIER = process.env.HELIUS_API_KEY || process.env.SOLANA_RPC_URL
-  ? { receiptBatch: 60, receiptParallel: 6, accountQueue: 48 }
-  : { receiptBatch: 24, receiptParallel: 3, accountQueue: 12 };
+  ? { receiptBatch: 60, receiptParallel: 6, accountQueue: 48, accountsPerTick: 8, signaturePage: 1000 }
+  : { receiptBatch: 24, receiptParallel: 3, accountQueue: 12, accountsPerTick: 1, signaturePage: 100 };
+const SIGNATURE_PAGE = RPC_TIER.signaturePage;
 const assert = (ok, message) => { if (!ok) throw new Error(message); };
 const rawAmount = (value) => { assert(/^\d+$/.test(String(value)), "Invalid transfer amount"); return BigInt(value); };
 
@@ -234,37 +235,43 @@ async function discoverTreasuryHistory(ledger, rpc, fetchJson, now) {
     ledger.chainInventoryAt = now;
   }
   if (ledger.chainPending.length >= RPC_TIER.accountQueue) return;
-  const account = ledger.chainAccounts.find((a) => !a.complete);
-  if (!account) return;
-  if (!account.named) {
-    // Holder profiles supply optional names ONLY. Absence from this list never
-    // excludes an on-chain depositor or requires them to retain any holdings.
-    try {
-      const response = await fetchJson(`https://www.trix.market/api/holders/${account.mint}?limit=50`, { timeoutMs: 3500 });
-      for (const row of response.json?.holders || []) if (ADDRESS.test(row.address || "") && row.trixUsername && !row.isPool && !row.isVoid) ledger.names[row.address] = String(row.trixUsername).slice(0, 80);
-    } catch { /* Receipt discovery does not depend on the profile service. */ }
-    account.named = true;
+  const deadline = Date.now() + 12000;
+  // One account per tick left the receipt queue empty while 500+ accounts sat
+  // unscanned. Walk several accounts until the queue is full or the budget ends.
+  for (let scanned = 0; scanned < RPC_TIER.accountsPerTick; scanned++) {
+    if (Date.now() >= deadline || ledger.chainPending.length >= RPC_TIER.accountQueue) return;
+    const account = ledger.chainAccounts.find((a) => !a.complete);
+    if (!account) return;
+    if (!account.named) {
+      // Holder profiles supply optional names ONLY. Absence from this list never
+      // excludes an on-chain depositor or requires them to retain any holdings.
+      try {
+        const response = await fetchJson(`https://www.trix.market/api/holders/${account.mint}?limit=50`, { timeoutMs: 3500 });
+        for (const row of response.json?.holders || []) if (ADDRESS.test(row.address || "") && row.trixUsername && !row.isPool && !row.isVoid) ledger.names[row.address] = String(row.trixUsername).slice(0, 80);
+      } catch { /* Receipt discovery does not depend on the profile service. */ }
+      account.named = true;
+    }
+    if (!ledger.assetSupplies[account.mint]) {
+      try {
+        const supply = await rpc("getTokenSupply", [account.mint, { commitment: "finalized" }], { timeoutMs: 3500 });
+        if (supply?.value?.amount && Number.isInteger(supply.value.decimals)) ledger.assetSupplies[account.mint] = { amountRaw: supply.value.amount, decimals: supply.value.decimals, checkedAt: now, slot: supply.context?.slot };
+      } catch { /* Missing supply never prevents ranking exact transfer amounts. */ }
+    }
+    const signatures = await rpc("getSignaturesForAddress", [account.address, { limit: SIGNATURE_PAGE, commitment: "finalized", ...(account.before ? { before: account.before } : {}) }], { timeoutMs: 4500 });
+    assert(Array.isArray(signatures), "Treasury token history unavailable");
+    const known = new Set([...ledger.chainSeen, ...ledger.chainPending.map((p) => `${p.signature}:${p.mint}`)]);
+    for (const row of signatures) {
+      if (row.err || !SIGNATURE.test(row.signature || "")) continue;
+      const key = `${row.signature}:${account.mint}`;
+      if (!known.has(key)) ledger.chainPending.push({ signature: row.signature, mint: account.mint, symbol: account.symbol, attempts: 0 });
+    }
+    const next = signatures.at(-1)?.signature;
+    assert(!next || next !== account.before, "Chain history cursor did not advance");
+    account.before = next || account.before;
+    account.complete = signatures.length < SIGNATURE_PAGE;
+    const oldest = signatures.at(-1)?.blockTime;
+    if (oldest) account.oldestAt = new Date(oldest * 1000).toISOString();
   }
-  if (!ledger.assetSupplies[account.mint]) {
-    try {
-      const supply = await rpc("getTokenSupply", [account.mint, { commitment: "finalized" }], { timeoutMs: 3500 });
-      if (supply?.value?.amount && Number.isInteger(supply.value.decimals)) ledger.assetSupplies[account.mint] = { amountRaw: supply.value.amount, decimals: supply.value.decimals, checkedAt: now, slot: supply.context?.slot };
-    } catch { /* Missing supply never prevents ranking exact transfer amounts. */ }
-  }
-  const signatures = await rpc("getSignaturesForAddress", [account.address, { limit: 100, commitment: "finalized", ...(account.before ? { before: account.before } : {}) }], { timeoutMs: 4500 });
-  assert(Array.isArray(signatures), "Treasury token history unavailable");
-  const known = new Set([...ledger.chainSeen, ...ledger.chainPending.map((p) => `${p.signature}:${p.mint}`)]);
-  for (const row of signatures) {
-    if (row.err || !SIGNATURE.test(row.signature || "")) continue;
-    const key = `${row.signature}:${account.mint}`;
-    if (!known.has(key)) ledger.chainPending.push({ signature: row.signature, mint: account.mint, symbol: account.symbol, attempts: 0 });
-  }
-  const next = signatures.at(-1)?.signature;
-  assert(!next || next !== account.before, "Chain history cursor did not advance");
-  account.before = next || account.before;
-  account.complete = signatures.length < 100;
-  const oldest = signatures.at(-1)?.blockTime;
-  if (oldest) account.oldestAt = new Date(oldest * 1000).toISOString();
 }
 
 export async function collectVoids({ previous, fetchJson, rpc, now = new Date().toISOString() }) {
