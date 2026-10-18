@@ -1,5 +1,5 @@
 import { config } from "./config.js";
-import { restoreVoidHistory } from "./trix-voids.js";
+import { restoreVoidHistory, publicVoidSource } from "./trix-voids.js";
 import { compileBriefing } from "./briefing.js";
 import { upsertDailyActivity } from "./daily-activity.js";
 import { upsertPond0x } from "./pond0x.js";
@@ -54,6 +54,8 @@ export function publicConfig() {
 
 function withBriefing(payload) {
   const latest = filterEvidence(payload.latest);
+  if (latest?.sources?.["trix.voids"]) latest.sources["trix.voids"] = publicVoidSource(latest.sources["trix.voids"]);
+  if (payload.state?.voidLedger) { const { voidLedger, ...state } = payload.state; payload = { ...payload, state }; }
   if (latest) latest.summary = summarizeSnapshot(latest.sources, latest.takenAt);
   const recent = (rows) => (rows || []).filter((row) => {
     const age = Date.now() - Date.parse(row.at || "");

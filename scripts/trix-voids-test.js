@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { voidCandidate, verifyVoidTransfer, collectVoids, summarizeVoids, restoreVoidHistory, VOID_TREASURY } from "../server/trix-voids.js";
+import { voidCandidate, verifyVoidTransfer, collectVoids, summarizeVoids, restoreVoidHistory, candidatesFromTreasuryReceipt, publicVoidSource, VOID_TREASURY, SHOCKER_MINT } from "../server/trix-voids.js";
 import { rankVoiders, voidAmount } from "../public/trix-void-board.js";
 import { normalizeBundle } from "../server/shared-store.js";
 import { filterEvidence } from "../public/evidence.js";
@@ -54,7 +54,10 @@ test("native voids require an exact feed-to-receipt amount, not inferred treasur
 });
 
 test("deduped credits survive later sales, empty feeds and RPC outages", async () => {
-  const rpc = async (method) => { assert.equal(method, "getTransaction", "collector never asks for current holdings"); return receipt(); };
+  const rpc = async (method, params) => {
+    if (method === "getTokenAccountsByOwner") { assert.equal(params[0], VOID_TREASURY, "only treasury accounts are inventoried, never individual current holdings"); return { value: [] }; }
+    assert.equal(method, "getTransaction"); return receipt();
+  };
   const first = await collectVoids({ fetchJson: async () => json([event, event]), rpc });
   assert.equal(first.verifiedEvents, 1);
   const again = await collectVoids({ previous: first, fetchJson: async () => json([{ ...event, side: "sell" }]), rpc });
@@ -99,4 +102,37 @@ test("asset-specific ranking is exact and never sums different coins", () => {
   assert.equal(rankVoiders(rows)[0].wallet, "b");
   assert.equal(rankVoiders(rows, mint)[0].wallet, "a");
   assert.equal(voidAmount("9007199254740993", 6), "9,007,199,254.740993");
+});
+
+test("direct treasury history recovers a depositor missing from both feed and holder lists", async () => {
+  const tx = receipt();
+  for (const b of [...tx.meta.preTokenBalances, ...tx.meta.postTokenBalances]) b.mint = SHOCKER_MINT;
+  const rpc = async (method, params) => {
+    if (method === "getTokenAccountsByOwner") {
+      assert.equal(params[0], VOID_TREASURY);
+      return { value: [{ pubkey: destination, account: { data: { parsed: { info: { owner: VOID_TREASURY, mint: SHOCKER_MINT, tokenAmount: { amount: "0" } } } } } }] };
+    }
+    if (method === "getSignaturesForAddress") { assert.equal(params[0], destination); return [{ signature, err: null, blockTime: tx.blockTime }]; }
+    if (method === "getTokenSupply") return { value: { amount: "100000000", decimals: 6 } };
+    if (method === "getTransaction") return tx;
+    throw Error(`Unexpected ${method}`);
+  };
+  const s = await collectVoids({ rpc, fetchJson: async url => url.includes('/holders/') ? { ok: true, json: { holders: [] } } : json([]) });
+  assert.equal(s.verifiedEvents, 1);
+  assert.equal(s.leaderboard[0].wallet, wallet);
+  assert.equal(s.leaderboard[0].assets[SHOCKER_MINT].amountRaw, "5000000");
+  assert.equal(s.leaderboard[0].assets[SHOCKER_MINT].supplyPct, 5);
+  assert.equal(s.ledger.chainPending.length, 0);
+  assert.equal(s.ledger.chainReceiptsChecked, 1);
+  const again = await collectVoids({ previous: s, rpc, fetchJson: async()=>json([]) });
+  assert.equal(again.verifiedEvents, 1, "history and feed overlap do not duplicate credits");
+  assert.equal(candidatesFromTreasuryReceipt({ ...tx, meta: { ...tx.meta, err: { failed: true } } }, signature, SHOCKER_MINT, "SHOCKER").length, 0);
+  const projected = publicVoidSource(s);
+  assert.equal(projected.totalWallets, 1);
+  assert.equal(projected.ledger.chainAccountCount, 1);
+  assert.equal(projected.ledger.chainAccounts, undefined, "scan inventory is not shipped to every browser");
+  assert.equal(projected.ledger.chainSeen, undefined);
+  assert.equal(projected.assetLeaderboards[SHOCKER_MINT][0].assets[SHOCKER_MINT].supplyPct, 5);
+  assert.equal(s.ledger.chainAccounts.length, 1, "projection must not remove persisted scan state");
+  assert.ok(Buffer.byteLength(JSON.stringify(projected)) < 600000);
 });
