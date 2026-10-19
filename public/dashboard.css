@@ -222,6 +222,8 @@
 .void-sortable:hover { color: var(--text); }
 .void-sortable.sorted { color: var(--text); border-bottom: 2px solid currentColor; }
 .void-amount u { color: var(--muted); text-decoration: none; font-size: .85em; }
+.void-wallet { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; color: var(--muted); }
+.void-wallet:hover { color: var(--text); }
 .void-notes { margin-top: .8rem; border-top: 1px solid var(--line, rgba(255,255,255,.12)); padding-top: .6rem; }
 .void-notes summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
 .void-notes p { font-size: .88rem; color: var(--muted); margin: .5rem 0 0; }
