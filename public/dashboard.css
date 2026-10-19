@@ -201,10 +201,25 @@
 .desk-toolbar input { width: 170px; }
 .desk-toolbar select { width: 140px; }
 #voidAsset { width: min(100%, 320px); }
+#voidSearch { width: min(100%, 220px); }
 #voidRows td { overflow-wrap: anywhere; }
 #voidRows td small { display: block; margin-top: .3rem; color: var(--muted); }
-#voidRows details { min-width: 130px; }
+#voidRows details { min-width: 90px; }
 #voidRows summary { cursor: pointer; }
+.void-head { font-size: .95rem; margin: .2rem 0 .6rem; color: var(--muted); }
+.void-head b { color: var(--text); }
+.void-table { font-size: .92rem; }
+.void-table td { padding-top: .35rem; padding-bottom: .35rem; vertical-align: top; }
+.void-table .void-rank { color: var(--muted); width: 2.2rem; }
+.void-table .void-when { white-space: nowrap; color: var(--muted); }
+.void-table .void-assets { display: flex; flex-wrap: wrap; gap: .25rem .6rem; }
+.void-amount { white-space: nowrap; }
+.void-amount i { color: var(--muted); font-style: normal; font-size: .85em; }
+.void-amount b { color: var(--muted); font-weight: 600; font-size: .85em; }
+.void-more { color: var(--muted); white-space: nowrap; }
+.void-notes { margin-top: .8rem; border-top: 1px solid var(--line, rgba(255,255,255,.12)); padding-top: .6rem; }
+.void-notes summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
+.void-notes p { font-size: .88rem; color: var(--muted); margin: .5rem 0 0; }
 /* ---- asset viewer ---- */
 .asset-fold > summary { color: #d7b4ff; }
 .asset-fold .fold-body, .asset-viewer { padding: 0 .2rem .8rem; }
