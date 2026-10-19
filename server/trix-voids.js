@@ -423,32 +423,38 @@ export async function collectVoids({ previous, fetchJson, rpc, now = new Date().
   for (let offset = 0; offset < chainBatch.length; offset += RPC_TIER.receiptParallel) await Promise.all(chainBatch.slice(offset, offset + RPC_TIER.receiptParallel).map(async (entry) => {
     if (Date.now() >= deadline) return;
     entry.attempts++;
+    const drop = () => { ledger.chainPending = ledger.chainPending.filter((p) => p !== entry); };
+    let tx;
     try {
-      const tx = await rpc("getTransaction", [entry.signature, { encoding: "jsonParsed", commitment: "finalized", maxSupportedTransactionVersion: 0 }], { timeoutMs: 4500 });
-      assert(tx, "Historical receipt not available");
-      const candidates = candidatesFromTreasuryReceipt(tx, entry.signature, entry.mint, entry.symbol);
-      ledger.chainReceiptsChecked = (ledger.chainReceiptsChecked || 0) + 1;
-      for (const candidate of candidates) {
-        if (known.has(candidate.key)) continue;
-        try {
-          const verified = verifyVoidTransfer(candidate, tx);
-          absorbVerified(ledger, verified); known.add(verified.key);
-        } catch (e) { ledger.chainUnverified = (ledger.chainUnverified || 0) + 1; failures.push(`Historical verification: ${e.message}`); }
-      }
-      ledger.chainSeen.push(`${entry.signature}:${entry.mint}`);
-      ledger.chainPending = ledger.chainPending.filter((p) => p !== entry);
-      // History cursors prevent rescans; this is only an overlap guard.
-      if (ledger.chainSeen.length > 5000) ledger.chainSeen = ledger.chainSeen.slice(-5000);
+      tx = await rpc("getTransaction", [entry.signature, { encoding: "jsonParsed", commitment: "finalized", maxSupportedTransactionVersion: 0 }], { timeoutMs: 3000 });
     } catch (e) {
-      // An unreadable or permanently rejected receipt used to stay queued for
-      // ever, and those repeats ate the whole per-run batch and stalled every
-      // account behind them. Give up after a few tries and say so.
-      if (entry.attempts >= 3) {
-        ledger.chainUnreadable = (ledger.chainUnreadable || 0) + 1;
-        ledger.chainPending = ledger.chainPending.filter((p) => p !== entry);
-      }
+      // A transport failure is transient; give it a few tries, then let it go.
+      if (entry.attempts >= 3) { ledger.chainUnreadable = (ledger.chainUnreadable || 0) + 1; drop(); }
       failures.push(`Historical receipt: ${e.message}`);
+      return;
     }
+    if (!tx) {
+      // No record at all is pruned history, not a blip. Retrying it burned the
+      // whole run's time budget on signatures the provider will never return.
+      ledger.chainUnreadable = (ledger.chainUnreadable || 0) + 1;
+      ledger.chainPruned = (ledger.chainPruned || 0) + 1;
+      drop();
+      failures.push("Historical receipt: provider holds no record of this transaction");
+      return;
+    }
+    const candidates = candidatesFromTreasuryReceipt(tx, entry.signature, entry.mint, entry.symbol);
+    ledger.chainReceiptsChecked = (ledger.chainReceiptsChecked || 0) + 1;
+    for (const candidate of candidates) {
+      if (known.has(candidate.key)) continue;
+      try {
+        const verified = verifyVoidTransfer(candidate, tx);
+        absorbVerified(ledger, verified); known.add(verified.key);
+      } catch (e) { ledger.chainUnverified = (ledger.chainUnverified || 0) + 1; failures.push(`Historical verification: ${e.message}`); }
+    }
+    ledger.chainSeen.push(`${entry.signature}:${entry.mint}`);
+    drop();
+    // History cursors prevent rescans; this is only an overlap guard.
+    if (ledger.chainSeen.length > 5000) ledger.chainSeen = ledger.chainSeen.slice(-5000);
   }));
   return { source: "trix.voids", ok: recentOk || (ledger.verifiedCount || 0) > 0 || ledger.records.length > 0, stale: !recentOk, status: recentOk ? 200 : 0,
     checkedAt: now, dataUpdatedAt: ledger.lastFeedAt || null, treasury: VOID_TREASURY, sourceUrl: VOID_FEED,
@@ -479,7 +485,7 @@ export function publicVoidSource(source) {
       chainAccountCount: ledger.chainAccounts?.length || 0, chainPendingCount: ledger.chainPending?.length || 0,
       chainCompleteCount: ledger.chainAccounts?.filter((a) => a.complete).length || 0,
       chainReceiptsChecked: ledger.chainReceiptsChecked || 0, chainUnverified: ledger.chainUnverified || 0,
-      chainUnreadable: ledger.chainUnreadable || 0, chainAccountErrors: ledger.chainAccountErrors || 0, chainDeferred: ledger.chainDeferred || [],
+      chainUnreadable: ledger.chainUnreadable || 0, chainPruned: ledger.chainPruned || 0, chainAccountErrors: ledger.chainAccountErrors || 0, chainDeferred: ledger.chainDeferred || [],
       chainToken2022Accounts: ledger.chainToken2022Accounts || 0, chainToken2022Unavailable: !!ledger.chainToken2022Unavailable,
       chainInventoryCapped: ledger.chainInventoryCapped, records: [] },
   };

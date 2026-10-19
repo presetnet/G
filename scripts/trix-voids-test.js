@@ -263,6 +263,7 @@ test("a receipt that stays unreadable is dropped instead of retried forever", as
   const tx = receipt();
   for (const b of [...tx.meta.preTokenBalances, ...tx.meta.postTokenBalances]) b.mint = SHOCKER_MINT;
   const deadSig = "8".repeat(64);
+  let deadCalls = 0;
   const rpc = async (method, params) => {
     if (method === "getTokenAccountsByOwner") {
       return { value: [{ pubkey: GOOD, account: { data: { parsed: { info: { owner: VOID_TREASURY, mint: SHOCKER_MINT, tokenAmount: { amount: "0" } } } } } }] };
@@ -270,18 +271,16 @@ test("a receipt that stays unreadable is dropped instead of retried forever", as
     if (method === "getTokenSupply") return { value: { amount: "100000000", decimals: 6 } };
     if (method === "getSignaturesForAddress") return [{ signature: deadSig, err: null, blockTime: tx.blockTime }, { signature, err: null, blockTime: tx.blockTime }];
     if (method === "getTransaction") {
-      if (params[0] === deadSig) return null; // never readable, e.g. pruned history
+      if (params[0] === deadSig) { deadCalls++; return null; } // pruned history: never retry
       return tx;
     }
     throw Error(`Unexpected ${method}`);
   };
   const fetchJson = async (url) => url.includes("/holders/") ? { ok: true, json: { holders: [] } } : json([]);
-  let out = await collectVoids({ rpc, fetchJson });
-  assert.equal(out.verifiedEvents, 1, "the readable receipt is still credited beside the dead one");
-  assert.ok(out.ledger.chainPending.some((p) => p.signature === deadSig), "an unreadable receipt is retried, not dropped on the first miss");
-  out = await collectVoids({ previous: out, rpc, fetchJson });
-  out = await collectVoids({ previous: out, rpc, fetchJson });
-  assert.equal(out.ledger.chainPending.some((p) => p.signature === deadSig), false, "a permanently unreadable receipt leaves the queue");
-  assert.equal(out.ledger.chainUnreadable, 1);
-  assert.equal(out.verifiedEvents, 1, "verified credits survive the dropped receipt");
+  const out = await collectVoids({ rpc, fetchJson });
+  assert.equal(out.verifiedEvents, 1, "the readable receipt is still credited beside the pruned one");
+  assert.equal(deadCalls, 1, "a signature the provider does not hold is asked for exactly once");
+  assert.equal(out.ledger.chainPending.some((p) => p.signature === deadSig), false, "pruned history leaves the queue immediately");
+  assert.equal(out.ledger.chainPruned, 1);
+  assert.equal(out.verifiedEvents, 1);
 });
