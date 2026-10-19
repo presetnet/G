@@ -288,23 +288,25 @@ async function discoverTreasuryHistory(ledger, rpc, fetchJson, now) {
       const signatures = await rpc("getSignaturesForAddress", [account.address, { limit: SIGNATURE_PAGE, commitment: "finalized", ...(account.before ? { before: account.before } : {}) }], { timeoutMs: 4500 });
       assert(Array.isArray(signatures), "Treasury token history unavailable");
       const known = new Set([...ledger.chainSeen, ...ledger.chainPending.map((p) => `${p.signature}:${p.mint}`)]);
-      let consumedAll = true;
+      let consumedAll = true, cursor = signatures.at(-1)?.signature;
       for (const row of signatures) {
         if (row.err || !SIGNATURE.test(row.signature || "")) continue;
         const key = `${row.signature}:${account.mint}`;
-        if (known.has(key)) continue;
-        // Stop cleanly mid-page: the cursor stays put, so the remainder is
-        // re-read next run instead of being skipped for good.
+        // Already queued or already seen still counts as consumed: the evidence
+        // is already in hand, so the cursor may pass it.
+        if (known.has(key)) { cursor = row.signature; continue; }
+        // Out of room. Stop here and advance the cursor only as far as we got,
+        // so the next run resumes exactly where this one stopped.
         if (enqueued >= room) { consumedAll = false; break; }
         ledger.chainPending.push({ signature: row.signature, mint: account.mint, symbol: account.symbol, attempts: 0 });
         known.add(key); enqueued++;
+        cursor = row.signature;
       }
-      if (!consumedAll) { account.pendingPage = true; continue; }
-      account.pendingPage = false;
-      const next = signatures.at(-1)?.signature;
+      account.pendingPage = !consumedAll;
+      const next = cursor;
       assert(!next || next !== account.before, "Chain history cursor did not advance");
       account.before = next || account.before;
-      account.complete = signatures.length < SIGNATURE_PAGE;
+      account.complete = consumedAll && signatures.length < SIGNATURE_PAGE;
       account.retryAfter = null;
       const oldest = signatures.at(-1)?.blockTime;
       if (oldest) account.oldestAt = new Date(oldest * 1000).toISOString();

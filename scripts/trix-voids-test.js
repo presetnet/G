@@ -212,6 +212,36 @@ test("provider rate limiting is counted apart from bad data", async () => {
   assert.ok(throttledAgain.ledger.chainPending[0].deferUntil > Date.now(), "a throttled receipt is parked, not dropped");
 });
 
+test("a page larger than the queue room still advances the account cursor", async () => {
+  // The failure this guards: a 1000-signature page that never fits in the free
+  // queue slots, so the cursor never moves and the account never completes.
+  const GOOD = "V".repeat(32);
+  const tx = receipt();
+  for (const b of [...tx.meta.preTokenBalances, ...tx.meta.postTokenBalances]) b.mint = SHOCKER_MINT;
+  const sigs = Array.from({ length: 40 }, (_, i) => `4${String.fromCharCode(65 + (i % 26))}`.repeat(32));
+  let served = 0;
+  const rpc = async (method, params) => {
+    if (method === "getTokenAccountsByOwner") return { value: [{ pubkey: GOOD, account: { data: { parsed: { info: { owner: VOID_TREASURY, mint: SHOCKER_MINT, tokenAmount: { amount: "0" } } } } } }] };
+    if (method === "getTokenSupply") return { value: { amount: "100000000", decimals: 6 } };
+    if (method === "getSignaturesForAddress") {
+      const before = params[1].before;
+      const rows = before ? sigs.filter((s) => sigs.indexOf(s) > sigs.indexOf(before)) : sigs;
+      served += rows.length;
+      return rows.map((s) => ({ signature: s, err: null, blockTime: tx.blockTime }));
+    }
+    if (method === "getTransaction") return tx;
+    throw Error(`Unexpected ${method}`);
+  };
+  const fetchJson = async (url) => url.includes("/holders/") ? { ok: true, json: { holders: [] } } : json([]);
+  const first = await collectVoids({ rpc, fetchJson });
+  const account = first.ledger.chainAccounts.find((a) => a.address === GOOD);
+  assert.ok(account.before, "the cursor advanced past the signatures it could not queue");
+  assert.ok(first.ledger.chainReceiptsChecked > 0, "the queued receipts were actually sent for verification");
+  assert.ok(served > 20, "a later run re-reads history instead of skipping it");
+  const second = await collectVoids({ previous: first, rpc, fetchJson });
+  assert.ok(second.ledger.chainAccounts.find((a) => a.address === GOOD).before, "the cursor survives to the next run");
+});
+
 test("a ledger that reached the old retention cap keeps every credit and resumes discovery", async () => {
   // The pre-rollup ledger stored one row per receipt and stopped the entire scan
   // at 2500 rows. That silently truncated every all-time ranking from there on.
