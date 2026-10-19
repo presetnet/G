@@ -3900,12 +3900,13 @@ export async function sniffTrixMarket({ previous = null } = {}) {
  * treasury and the distinct geoff leg. All values are resilient (null on failure)
  * so a partial read never breaks the dashboard.
  */
-export async function sniffTrixVoids({ previous = null } = {}) {
-  // Market caps and user points already live in sibling sources. Passing them in
-  // costs no extra requests and lets the VOIDer rows carry real price and points
-  // instead of leaving those columns empty or estimated.
+export async function sniffTrixVoids({ previous = null, siblings = null } = {}) {
+  // Market caps and user points already live in sibling sources. They are passed
+  // in rather than refetched, so the VOIDer rows can carry real price and points
+  // instead of leaving those columns empty or estimated. `previous` stays the
+  // voids source itself: that object holds the ledger this collector extends.
   return collectVoids({ previous, fetchJson, rpc: solanaRpc,
-    market: previous?.sources?.["trix.meme.market"], leaderboard: previous?.sources?.["trix.market"] });
+    market: siblings?.["trix.meme.market"] || null, leaderboard: siblings?.["trix.market"] || null });
 }
 
 export async function sniffTrixMoney({ previous = null } = {}) {
@@ -5904,7 +5905,7 @@ function trixAttempts(previous) {
     ["trix.geoff", sniffTrixGeoff({ previous: previous?.sources?.["trix.geoff"] || null })],
     ["trix.market", sniffTrixMarket()],
     ["trix.money", sniffTrixMoney()],
-    ["trix.voids", sniffTrixVoids({ previous: previous?.sources?.["trix.voids"] })],
+    ["trix.voids", sniffTrixVoids({ previous: previous?.sources?.["trix.voids"], siblings: previous?.sources || null })],
     ["trix.boxes", sniffTrixBoxes()],
     ["trix.boxboard", sniffTrixBoxBoard()],
     ["trix.boxchain", sniffTrixBoxChain()],
