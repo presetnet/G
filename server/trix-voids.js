@@ -20,10 +20,9 @@ const RPC_TIER = process.env.HELIUS_API_KEY || process.env.SOLANA_RPC_URL
   ? { receiptBatch: 240, receiptParallel: 6, accountQueue: 2400, accountsPerTick: 8, signaturePage: 1000 }
   : { receiptBatch: 24, receiptParallel: 3, accountQueue: 200, accountsPerTick: 1, signaturePage: 100 };
 const SIGNATURE_PAGE = RPC_TIER.signaturePage;
-// Only open a new account page when the queue has room for a WHOLE page.
-// Enqueuing into a full queue leaves a page half-consumed forever, so no
-// account ever completes and discovery stalls at the same count run after run.
-const ACCOUNT_QUEUE_ROOM = RPC_TIER.signaturePage;
+// Only open a new account page when the queue has real room. Enqueuing into a
+// full queue leaves a page half-consumed forever, so no account ever completes.
+const ACCOUNT_QUEUE_ROOM = Math.max(25, Math.floor(RPC_TIER.accountQueue / 4));
 const assert = (ok, message) => { if (!ok) throw new Error(message); };
 const rawAmount = (value) => { assert(/^\d+$/.test(String(value)), "Invalid transfer amount"); return BigInt(value); };
 
@@ -423,23 +422,28 @@ const deadline = Date.now() + 35000;
       failures.push(`Receipt evidence: ${record.reason}`);
     }
   }));
-  const chainBatch = (ledger.chainPending || []).sort((a, b) => a.attempts - b.attempts).slice(0, RPC_TIER.receiptBatch);
+  const chainBatch = (ledger.chainPending || []).filter((e) => !e.deferUntil || e.deferUntil <= Date.now()).sort((a, b) => a.attempts - b.attempts).slice(0, RPC_TIER.receiptBatch);
   for (let offset = 0; offset < chainBatch.length; offset += RPC_TIER.receiptParallel) await Promise.all(chainBatch.slice(offset, offset + RPC_TIER.receiptParallel).map(async (entry) => {
-    if (Date.now() >= deadline) return;
-    entry.attempts++;
+if (Date.now() >= deadline) return;
     const drop = () => { ledger.chainPending = ledger.chainPending.filter((p) => p !== entry); };
     let tx;
     try {
       tx = await rpc("getTransaction", [entry.signature, { encoding: "jsonParsed", commitment: "finalized", maxSupportedTransactionVersion: 0 }], { timeoutMs: 3000 });
     } catch (e) {
-      // A transport failure is transient; give it a few tries, then let it go.
-      // Rate limiting is counted apart: it is provider capacity, not bad data,
-      // and it is the one thing no amount of local tuning can fix.
-      if (String(e.message).includes("429")) ledger.chainRateLimited = (ledger.chainRateLimited || 0) + 1;
-      if (entry.attempts >= 3) { ledger.chainUnreadable = (ledger.chainUnreadable || 0) + 1; drop(); }
+      // Throttling is provider capacity, not bad evidence. It must never spend a
+      // retry: doing so turned a quiet period into permanently discarded
+      // deposits. Park the entry briefly so the rest of the queue gets a turn.
+      if (String(e.message).includes("429")) {
+        ledger.chainRateLimited = (ledger.chainRateLimited || 0) + 1;
+        entry.deferUntil = Date.now() + 5 * 60_000;
+      } else {
+        entry.attempts++;
+        if (entry.attempts >= 3) { ledger.chainUnreadable = (ledger.chainUnreadable || 0) + 1; drop(); }
+      }
       failures.push(`Historical receipt: ${e.message}`);
       return;
     }
+    entry.attempts++;
     if (!tx) {
       // No record at all is pruned history, not a blip. Retrying it burned the
       // whole run's time budget on signatures the provider will never return.

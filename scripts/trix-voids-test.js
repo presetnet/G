@@ -203,6 +203,13 @@ test("provider rate limiting is counted apart from bad data", async () => {
   assert.equal(out.ledger.chainRateLimited, 1, "a throttled call is reported as capacity, not as missing evidence");
   assert.ok(!out.ledger.chainUnreadable, "a throttled call is never mistaken for unreadable history");
   assert.equal(out.verifiedEvents, 0);
+  // Repeated throttling must never turn a readable receipt into discarded evidence.
+  const throttled = await collectVoids({ previous: out, rpc, fetchJson });
+  const throttledAgain = await collectVoids({ previous: throttled, rpc, fetchJson });
+  assert.equal(throttledAgain.ledger.chainRateLimited, 1, "a parked receipt is not re-burned on the next run");
+  assert.ok(!throttledAgain.ledger.chainUnreadable, "throttling spends no retry budget, so nothing is discarded");
+  assert.equal(throttledAgain.ledger.chainPending.length, 1, "the receipt stays queued for when capacity frees up");
+  assert.ok(throttledAgain.ledger.chainPending[0].deferUntil > Date.now(), "a throttled receipt is parked, not dropped");
 });
 
 test("a ledger that reached the old retention cap keeps every credit and resumes discovery", async () => {
