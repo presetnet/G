@@ -16,9 +16,13 @@ const ACCOUNT_LIMIT = 1500;
 // endpoint, which answers in bursts and then returns HTTP 429. The collector
 // still honours its own deadline; only the per-tick budget changes.
 const RPC_TIER = process.env.HELIUS_API_KEY || process.env.SOLANA_RPC_URL
-  ? { receiptBatch: 60, receiptParallel: 6, accountQueue: 48, accountsPerTick: 8, signaturePage: 1000 }
+  ? { receiptBatch: 120, receiptParallel: 8, accountQueue: 240, accountsPerTick: 8, signaturePage: 1000 }
   : { receiptBatch: 24, receiptParallel: 3, accountQueue: 12, accountsPerTick: 1, signaturePage: 100 };
 const SIGNATURE_PAGE = RPC_TIER.signaturePage;
+// A 1000-signature page can queue far more receipts than one run verifies, which
+// starves the account walk behind the backlog. Enqueue at most this many new
+// receipts per run; an unfinished page is re-read next run rather than skipped.
+const ENQUEUE_PER_RUN = RPC_TIER.receiptBatch * 2;
 const assert = (ok, message) => { if (!ok) throw new Error(message); };
 const rawAmount = (value) => { assert(/^\d+$/.test(String(value)), "Invalid transfer amount"); return BigInt(value); };
 
@@ -237,10 +241,11 @@ async function discoverTreasuryHistory(ledger, rpc, fetchJson, now) {
   if (ledger.chainPending.length >= RPC_TIER.accountQueue) return;
   const deadline = Date.now() + 12000;
   const deferred = [];
+  let enqueued = 0;
   // One account per tick left the receipt queue empty while 500+ accounts sat
   // unscanned. Walk several accounts until the queue is full or the budget ends.
   for (let scanned = 0; scanned < RPC_TIER.accountsPerTick; scanned++) {
-    if (Date.now() >= deadline || ledger.chainPending.length >= RPC_TIER.accountQueue) break;
+    if (Date.now() >= deadline || ledger.chainPending.length >= RPC_TIER.accountQueue || enqueued >= ENQUEUE_PER_RUN) break;
     // An account that fails or refuses to advance its cursor is parked briefly.
     // Without this, one stubborn account is re-picked every run and the 500
     // accounts behind it are never reached.
@@ -265,11 +270,19 @@ async function discoverTreasuryHistory(ledger, rpc, fetchJson, now) {
       const signatures = await rpc("getSignaturesForAddress", [account.address, { limit: SIGNATURE_PAGE, commitment: "finalized", ...(account.before ? { before: account.before } : {}) }], { timeoutMs: 4500 });
       assert(Array.isArray(signatures), "Treasury token history unavailable");
       const known = new Set([...ledger.chainSeen, ...ledger.chainPending.map((p) => `${p.signature}:${p.mint}`)]);
+      let consumedAll = true;
       for (const row of signatures) {
         if (row.err || !SIGNATURE.test(row.signature || "")) continue;
         const key = `${row.signature}:${account.mint}`;
-        if (!known.has(key)) ledger.chainPending.push({ signature: row.signature, mint: account.mint, symbol: account.symbol, attempts: 0 });
+        if (known.has(key)) continue;
+        // Stop cleanly mid-page: the cursor stays put, so the remainder is
+        // re-read next run instead of being skipped for good.
+        if (enqueued >= ENQUEUE_PER_RUN) { consumedAll = false; break; }
+        ledger.chainPending.push({ signature: row.signature, mint: account.mint, symbol: account.symbol, attempts: 0 });
+        known.add(key); enqueued++;
       }
+      if (!consumedAll) { account.pendingPage = true; continue; }
+      account.pendingPage = false;
       const next = signatures.at(-1)?.signature;
       assert(!next || next !== account.before, "Chain history cursor did not advance");
       account.before = next || account.before;
