@@ -128,6 +128,51 @@ function migrateLedger(ledger) {
   ledger.capped = false;
 }
 
+// TRIX publishes a market cap per coin and a points table keyed by wallet. Both
+// are real published numbers, joined here rather than estimated: price is the
+// published cap divided by the on-chain supply this collector already reads.
+function attachMarketAndPoints(ledger, market, leaderboard) {
+  if (market?.coins?.length) {
+    const coins = {};
+    for (const coin of market.coins) {
+      if (!ADDRESS.test(coin?.mintAddress || "") || !Number.isFinite(coin.currentMarketCap)) continue;
+      coins[coin.mintAddress] = { name: coin.tokenName || null, symbol: coin.ticker || null,
+        logo: typeof coin.logoUrl === "string" && coin.logoUrl.startsWith("http") ? coin.logoUrl : null,
+        marketCap: coin.currentMarketCap, marketCapAt: coin.marketCapUpdatedAt || null };
+    }
+    ledger.market = { at: market.checkedAt || null, total: market.catalogTotal ?? market.totalCoins ?? null, coins };
+  }
+  const rows = leaderboard?.leaderboard?.rows;
+  if (Array.isArray(rows) && rows.length) {
+    const points = {};
+    for (const row of rows) {
+      if (!ADDRESS.test(row?.wallet || "") || !Number.isFinite(row.points)) continue;
+      points[row.wallet] = { points: row.points, rank: Number.isSafeInteger(row.rank) ? row.rank : null,
+        username: row.username ? String(row.username).slice(0, 80) : null };
+    }
+    ledger.points = { at: leaderboard.checkedAt || null, entries: leaderboard.leaderboard.entries ?? rows.length,
+      capped: !!leaderboard.leaderboard.capped, rows: points };
+  }
+}
+
+// Price per token from the published cap and the supply read from chain. Returns
+// null rather than a guess when either side is missing.
+function unitPriceUsd(ledger, mint, decimals) {
+  const cap = ledger.market?.coins?.[mint];
+  const supply = ledger.assetSupplies?.[mint];
+  if (!cap || !Number.isFinite(cap.marketCap) || !supply?.amountRaw || !Number.isFinite(decimals)) return null;
+  const tokens = Number(supply.amountRaw) / 10 ** decimals;
+  if (!Number.isFinite(tokens) || tokens <= 0) return null;
+  return cap.marketCap / tokens;
+}
+
+// Join whatever published market and points data is available, then summarize.
+// Used by the collector and by tests that need the enriched shape directly.
+export function summarizeVoidsWith(ledger, market = null, leaderboard = null) {
+  attachMarketAndPoints(ledger, market, leaderboard);
+  return summarizeVoids(ledger);
+}
+
 export function summarizeVoids(ledger) {
   const wallets = new Map(), assets = new Map();
   const rolled = ledger.totals && Object.keys(ledger.totals).length ? Object.values(ledger.totals) : null;
@@ -137,25 +182,46 @@ export function summarizeVoids(ledger) {
     const name = catalogName(ledger, event.wallet) || event.username;
     if (name) wallet.username = name;
     const coin = ledger.catalog?.mints?.[event.asset];
-    const asset = wallet.assets[event.asset] || { mint: event.asset, symbol: coin?.symbol || event.symbol, creator: coin?.creator || null, amountRaw: "0", decimals: event.decimals, transactions: 0 };
+    const listed = ledger.market?.coins?.[event.asset];
+    const asset = wallet.assets[event.asset] || { mint: event.asset, symbol: coin?.symbol || listed?.symbol || event.symbol,
+      creator: coin?.creator || null, name: coin?.name || listed?.name || null, logo: listed?.logo || null, amountRaw: "0", decimals: event.decimals, transactions: 0 };
     if (asset.decimals !== event.decimals) continue;
     asset.amountRaw = rolled ? event.amountRaw : (BigInt(asset.amountRaw) + BigInt(event.amountRaw)).toString();
     asset.transactions += rolled ? event.deposits : 1;
     if (!asset.latestAt || event.at > asset.latestAt) { asset.latestAt = event.at; asset.latestSignature = event.signature; }
     wallet.assets[event.asset] = asset;
     wallet.transactions += rolled ? event.deposits : 1;
-    assets.set(event.asset, { mint: event.asset, symbol: coin?.symbol || event.symbol, decimals: event.decimals,
-      name: coin?.name || null, creator: coin?.creator || null, creatorWallet: coin?.creatorWallet || null });
+    assets.set(event.asset, { mint: event.asset, symbol: coin?.symbol || listed?.symbol || event.symbol, decimals: event.decimals,
+      name: coin?.name || listed?.name || null, logo: listed?.logo || null, creator: coin?.creator || null, creatorWallet: coin?.creatorWallet || null,
+      marketCap: listed?.marketCap ?? null, marketCapAt: listed?.marketCapAt ?? null });
     if (!wallet.latestAt || event.at > wallet.latestAt) { wallet.latestAt = event.at; wallet.latestSignature = event.signature; }
     wallets.set(event.wallet, wallet);
   }
+  // Share of the coin's total verified void volume, so a row shows weight and
+  // not just a raw number.
+  const coinTotals = new Map();
+  for (const row of wallets.values()) for (const a of Object.values(row.assets)) {
+    const prev = coinTotals.get(a.mint) || 0n;
+    coinTotals.set(a.mint, prev + BigInt(a.amountRaw));
+  }
   const leaderboard = [...wallets.values()].map((w) => {
+    const score = ledger.points?.rows?.[w.wallet];
+    if (score) { w.points = score.points; w.pointsRank = score.rank; if (!w.username && score.username) w.username = score.username; }
     for (const asset of Object.values(w.assets)) {
       const supply = ledger.assetSupplies?.[asset.mint];
       if (supply?.amountRaw && supply.decimals === asset.decimals && BigInt(supply.amountRaw) > 0n) {
         const scaled = BigInt(asset.amountRaw) * 1000000n / BigInt(supply.amountRaw);
         if (scaled <= BigInt(Number.MAX_SAFE_INTEGER)) asset.supplyPct = Number(scaled) / 10000;
         asset.supplyCheckedAt = supply.checkedAt;
+      }
+      const total = coinTotals.get(asset.mint);
+      if (total && total > 0n) asset.sharePct = Number(BigInt(asset.amountRaw) * 1000000n / total) / 10000;
+      const price = unitPriceUsd(ledger, asset.mint, asset.decimals);
+      if (price !== null) {
+        asset.unitPriceUsd = price;
+        asset.marketCapAt = ledger.market.coins[asset.mint].marketCapAt;
+        const value = Number(asset.amountRaw) / 10 ** asset.decimals * price;
+        if (Number.isFinite(value)) asset.valueUsd = value;
       }
     }
     return w;
@@ -325,7 +391,7 @@ async function discoverTreasuryHistory(ledger, rpc, fetchJson, now) {
   }
 }
 
-export async function collectVoids({ previous, fetchJson, rpc, now = new Date().toISOString() }) {
+export async function collectVoids({ previous, fetchJson, rpc, market = null, leaderboard = null, now = new Date().toISOString() }) {
   // The function budget is 60s (vercel.json). Spending 25s of it threw away more
 // than half the reachable receipts every run; 35s leaves room for the collectors
 // that share this tick.
@@ -342,6 +408,8 @@ const deadline = Date.now() + 35000;
     try { await collectTrixCatalog(ledger, fetchJson, now); }
     catch (e) { failures.push(`TRIX catalog: ${e.message}`); }
   }
+  try { attachMarketAndPoints(ledger, market, leaderboard); }
+  catch (e) { failures.push(`Market/points join: ${e.message}`); }
   const known = new Set([...(ledger.keys || []), ...ledger.records.map((r) => r.key)]);
   const ingest = (items) => {
     for (const row of items) {
@@ -492,6 +560,8 @@ export function publicVoidSource(source) {
   const compactRow = (row, asset) => ({ ...row, assets: asset ? { [asset]: row.assets[asset] } : Object.fromEntries(Object.entries(row.assets).slice(0, 4)) });
   const output = { ...summary, publicView: true, totalWallets: leaderboard.length, retainedProofs: (ledger.samples || []).length,
     verifiedEvents: ledger.verifiedCount ?? summary.verifiedEvents,
+    marketAt: ledger.market?.at ?? null, marketTotal: ledger.market?.total ?? null,
+    pointsAt: ledger.points?.at ?? null, pointsEntries: ledger.points?.entries ?? null, pointsCapped: !!ledger.points?.capped,
     leaderboard: leaderboard.slice(0, 50).map((r) => compactRow(r)), assetLeaderboards: {}, rankingsLimited: false,
     ledger: { version: ledger.version, historyOldestAt: ledger.historyOldestAt, historyComplete: ledger.historyComplete,
       recentGapBefore: ledger.recentGapBefore, coverageGaps: ledger.coverageGaps,

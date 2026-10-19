@@ -3901,7 +3901,11 @@ export async function sniffTrixMarket({ previous = null } = {}) {
  * so a partial read never breaks the dashboard.
  */
 export async function sniffTrixVoids({ previous = null } = {}) {
-  return collectVoids({ previous, fetchJson, rpc: solanaRpc });
+  // Market caps and user points already live in sibling sources. Passing them in
+  // costs no extra requests and lets the VOIDer rows carry real price and points
+  // instead of leaving those columns empty or estimated.
+  return collectVoids({ previous, fetchJson, rpc: solanaRpc,
+    market: previous?.sources?.["trix.meme.market"], leaderboard: previous?.sources?.["trix.market"] });
 }
 
 export async function sniffTrixMoney({ previous = null } = {}) {

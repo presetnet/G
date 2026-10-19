@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { voidCandidate, verifyVoidTransfer, collectVoids, summarizeVoids, restoreVoidHistory, candidatesFromTreasuryReceipt, publicVoidSource, VOID_TREASURY, SHOCKER_MINT, TOKEN_2022 } from "../server/trix-voids.js";
-import { rankVoiders, voidAmount, filterVoiders, mergeVoidRows } from "../public/trix-void-board.js";
+import { voidCandidate, verifyVoidTransfer, collectVoids, summarizeVoids, summarizeVoidsWith, restoreVoidHistory, candidatesFromTreasuryReceipt, publicVoidSource, VOID_TREASURY, SHOCKER_MINT, TOKEN_2022 } from "../server/trix-voids.js";
+import { rankVoiders, voidAmount, filterVoiders, mergeVoidRows, sortVoidRows } from "../public/trix-void-board.js";
 import { normalizeBundle } from "../server/shared-store.js";
 import { filterEvidence } from "../public/evidence.js";
 
@@ -240,6 +240,65 @@ test("a page larger than the queue room still advances the account cursor", asyn
   assert.ok(served > 20, "a later run re-reads history instead of skipping it");
   const second = await collectVoids({ previous: first, rpc, fetchJson });
   assert.ok(second.ledger.chainAccounts.find((a) => a.address === GOOD).before, "the cursor survives to the next run");
+});
+
+test("columns sort by real metrics and a missing metric never sorts as zero", () => {
+  const A = "P".repeat(32), B = "Q".repeat(32), C = "R".repeat(32);
+  const rows = [
+    { wallet: A, username: "Zed", transactions: 5, points: 10, assets: { [mint]: { mint, symbol: "CRACK", amountRaw: "900", decimals: 6, transactions: 5, valueUsd: 3, sharePct: 40 } } },
+    { wallet: B, username: "Amy", transactions: 9, assets: { [mint]: { mint, symbol: "CRACK", amountRaw: "100", decimals: 6, transactions: 9, valueUsd: 1, sharePct: 10 } } },
+    { wallet: C, username: "Mid", transactions: 7, points: 99, assets: { [mint]: { mint, symbol: "CRACK", amountRaw: "500", decimals: 6, transactions: 7 } } }];
+  const rank = new Map(rows.map((r, i) => [r.wallet, i + 1]));
+  assert.deepEqual(sortVoidRows(rows, "deposits", "", rank).map((r) => r.wallet), [B, C, A]);
+  assert.deepEqual(sortVoidRows(rows, "value", "", rank).map((r) => r.wallet).slice(0, 2), [A, B], "value sorts by the real number");
+  assert.equal(sortVoidRows(rows, "value", "", rank)[2].wallet, C, "a wallet with no price sorts last, never as $0");
+  assert.deepEqual(sortVoidRows(rows, "points", "", rank).map((r) => r.wallet).slice(0, 2), [C, A]);
+  assert.equal(sortVoidRows(rows, "points", "", rank)[2].wallet, B, "unranked wallets sort last");
+  assert.deepEqual(sortVoidRows(rows, "wallet", "", rank).map((r) => r.username), ["Amy", "Mid", "Zed"]);
+  assert.deepEqual(sortVoidRows(rows, "amount", mint, rank).map((r) => r.wallet), [A, C, B], "amount compares exact raw integers");
+  assert.deepEqual(sortVoidRows(rows, "latest", "", rank)[0].wallet, rows[0].wallet, "latest is stable for equal timestamps");
+});
+
+test("published market cap and TRIX points join the rows without inventing values", async () => {
+  const other = "G".repeat(32);
+  const ledger = { version: 1, records: [], totals: {}, keys: [], samples: [], verifiedCount: 0 };
+  const forSig = (s, w) => {
+    const tx = receipt();
+    tx.transaction.signatures = [s];
+    tx.transaction.message.accountKeys[0] = { pubkey: w, signer: true };
+    tx.transaction.message.instructions[0].parsed.info.authority = w;
+    tx.meta.preTokenBalances[0].owner = w;
+    return tx;
+  };
+  const sigA = "9".repeat(64), sigB = "9".repeat(63) + "8";
+  const v1 = verifyVoidTransfer(voidCandidate({ ...event, txSignature: sigA }), forSig(sigA, wallet));
+  const v2 = verifyVoidTransfer(voidCandidate({ ...event, txSignature: sigB, walletAddress: other }), forSig(sigB, other));
+  absorb(v1); absorb(v2);
+  function absorb(v) {
+    const id = `${v.wallet}|${v.asset}`;
+    const row = ledger.totals[id] || (ledger.totals[id] = { wallet: v.wallet, asset: v.asset, symbol: v.symbol, decimals: v.decimals, amountRaw: "0", deposits: 0 });
+    row.amountRaw = (BigInt(row.amountRaw) + BigInt(v.amountRaw)).toString();
+    row.deposits++;
+    ledger.verifiedCount++;
+  }
+  ledger.assetSupplies = { [mint]: { amountRaw: "100000000", decimals: 6, checkedAt: "2026-10-01T00:00:00Z" } };
+  const base = { checkedAt: "2026-10-01T00:00:00Z" };
+  const s1 = summarizeVoidsWith(ledger, { ...base, coins: [{ mintAddress: mint, ticker: "RUG", tokenName: "Rug Coin", logoUrl: "https://x.test/l.png", currentMarketCap: 1000, marketCapUpdatedAt: "2026-10-01T00:00:00Z" }], catalogTotal: 1077 },
+    { ...base, leaderboard: { entries: 100, capped: true, rows: [{ rank: 7, username: "hunter", wallet: other, points: 4242 }] } });
+  const top = s1.leaderboard.find((r) => r.wallet === other);
+  const a = top.assets[mint];
+  assert.equal(a.valueUsd, 50, "5 tokens at $10 (a $1000 cap over 100 tokens of supply) is $50");
+  assert.equal(a.unitPriceUsd, 10);
+  assert.equal(top.points, 4242);
+  assert.equal(top.pointsRank, 7);
+  assert.equal(top.username, "hunter", "a points row names a wallet that had no other name");
+  assert.equal(s1.assets[0].logo, "https://x.test/l.png");
+  const fresh = { version: 1, records: [], totals: JSON.parse(JSON.stringify(ledger.totals)), keys: [], samples: [], verifiedCount: 2,
+    assetSupplies: ledger.assetSupplies };
+  const s2 = summarizeVoidsWith(fresh, base, base);
+  assert.equal(s2.leaderboard.find((r) => r.wallet === other).assets[mint].valueUsd, undefined, "no published cap means no value, never $0");
+  assert.ok(s2.leaderboard.find((r) => r.wallet === other).assets[mint].sharePct > 0, "share of coin volume still works without market data");
+  assert.equal(s1.leaderboard.find((r) => r.wallet === other).assets[mint].valueUsd, 50, "a later empty read keeps the last known cap rather than erasing value");
 });
 
 test("a ledger that reached the old retention cap keeps every credit and resumes discovery", async () => {
