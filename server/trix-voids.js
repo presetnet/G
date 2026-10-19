@@ -236,41 +236,59 @@ async function discoverTreasuryHistory(ledger, rpc, fetchJson, now) {
   }
   if (ledger.chainPending.length >= RPC_TIER.accountQueue) return;
   const deadline = Date.now() + 12000;
+  const deferred = [];
   // One account per tick left the receipt queue empty while 500+ accounts sat
   // unscanned. Walk several accounts until the queue is full or the budget ends.
   for (let scanned = 0; scanned < RPC_TIER.accountsPerTick; scanned++) {
-    if (Date.now() >= deadline || ledger.chainPending.length >= RPC_TIER.accountQueue) return;
-    const account = ledger.chainAccounts.find((a) => !a.complete);
-    if (!account) return;
-    if (!account.named) {
-      // Holder profiles supply optional names ONLY. Absence from this list never
-      // excludes an on-chain depositor or requires them to retain any holdings.
-      try {
-        const response = await fetchJson(`https://www.trix.market/api/holders/${account.mint}?limit=50`, { timeoutMs: 3500 });
-        for (const row of response.json?.holders || []) if (ADDRESS.test(row.address || "") && row.trixUsername && !row.isPool && !row.isVoid) ledger.names[row.address] = String(row.trixUsername).slice(0, 80);
-      } catch { /* Receipt discovery does not depend on the profile service. */ }
-      account.named = true;
+    if (Date.now() >= deadline || ledger.chainPending.length >= RPC_TIER.accountQueue) break;
+    // An account that fails or refuses to advance its cursor is parked briefly.
+    // Without this, one stubborn account is re-picked every run and the 500
+    // accounts behind it are never reached.
+    const account = ledger.chainAccounts.find((a) => !a.complete && (!a.retryAfter || Date.parse(a.retryAfter) <= Date.now()));
+    if (!account) break;
+    try {
+      if (!account.named) {
+        // Holder profiles supply optional names ONLY. Absence from this list never
+        // excludes an on-chain depositor or requires them to retain any holdings.
+        try {
+          const response = await fetchJson(`https://www.trix.market/api/holders/${account.mint}?limit=50`, { timeoutMs: 3500 });
+          for (const row of response.json?.holders || []) if (ADDRESS.test(row.address || "") && row.trixUsername && !row.isPool && !row.isVoid) ledger.names[row.address] = String(row.trixUsername).slice(0, 80);
+        } catch { /* Receipt discovery does not depend on the profile service. */ }
+        account.named = true;
+      }
+      if (!ledger.assetSupplies[account.mint]) {
+        try {
+          const supply = await rpc("getTokenSupply", [account.mint, { commitment: "finalized" }], { timeoutMs: 3500 });
+          if (supply?.value?.amount && Number.isInteger(supply.value.decimals)) ledger.assetSupplies[account.mint] = { amountRaw: supply.value.amount, decimals: supply.value.decimals, checkedAt: now, slot: supply.context?.slot };
+        } catch { /* Missing supply never prevents ranking exact transfer amounts. */ }
+      }
+      const signatures = await rpc("getSignaturesForAddress", [account.address, { limit: SIGNATURE_PAGE, commitment: "finalized", ...(account.before ? { before: account.before } : {}) }], { timeoutMs: 4500 });
+      assert(Array.isArray(signatures), "Treasury token history unavailable");
+      const known = new Set([...ledger.chainSeen, ...ledger.chainPending.map((p) => `${p.signature}:${p.mint}`)]);
+      for (const row of signatures) {
+        if (row.err || !SIGNATURE.test(row.signature || "")) continue;
+        const key = `${row.signature}:${account.mint}`;
+        if (!known.has(key)) ledger.chainPending.push({ signature: row.signature, mint: account.mint, symbol: account.symbol, attempts: 0 });
+      }
+      const next = signatures.at(-1)?.signature;
+      assert(!next || next !== account.before, "Chain history cursor did not advance");
+      account.before = next || account.before;
+      account.complete = signatures.length < SIGNATURE_PAGE;
+      account.retryAfter = null;
+      const oldest = signatures.at(-1)?.blockTime;
+      if (oldest) account.oldestAt = new Date(oldest * 1000).toISOString();
+    } catch (e) {
+      account.retryAfter = new Date(Date.now() + 10 * 60_000).toISOString();
+      account.lastError = String(e.message).slice(0, 160);
+      ledger.chainAccountErrors = (ledger.chainAccountErrors || 0) + 1;
+      deferred.push(`${account.symbol}: ${e.message}`);
     }
-    if (!ledger.assetSupplies[account.mint]) {
-      try {
-        const supply = await rpc("getTokenSupply", [account.mint, { commitment: "finalized" }], { timeoutMs: 3500 });
-        if (supply?.value?.amount && Number.isInteger(supply.value.decimals)) ledger.assetSupplies[account.mint] = { amountRaw: supply.value.amount, decimals: supply.value.decimals, checkedAt: now, slot: supply.context?.slot };
-      } catch { /* Missing supply never prevents ranking exact transfer amounts. */ }
-    }
-    const signatures = await rpc("getSignaturesForAddress", [account.address, { limit: SIGNATURE_PAGE, commitment: "finalized", ...(account.before ? { before: account.before } : {}) }], { timeoutMs: 4500 });
-    assert(Array.isArray(signatures), "Treasury token history unavailable");
-    const known = new Set([...ledger.chainSeen, ...ledger.chainPending.map((p) => `${p.signature}:${p.mint}`)]);
-    for (const row of signatures) {
-      if (row.err || !SIGNATURE.test(row.signature || "")) continue;
-      const key = `${row.signature}:${account.mint}`;
-      if (!known.has(key)) ledger.chainPending.push({ signature: row.signature, mint: account.mint, symbol: account.symbol, attempts: 0 });
-    }
-    const next = signatures.at(-1)?.signature;
-    assert(!next || next !== account.before, "Chain history cursor did not advance");
-    account.before = next || account.before;
-    account.complete = signatures.length < SIGNATURE_PAGE;
-    const oldest = signatures.at(-1)?.blockTime;
-    if (oldest) account.oldestAt = new Date(oldest * 1000).toISOString();
+  }
+  if (deferred.length) {
+    ledger.chainDeferred = [...new Set(deferred)].slice(0, 4);
+    const error = new Error(`Deferred ${deferred.length} account scan(s): ${ledger.chainDeferred.join("; ")}`);
+    error.deferred = true;
+    throw error;
   }
 }
 
@@ -421,6 +439,7 @@ export function publicVoidSource(source) {
       chainAccountCount: ledger.chainAccounts?.length || 0, chainPendingCount: ledger.chainPending?.length || 0,
       chainCompleteCount: ledger.chainAccounts?.filter((a) => a.complete).length || 0,
       chainReceiptsChecked: ledger.chainReceiptsChecked || 0, chainUnverified: ledger.chainUnverified || 0,
+      chainAccountErrors: ledger.chainAccountErrors || 0, chainDeferred: ledger.chainDeferred || [],
       chainInventoryCapped: ledger.chainInventoryCapped, records: [] },
   };
   let bytes = Buffer.byteLength(JSON.stringify(output));

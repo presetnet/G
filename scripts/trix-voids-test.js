@@ -205,3 +205,36 @@ test("a ledger that reached the old retention cap keeps every credit and resumes
   assert.equal(out.leaderboard.find((r) => r.wallet === freshWho).username, "JLEE");
   assert.equal(out.catalogTotal, 1);
 });
+
+test("one unreadable account is deferred, not retried forever while the rest wait", async () => {
+  const STUCK = "Z".repeat(32), GOOD = "Y".repeat(32);
+  const tx = receipt();
+  for (const b of [...tx.meta.preTokenBalances, ...tx.meta.postTokenBalances]) b.mint = SHOCKER_MINT;
+  const tried = [];
+  const rpc = async (method, params) => {
+    if (method === "getTokenAccountsByOwner") {
+      return { value: [
+        { pubkey: STUCK, account: { data: { parsed: { info: { owner: VOID_TREASURY, mint: SHOCKER_MINT, tokenAmount: { amount: "0" } } } } } },
+        { pubkey: GOOD, account: { data: { parsed: { info: { owner: VOID_TREASURY, mint: SHOCKER_MINT, tokenAmount: { amount: "0" } } } } } }] };
+    }
+    if (method === "getTokenSupply") return { value: { amount: "100000000", decimals: 6 } };
+    if (method === "getSignaturesForAddress") {
+      tried.push(params[0]);
+      if (params[0] === STUCK) return null; // unreadable history, every time
+      return [{ signature, err: null, blockTime: tx.blockTime }];
+    }
+    if (method === "getTransaction") return tx;
+    throw Error(`Unexpected ${method}`);
+  };
+  const fetchJson = async (url) => url.includes("/holders/") ? { ok: true, json: { holders: [] } } : json([]);
+  const first = await collectVoids({ rpc, fetchJson });
+  assert.equal(first.verifiedEvents, 0, "the unreadable account yields nothing rather than a guess");
+  assert.ok(first.reason && /Deferred/.test(first.reason), "the deferred account is reported, not hidden");
+  const stuck = first.ledger.chainAccounts.find((a) => a.address === STUCK);
+  assert.equal(stuck.complete, false);
+  assert.ok(stuck.retryAfter && Date.parse(stuck.retryAfter) > Date.now(), "a stuck account is parked instead of re-picked");
+  const again = await collectVoids({ previous: first, rpc, fetchJson });
+  assert.equal(again.verifiedEvents, 1, "the readable account behind the stuck one is still scanned");
+  assert.equal(tried.filter((a) => a === STUCK).length, 1, "the parked account is not retried every run");
+  assert.equal(again.ledger.chainAccounts.find((a) => a.address === GOOD).complete, true);
+});
