@@ -187,6 +187,24 @@ test("a sender with no reported pre-balance is still a real transfer, not a fail
   assert.throws(() => verifyVoidTransfer(candidate, contradicted), /contradicts/, "a reported debit smaller than the transfer is still rejected");
 });
 
+test("provider rate limiting is counted apart from bad data", async () => {
+  const GOOD = "W".repeat(32);
+  const tx = receipt();
+  for (const b of [...tx.meta.preTokenBalances, ...tx.meta.postTokenBalances]) b.mint = SHOCKER_MINT;
+  const rpc = async (method, params) => {
+    if (method === "getTokenAccountsByOwner") return { value: [{ pubkey: GOOD, account: { data: { parsed: { info: { owner: VOID_TREASURY, mint: SHOCKER_MINT, tokenAmount: { amount: "0" } } } } } }] };
+    if (method === "getTokenSupply") return { value: { amount: "100000000", decimals: 6 } };
+    if (method === "getSignaturesForAddress") return [{ signature, err: null, blockTime: tx.blockTime }];
+    if (method === "getTransaction") throw Error("Solana RPC HTTP 429");
+    throw Error(`Unexpected ${method}`);
+  };
+  const fetchJson = async (url) => url.includes("/holders/") ? { ok: true, json: { holders: [] } } : json([]);
+  const out = await collectVoids({ rpc, fetchJson });
+  assert.equal(out.ledger.chainRateLimited, 1, "a throttled call is reported as capacity, not as missing evidence");
+  assert.ok(!out.ledger.chainUnreadable, "a throttled call is never mistaken for unreadable history");
+  assert.equal(out.verifiedEvents, 0);
+});
+
 test("a ledger that reached the old retention cap keeps every credit and resumes discovery", async () => {
   // The pre-rollup ledger stored one row per receipt and stopped the entire scan
   // at 2500 rows. That silently truncated every all-time ranking from there on.

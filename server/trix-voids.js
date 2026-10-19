@@ -433,6 +433,9 @@ const deadline = Date.now() + 35000;
       tx = await rpc("getTransaction", [entry.signature, { encoding: "jsonParsed", commitment: "finalized", maxSupportedTransactionVersion: 0 }], { timeoutMs: 3000 });
     } catch (e) {
       // A transport failure is transient; give it a few tries, then let it go.
+      // Rate limiting is counted apart: it is provider capacity, not bad data,
+      // and it is the one thing no amount of local tuning can fix.
+      if (String(e.message).includes("429")) ledger.chainRateLimited = (ledger.chainRateLimited || 0) + 1;
       if (entry.attempts >= 3) { ledger.chainUnreadable = (ledger.chainUnreadable || 0) + 1; drop(); }
       failures.push(`Historical receipt: ${e.message}`);
       return;
@@ -489,7 +492,7 @@ export function publicVoidSource(source) {
       chainAccountCount: ledger.chainAccounts?.length || 0, chainPendingCount: ledger.chainPending?.length || 0,
       chainCompleteCount: ledger.chainAccounts?.filter((a) => a.complete).length || 0,
       chainReceiptsChecked: ledger.chainReceiptsChecked || 0, chainUnverified: ledger.chainUnverified || 0,
-      chainUnreadable: ledger.chainUnreadable || 0, chainPruned: ledger.chainPruned || 0, chainAccountErrors: ledger.chainAccountErrors || 0, chainDeferred: ledger.chainDeferred || [],
+      chainUnreadable: ledger.chainUnreadable || 0, chainPruned: ledger.chainPruned || 0, chainRateLimited: ledger.chainRateLimited || 0, chainAccountErrors: ledger.chainAccountErrors || 0, chainDeferred: ledger.chainDeferred || [],
       chainToken2022Accounts: ledger.chainToken2022Accounts || 0, chainToken2022Unavailable: !!ledger.chainToken2022Unavailable,
       chainInventoryCapped: ledger.chainInventoryCapped, records: [] },
   };
