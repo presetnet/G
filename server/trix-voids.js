@@ -16,13 +16,13 @@ const ACCOUNT_LIMIT = 1500;
 // endpoint, which answers in bursts and then returns HTTP 429. The collector
 // still honours its own deadline; only the per-tick budget changes.
 const RPC_TIER = process.env.HELIUS_API_KEY || process.env.SOLANA_RPC_URL
-  ? { receiptBatch: 120, receiptParallel: 8, accountQueue: 240, accountsPerTick: 8, signaturePage: 1000 }
+  ? { receiptBatch: 240, receiptParallel: 8, accountQueue: 1200, accountsPerTick: 8, signaturePage: 1000 }
   : { receiptBatch: 24, receiptParallel: 3, accountQueue: 12, accountsPerTick: 1, signaturePage: 100 };
 const SIGNATURE_PAGE = RPC_TIER.signaturePage;
-// A 1000-signature page can queue far more receipts than one run verifies, which
-// starves the account walk behind the backlog. Enqueue at most this many new
-// receipts per run; an unfinished page is re-read next run rather than skipped.
-const ENQUEUE_PER_RUN = RPC_TIER.receiptBatch * 2;
+// A 1000-signature page can queue far more receipts than one run verifies. The
+// per-run enqueue cap is the real throttle; accountQueue is only a runaway valve.
+// A gate low enough to block discovery while a backlog exists is a deadlock.
+const ENQUEUE_PER_RUN = RPC_TIER.receiptBatch;
 const assert = (ok, message) => { if (!ok) throw new Error(message); };
 const rawAmount = (value) => { assert(/^\d+$/.test(String(value)), "Invalid transfer amount"); return BigInt(value); };
 
