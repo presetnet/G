@@ -69,7 +69,11 @@ export function sortVoidRows(rows, key, asset, rank = new Map()) {
     deposits: (row) => asset ? (row.assets[asset]?.transactions ?? 0) : (row.transactions ?? 0),
     amount: (row) => { const a = asset ? row.assets[asset] : null; return a ? BigInt(a.amountRaw) : null; },
     share: (row) => (asset ? row.assets[asset]?.sharePct : null) ?? Math.max(...Object.values(row.assets || {}).map((a) => a.sharePct ?? -1), -1),
-    value: (row) => { const a = asset ? row.assets[asset] : Object.values(row.assets || {}).reduce((best, x) => Math.max(best, x.valueUsd ?? -1), -1); return a?.valueUsd ?? null; },
+    value: (row) => {
+      if (asset) return row.assets?.[asset]?.valueUsd ?? null;
+      const best = Object.values(row.assets || {}).reduce((b, x) => (x.valueUsd ?? -1) > (b?.valueUsd ?? -1) ? x : b, null);
+      return best?.valueUsd ?? null;
+    },
   };
   const dir = column.asc ? 1 : -1;
   return [...rows].sort((a, b) => {
