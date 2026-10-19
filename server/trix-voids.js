@@ -17,13 +17,13 @@ const ACCOUNT_LIMIT = 1500;
 // endpoint, which answers in bursts and then returns HTTP 429. The collector
 // still honours its own deadline; only the per-tick budget changes.
 const RPC_TIER = process.env.HELIUS_API_KEY || process.env.SOLANA_RPC_URL
-  ? { receiptBatch: 240, receiptParallel: 8, accountQueue: 1200, accountsPerTick: 8, signaturePage: 1000 }
-  : { receiptBatch: 24, receiptParallel: 3, accountQueue: 12, accountsPerTick: 1, signaturePage: 100 };
+  ? { receiptBatch: 240, receiptParallel: 8, accountQueue: 2400, accountsPerTick: 8, signaturePage: 1000 }
+  : { receiptBatch: 24, receiptParallel: 3, accountQueue: 200, accountsPerTick: 1, signaturePage: 100 };
 const SIGNATURE_PAGE = RPC_TIER.signaturePage;
-// A 1000-signature page can queue far more receipts than one run verifies. The
-// per-run enqueue cap is the real throttle; accountQueue is only a runaway valve.
-// A gate low enough to block discovery while a backlog exists is a deadlock.
-const ENQUEUE_PER_RUN = RPC_TIER.receiptBatch;
+// Only open a new account page when the queue has room for a WHOLE page.
+// Enqueuing into a full queue leaves a page half-consumed forever, so no
+// account ever completes and discovery stalls at the same count run after run.
+const ACCOUNT_QUEUE_ROOM = RPC_TIER.signaturePage;
 const assert = (ok, message) => { if (!ok) throw new Error(message); };
 const rawAmount = (value) => { assert(/^\d+$/.test(String(value)), "Invalid transfer amount"); return BigInt(value); };
 
@@ -263,7 +263,8 @@ async function discoverTreasuryHistory(ledger, rpc, fetchJson, now) {
   // One account per tick left the receipt queue empty while 500+ accounts sat
   // unscanned. Walk several accounts until the queue is full or the budget ends.
   for (let scanned = 0; scanned < RPC_TIER.accountsPerTick; scanned++) {
-    if (Date.now() >= deadline || ledger.chainPending.length >= RPC_TIER.accountQueue || enqueued >= ENQUEUE_PER_RUN) break;
+    const room = RPC_TIER.accountQueue - ledger.chainPending.length;
+    if (Date.now() >= deadline || room < ACCOUNT_QUEUE_ROOM) break;
     // An account that fails or refuses to advance its cursor is parked briefly.
     // Without this, one stubborn account is re-picked every run and the 500
     // accounts behind it are never reached.
@@ -295,7 +296,7 @@ async function discoverTreasuryHistory(ledger, rpc, fetchJson, now) {
         if (known.has(key)) continue;
         // Stop cleanly mid-page: the cursor stays put, so the remainder is
         // re-read next run instead of being skipped for good.
-        if (enqueued >= ENQUEUE_PER_RUN) { consumedAll = false; break; }
+        if (enqueued >= room) { consumedAll = false; break; }
         ledger.chainPending.push({ signature: row.signature, mint: account.mint, symbol: account.symbol, attempts: 0 });
         known.add(key); enqueued++;
       }
