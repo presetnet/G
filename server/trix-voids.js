@@ -421,7 +421,16 @@ export async function collectVoids({ previous, fetchJson, rpc, now = new Date().
       ledger.chainPending = ledger.chainPending.filter((p) => p !== entry);
       // History cursors prevent rescans; this is only an overlap guard.
       if (ledger.chainSeen.length > 5000) ledger.chainSeen = ledger.chainSeen.slice(-5000);
-    } catch (e) { failures.push(`Historical receipt: ${e.message}`); }
+    } catch (e) {
+      // An unreadable or permanently rejected receipt used to stay queued for
+      // ever, and those repeats ate the whole per-run batch and stalled every
+      // account behind them. Give up after a few tries and say so.
+      if (entry.attempts >= 3) {
+        ledger.chainUnreadable = (ledger.chainUnreadable || 0) + 1;
+        ledger.chainPending = ledger.chainPending.filter((p) => p !== entry);
+      }
+      failures.push(`Historical receipt: ${e.message}`);
+    }
   }));
   return { source: "trix.voids", ok: recentOk || (ledger.verifiedCount || 0) > 0 || ledger.records.length > 0, stale: !recentOk, status: recentOk ? 200 : 0,
     checkedAt: now, dataUpdatedAt: ledger.lastFeedAt || null, treasury: VOID_TREASURY, sourceUrl: VOID_FEED,
@@ -452,7 +461,7 @@ export function publicVoidSource(source) {
       chainAccountCount: ledger.chainAccounts?.length || 0, chainPendingCount: ledger.chainPending?.length || 0,
       chainCompleteCount: ledger.chainAccounts?.filter((a) => a.complete).length || 0,
       chainReceiptsChecked: ledger.chainReceiptsChecked || 0, chainUnverified: ledger.chainUnverified || 0,
-      chainAccountErrors: ledger.chainAccountErrors || 0, chainDeferred: ledger.chainDeferred || [],
+      chainUnreadable: ledger.chainUnreadable || 0, chainAccountErrors: ledger.chainAccountErrors || 0, chainDeferred: ledger.chainDeferred || [],
       chainInventoryCapped: ledger.chainInventoryCapped, records: [] },
   };
   let bytes = Buffer.byteLength(JSON.stringify(output));

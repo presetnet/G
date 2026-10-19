@@ -238,3 +238,31 @@ test("one unreadable account is deferred, not retried forever while the rest wai
   assert.equal(tried.filter((a) => a === STUCK).length, 1, "the parked account is not retried every run");
   assert.equal(again.ledger.chainAccounts.find((a) => a.address === GOOD).complete, true);
 });
+
+test("a receipt that stays unreadable is dropped instead of retried forever", async () => {
+  const GOOD = "X".repeat(32);
+  const tx = receipt();
+  for (const b of [...tx.meta.preTokenBalances, ...tx.meta.postTokenBalances]) b.mint = SHOCKER_MINT;
+  const deadSig = "8".repeat(64);
+  const rpc = async (method, params) => {
+    if (method === "getTokenAccountsByOwner") {
+      return { value: [{ pubkey: GOOD, account: { data: { parsed: { info: { owner: VOID_TREASURY, mint: SHOCKER_MINT, tokenAmount: { amount: "0" } } } } } }] };
+    }
+    if (method === "getTokenSupply") return { value: { amount: "100000000", decimals: 6 } };
+    if (method === "getSignaturesForAddress") return [{ signature: deadSig, err: null, blockTime: tx.blockTime }, { signature, err: null, blockTime: tx.blockTime }];
+    if (method === "getTransaction") {
+      if (params[0] === deadSig) return null; // never readable, e.g. pruned history
+      return tx;
+    }
+    throw Error(`Unexpected ${method}`);
+  };
+  const fetchJson = async (url) => url.includes("/holders/") ? { ok: true, json: { holders: [] } } : json([]);
+  let out = await collectVoids({ rpc, fetchJson });
+  assert.equal(out.verifiedEvents, 1, "the readable receipt is still credited beside the dead one");
+  assert.ok(out.ledger.chainPending.some((p) => p.signature === deadSig), "an unreadable receipt is retried, not dropped on the first miss");
+  out = await collectVoids({ previous: out, rpc, fetchJson });
+  out = await collectVoids({ previous: out, rpc, fetchJson });
+  assert.equal(out.ledger.chainPending.some((p) => p.signature === deadSig), false, "a permanently unreadable receipt leaves the queue");
+  assert.equal(out.ledger.chainUnreadable, 1);
+  assert.equal(out.verifiedEvents, 1, "verified credits survive the dropped receipt");
+});
