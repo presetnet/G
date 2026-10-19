@@ -17,7 +17,7 @@ const ACCOUNT_LIMIT = 1500;
 // endpoint, which answers in bursts and then returns HTTP 429. The collector
 // still honours its own deadline; only the per-tick budget changes.
 const RPC_TIER = process.env.HELIUS_API_KEY || process.env.SOLANA_RPC_URL
-  ? { receiptBatch: 240, receiptParallel: 8, accountQueue: 2400, accountsPerTick: 8, signaturePage: 1000 }
+  ? { receiptBatch: 240, receiptParallel: 6, accountQueue: 2400, accountsPerTick: 8, signaturePage: 1000 }
   : { receiptBatch: 24, receiptParallel: 3, accountQueue: 200, accountsPerTick: 1, signaturePage: 100 };
 const SIGNATURE_PAGE = RPC_TIER.signaturePage;
 // Only open a new account page when the queue has room for a WHOLE page.
@@ -257,7 +257,7 @@ async function discoverTreasuryHistory(ledger, rpc, fetchJson, now) {
     ledger.chainInventoryAt = now;
   }
   if (ledger.chainPending.length >= RPC_TIER.accountQueue) return;
-  const deadline = Date.now() + 12000;
+  const deadline = Date.now() + 18000;
   const deferred = [];
   let enqueued = 0;
   // One account per tick left the receipt queue empty while 500+ accounts sat
@@ -325,7 +325,10 @@ async function discoverTreasuryHistory(ledger, rpc, fetchJson, now) {
 }
 
 export async function collectVoids({ previous, fetchJson, rpc, now = new Date().toISOString() }) {
-  const deadline = Date.now() + 25000;
+  // The function budget is 60s (vercel.json). Spending 25s of it threw away more
+// than half the reachable receipts every run; 35s leaves room for the collectors
+// that share this tick.
+const deadline = Date.now() + 35000;
   const old = previous?.ledger?.version === 1 ? previous.ledger : null;
   const ledger = old ? JSON.parse(JSON.stringify(old)) : { version: 1, startedAt: now, records: [], before: null, historyComplete: false,
     historyOldestAt: null, recentGapBefore: null, recentHead: null, coverageGaps: false, capped: false };
