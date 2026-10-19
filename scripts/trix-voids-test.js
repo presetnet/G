@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { voidCandidate, verifyVoidTransfer, collectVoids, summarizeVoids, restoreVoidHistory, candidatesFromTreasuryReceipt, publicVoidSource, VOID_TREASURY, SHOCKER_MINT } from "../server/trix-voids.js";
+import { voidCandidate, verifyVoidTransfer, collectVoids, summarizeVoids, restoreVoidHistory, candidatesFromTreasuryReceipt, publicVoidSource, VOID_TREASURY, SHOCKER_MINT, TOKEN_2022 } from "../server/trix-voids.js";
 import { rankVoiders, voidAmount, filterVoiders, mergeVoidRows } from "../public/trix-void-board.js";
 import { normalizeBundle } from "../server/shared-store.js";
 import { filterEvidence } from "../public/evidence.js";
@@ -141,7 +141,8 @@ test("direct treasury history recovers a depositor missing from both feed and ho
   const rpc = async (method, params) => {
     if (method === "getTokenAccountsByOwner") {
       assert.equal(params[0], VOID_TREASURY);
-      return { value: [{ pubkey: destination, account: { data: { parsed: { info: { owner: VOID_TREASURY, mint: SHOCKER_MINT, tokenAmount: { amount: "0" } } } } } }] };
+      assert.deepEqual(params[1].programIds, [TOKEN, TOKEN_2022], "both token programs are inventoried, not just classic SPL");
+      return { value: [{ pubkey: destination, account: { data: { program: TOKEN_2022, parsed: { info: { owner: VOID_TREASURY, mint: SHOCKER_MINT, tokenAmount: { amount: "0" } } } } } }] };
     }
     if (method === "getSignaturesForAddress") { assert.equal(params[0], destination); return [{ signature, err: null, blockTime: tx.blockTime }]; }
     if (method === "getTokenSupply") return { value: { amount: "100000000", decimals: 6 } };
@@ -155,6 +156,7 @@ test("direct treasury history recovers a depositor missing from both feed and ho
   assert.equal(s.leaderboard[0].assets[SHOCKER_MINT].supplyPct, 5);
   assert.equal(s.ledger.chainPending.length, 0);
   assert.equal(s.ledger.chainReceiptsChecked, 1);
+  assert.equal(s.ledger.chainToken2022Accounts, 1, "Token-2022 treasury accounts are inventoried and reported");
   const again = await collectVoids({ previous: s, rpc, fetchJson: async()=>json([]) });
   assert.equal(again.verifiedEvents, 1, "history and feed overlap do not duplicate credits");
   assert.equal(candidatesFromTreasuryReceipt({ ...tx, meta: { ...tx.meta, err: { failed: true } } }, signature, SHOCKER_MINT, "SHOCKER").length, 0);
@@ -166,6 +168,23 @@ test("direct treasury history recovers a depositor missing from both feed and ho
   assert.equal(projected.assetLeaderboards[SHOCKER_MINT][0].assets[SHOCKER_MINT].supplyPct, 5);
   assert.equal(s.ledger.chainAccounts.length, 1, "projection must not remove persisted scan state");
   assert.ok(Buffer.byteLength(JSON.stringify(projected)) < 600000);
+});
+
+test("a sender with no reported pre-balance is still a real transfer, not a failure", () => {
+  // Solana omits zero balances, so a sender holding nothing beforehand has no
+  // pre-balance row. Rejecting those discarded real voids; a contradiction is
+  // still rejected.
+  const candidate = voidCandidate(event);
+  const unreported = receipt();
+  unreported.meta.preTokenBalances = unreported.meta.preTokenBalances.filter((b) => b.owner !== wallet);
+  unreported.meta.postTokenBalances = unreported.meta.postTokenBalances.filter((b) => b.owner !== wallet);
+  const verified = verifyVoidTransfer(candidate, unreported);
+  assert.equal(verified.status, "verified");
+  assert.equal(verified.amountRaw, "5000000");
+  assert.equal(verified.debitUnreported, true, "the missing debit row is disclosed, not silently assumed");
+  const contradicted = receipt();
+  contradicted.meta.preTokenBalances[0].uiTokenAmount.amount = "1000000";
+  assert.throws(() => verifyVoidTransfer(candidate, contradicted), /contradicts/, "a reported debit smaller than the transfer is still rejected");
 });
 
 test("a ledger that reached the old retention cap keeps every credit and resumes discovery", async () => {

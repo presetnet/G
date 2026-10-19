@@ -3,6 +3,7 @@ export const VOID_FEED = "https://www.trix.market/api/feed/trades";
 export const TRIX_CATALOG = "https://www.trix.market/api/launches";
 export const SHOCKER_MINT = "E6LwzUpR2NsdUzAiGzZb1K5PbffkXANagXHt1R4BTRiX";
 const TOKENS = new Set(["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"]);
+export const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const SIGNATURE = /^[1-9A-HJ-NP-Za-km-z]{64,88}$/;
 // Verified deposits roll up into durable per-wallet, per-asset totals. The receipt
@@ -57,8 +58,10 @@ export function verifyVoidTransfer(candidate, tx) {
       if (instruction.programId === "11111111111111111111111111111111" && p.type === "transfer" && i.source === candidate.wallet && i.destination === VOID_TREASURY) amount += rawAmount(i.lamports);
     } else if (TOKENS.has(instruction.programId) && ["transfer", "transferChecked"].includes(p.type) && i.authority === candidate.wallet) {
       const from = account(i.source, candidate.wallet), to = account(i.destination, VOID_TREASURY);
-      if (!from || !to) continue;
-      const d = from.uiTokenAmount?.decimals;
+      // The treasury side is mandatory; the sender's row may legitimately be
+      // absent when the sender held nothing before the transfer.
+      if (!to) continue;
+      const d = from?.uiTokenAmount?.decimals ?? to.uiTokenAmount?.decimals;
       assert(Number.isInteger(d) && d >= 0 && d <= 18 && d === to.uiTokenAmount?.decimals, "Token decimals mismatch");
       assert(decimals === null || decimals === d, "Inconsistent token decimals");
       decimals = d;
@@ -70,7 +73,13 @@ export function verifyVoidTransfer(candidate, tx) {
     const total = (rows, owner) => rows.filter((b) => b.owner === owner && b.mint === candidate.asset).reduce((sum, b) => sum + rawAmount(b.uiTokenAmount.amount), 0n);
     const pre = tx.meta.preTokenBalances || [], post = tx.meta.postTokenBalances || [];
     assert(total(post, VOID_TREASURY) - total(pre, VOID_TREASURY) >= amount, "Treasury token credit does not confirm the transfer amount");
-    assert(total(pre, candidate.wallet) - total(post, candidate.wallet) >= amount, "Sender token debit does not confirm the transfer amount");
+    // Solana omits zero balances from these lists, so a sender that held nothing
+    // before the transfer has no pre-balance row. Treating that absence as a
+    // failed debit threw away real deposits; only a contradiction is a rejection.
+    const senderPre = pre.some((b) => b.owner === candidate.wallet && b.mint === candidate.asset);
+    const debit = total(pre, candidate.wallet) - total(post, candidate.wallet);
+    assert(!senderPre || debit >= amount, "Sender token debit contradicts the transfer amount");
+    candidate.debitUnreported = !senderPre;
   }
   if (candidate.asset === "SOL") {
     const lamports = Number(candidate.reportedSol) * 1e9;
@@ -217,9 +226,18 @@ async function discoverTreasuryHistory(ledger, rpc, fetchJson, now) {
   if (!ledger.chainInventoryAt || Date.parse(now) - Date.parse(ledger.chainInventoryAt) > 6 * 3600_000) {
     // The treasury's inventory selects account histories, not eligible people.
     // Keep zero-balance accounts and previously seen accounts as well.
-    const response = await rpc("getTokenAccountsByOwner", [VOID_TREASURY, { programId: [...TOKENS][0] }, { encoding: "jsonParsed", commitment: "finalized" }], { timeoutMs: 4500 });
+    // Both token programs are requested: a Token-2022 coin's voids are just as
+    // real, and filtering to the classic program hid every one of them.
+    let response;
+    try {
+      response = await rpc("getTokenAccountsByOwner", [VOID_TREASURY, { programIds: [...TOKENS] }, { encoding: "jsonParsed", commitment: "finalized" }], { timeoutMs: 4500 });
+    } catch {
+      response = await rpc("getTokenAccountsByOwner", [VOID_TREASURY, { programId: [...TOKENS][0] }, { encoding: "jsonParsed", commitment: "finalized" }], { timeoutMs: 4500 });
+      ledger.chainToken2022Unavailable = true;
+    }
     assert(Array.isArray(response?.value), "Treasury token-account inventory unavailable");
     const known = new Set(ledger.chainAccounts.map((a) => a.address));
+    ledger.chainToken2022Accounts = response.value.filter((row) => row.account?.data?.program === TOKEN_2022).length;
     const inventory = [...response.value].sort((a, b) => Number(b.account?.data?.parsed?.info?.mint === SHOCKER_MINT) - Number(a.account?.data?.parsed?.info?.mint === SHOCKER_MINT));
     for (const row of inventory) {
       const info = row.account?.data?.parsed?.info;
@@ -462,6 +480,7 @@ export function publicVoidSource(source) {
       chainCompleteCount: ledger.chainAccounts?.filter((a) => a.complete).length || 0,
       chainReceiptsChecked: ledger.chainReceiptsChecked || 0, chainUnverified: ledger.chainUnverified || 0,
       chainUnreadable: ledger.chainUnreadable || 0, chainAccountErrors: ledger.chainAccountErrors || 0, chainDeferred: ledger.chainDeferred || [],
+      chainToken2022Accounts: ledger.chainToken2022Accounts || 0, chainToken2022Unavailable: !!ledger.chainToken2022Unavailable,
       chainInventoryCapped: ledger.chainInventoryCapped, records: [] },
   };
   let bytes = Buffer.byteLength(JSON.stringify(output));
