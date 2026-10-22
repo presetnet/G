@@ -60,6 +60,50 @@ test("search and sort use the refreshed snapshot rather than the initial render"
   }
 });
 
+test("refresh preserves scroll, sort and a selected coin missing from a partial update", () => {
+  const previousDocument = globalThis.document;
+  const scroller = { scrollTop: 230, scrollLeft: 40 };
+  const root = { innerHTML: "", querySelector: () => scroller };
+  const select = { innerHTML: "", value: mint };
+  globalThis.document = { getElementById: (id) => ({ voidRows: root, voidAsset: select, voidSearch: { value: "" } })[id] };
+  try {
+    const ui = { sort: "value" };
+    renderVoidBoard({ ok: true, ledger: { records: [] }, assets: [], leaderboard: [], verifiedEvents: 0 }, ui);
+    assert.equal(select.value, mint);
+    assert.match(select.innerHTML, /unavailable in this update/);
+    assert.equal(ui.sort, "value");
+    assert.deepEqual(scroller, { scrollTop: 230, scrollLeft: 40 });
+  } finally {
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+  }
+});
+
+test("Value selection survives automatic renders even without caller-owned state", () => {
+  const previousDocument = globalThis.document;
+  const scroller = { scrollTop: 300, scrollLeft: 0 };
+  const root = { innerHTML: "", querySelector: () => scroller };
+  const select = { value: "", innerHTML: "" };
+  globalThis.document = { getElementById: (id) => ({ voidRows: root, voidAsset: select, voidSearch: { value: "" } })[id] };
+  try {
+    const row = (wallet, transactions, valueUsd) => ({ wallet, transactions, latestAt: "2026-10-22T00:00:00Z", assets: {
+      [mint]: { mint, symbol: "COIN", amountRaw: "1", decimals: 0, transactions, valueUsd, unitPriceUsd: valueUsd },
+    } });
+    const source = { ok: true, ledger: { records: [] }, assets: [{ mint, symbol: "COIN" }], verifiedEvents: 11,
+      leaderboard: [row("depositLeader", 10, 1), row("valueLeader", 1, 100)] };
+    renderVoidBoard(source);
+    root.onclick({ target: { closest: () => ({ dataset: { sort: "value" } }) } });
+    renderVoidBoard({ ...source });
+    assert.match(root.innerHTML, /sorted[^>]*data-sort="value"/);
+    const body = root.innerHTML.split("<tbody>")[1];
+    assert.ok(body.indexOf('title="valueLeader"') < body.indexOf('title="depositLeader"'));
+    assert.equal(scroller.scrollTop, 300);
+  } finally {
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+  }
+});
+
 test("an emptied token account remains credited, without counting its SOL fee", () => {
   const verified = verifyVoidTransfer(voidCandidate(event), receipt());
   assert.equal(verified.amountRaw, "5000000");

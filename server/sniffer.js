@@ -345,6 +345,35 @@ async function sniffStacknetX402() {
  * /network/summary route is private; this keeps a real price on the desk from
  * a public source rather than leaving the figure blank or stale.
  */
+export async function sniffPoolVoid() {
+  const base = "https://poolvoid.app";
+  const [status, transfers] = await Promise.all([
+    fetchJson(`${base}/api/status`),
+    fetchJson(`${base}/api/transfers?target=all&category=all`),
+  ]);
+  const count = (value) => typeof value === "string" && /^\d+(\.\d+)?$/.test(value)
+    ? value : typeof value === "number" && Number.isFinite(value) && value >= 0 ? String(value) : null;
+  const valid = status.ok && status.json?.configured === true && Array.isArray(status.json?.targets) && status.json?.counts;
+  const targets = (valid ? status.json.targets : []).filter((t) => [1, 8453].includes(t.chain_id)).map((t) => ({
+    name: t.name, address: t.address, chainId: t.chain_id, syncedAt: t.last_synced_at,
+    backfillComplete: t.backfill_complete === true, enabled: t.enabled === true,
+  }));
+  const items = (transfers.ok && Array.isArray(transfers.json?.items) ? transfers.json.items : [])
+    .filter((r) => [1, 8453].includes(r.chain_id) && /^0x[a-fA-F0-9]{64}$/.test(r.hash || ""))
+    .slice(0, 12).map((r) => ({ hash: r.hash, chainId: r.chain_id, from: r.from_address,
+      target: r.target_name, category: r.category, asset: r.asset, value: count(r.value), at: r.timestamp }));
+  return {
+    source: "poolvoid.archive", ok: !!valid, status: status.status,
+    sourceUrl: `${base}/#void`, statusUrl: `${base}/api/status`,
+    transfersUrl: `${base}/api/transfers?target=all&category=all`,
+    counts: Object.fromEntries(["transactions", "transfers", "wallets", "eth"].map((k) => [k, valid ? count(status.json.counts[k]) : null])),
+    targets, items, transfersOk: transfers.ok && Array.isArray(transfers.json?.items),
+    hasMore: transfers.json?.hasMore === true,
+    reason: !valid ? "Pool Void status unavailable or invalid" : !transfers.ok || !Array.isArray(transfers.json?.items) ? "Recent transfers unavailable" : null,
+    note: "Pool Void-reported archive on Ethereum and Base. Not independently receipt-verified here; not merged with Solana TRIX credits.",
+  };
+}
+
 async function sniffSolPrice() {
   const res = await fetchJson(
     "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
@@ -5960,6 +5989,7 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
     ...trixAttempts(previous),
     ...simAttempts(previous),
     ["stacknet.health", sniffStacknetHealth()],
+    ["poolvoid.archive", sniffPoolVoid()],
     ["stacknet.root", sniffStacknetRoot()],
     ["stacknet.network", sniffStacknetNetwork()],
     ["stacknet.pile", sniffStacknetPile()],

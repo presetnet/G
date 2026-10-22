@@ -78,5 +78,12 @@ lead with highest rank.
 
 ## Onward
 
+Pool Void (`poolvoid.archive`) is collected on full passes from public
+`https://poolvoid.app/api/status` and `/api/transfers?target=all&category=all`.
+The VOIDers tab shows source-reported Ethereum/Base counts, target sync times,
+and up to 12 recent transfers. These are not independently verified here and
+must never be added to Solana TRIX totals. Source JSON and curl proofs are in
+the panel. An unavailable feed is not zero activity; the panel flags old reads.
+
 If you extend this project, extend PROMPTME.md with it. Machines reading blind guess;
 machines reading this don't.

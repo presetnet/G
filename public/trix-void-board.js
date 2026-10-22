@@ -5,6 +5,8 @@ const explorer = (type, value, label) => `<a href="https://solscan.io/${type}/${
 // An unnamed wallet is still a person: show enough of the address to recognise
 // it, and keep the full address in the tooltip for copying.
 const walletTag = (wallet) => `<a class="void-wallet" href="https://solscan.io/account/${encodeURIComponent(wallet)}" target="_blank" rel="noopener noreferrer" title="${esc(wallet)}">${esc(wallet.slice(0, 10))}…${esc(wallet.slice(-8))} ↗</a>`;
+const optionCache = new WeakMap();
+const boardState = new WeakMap();
 
 export function voidAmount(raw, decimals) {
   const digits = String(raw).padStart(decimals + 1, "0");
@@ -95,9 +97,13 @@ export function sortVoidRows(rows, key, asset, rank = new Map()) {
 
 const usd = (v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : v >= 1 ? `$${v.toFixed(2)}` : `$${v.toFixed(4)}`;
 
-export function renderVoidBoard(source, ui = {}) {
+export function renderVoidBoard(source, ui) {
   const root = document.getElementById("voidRows"), select = document.getElementById("voidAsset"), search = document.getElementById("voidSearch");
   if (!root || !select) return;
+  ui = boardState.get(root) || ui || {};
+  boardState.set(root, ui);
+  const oldScroll = root.querySelector?.(".desk-table-scroll");
+  const scroll = [oldScroll?.scrollTop || 0, oldScroll?.scrollLeft || 0];
   if (!source?.ok || !source?.ledger) {
     root.innerHTML = `<p class="desk-context">${esc(source?.reason || "The collector is discovering historical void events and verifying receipts. No holdings are required to appear here.")} Stored credits are retained across refreshes; an unavailable read is not zero activity.</p>`;
     return;
@@ -113,8 +119,9 @@ export function renderVoidBoard(source, ui = {}) {
   root.onkeydown = (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.closest("th[data-sort]")) { e.preventDefault(); clickSort(e); } };
   const selected = select.value;
   const coins = voidCoinOptions(source);
-  const options = '<option value="">All verified coins · most deposits</option>' + coins.map((a) => `<option value="${esc(a.mint)}">${esc(a.symbol)}${a.mint !== "SOL" ? ` · ${esc(short(a.mint))}` : ""}${a.verified ? "" : " · not yet verified"}</option>`).join("");
-  if (select.innerHTML !== options) { select.innerHTML = options; select.value = coins.some((a) => a.mint === selected) ? selected : ""; }
+  const options = '<option value="">All verified coins · most deposits</option>' + coins.map((a) => `<option value="${esc(a.mint)}">${esc(a.symbol)}${a.mint !== "SOL" ? ` · ${esc(short(a.mint))}` : ""}${a.verified ? "" : " · not yet verified"}</option>`).join("")
+    + (selected && !coins.some((a) => a.mint === selected) ? `<option value="${esc(selected)}">${esc(short(selected))} · unavailable in this update</option>` : "");
+  if (optionCache.get(select) !== options) { select.innerHTML = options; select.value = selected; optionCache.set(select, options); }
   select.onchange = () => renderVoidBoard(source, ui);
   const boardRows = select.value && source.assetLeaderboards ? source.assetLeaderboards[select.value] || [] : source.leaderboard;
   const query = search?.value || "";
@@ -162,4 +169,6 @@ export function renderVoidBoard(source, ui = {}) {
       <p><b>Value</b> is the verified amount multiplied by TRIX's published market cap for that coin divided by the on-chain supply read from chain${source.marketAt ? ` (caps sampled ${esc(stamp(source.marketAt))})` : ""}. It is a marked-at-cap estimate of what the voided amount would be worth today, not a realised sale: TRIX publishes caps for ${source.marketTotal ?? "most"} of its coins, and a coin without one shows <b>n/a</b> rather than $0. <b>Share</b> is that wallet's slice of every verified void of that coin. <b>Points</b> comes from TRIX's published points table${source.pointsEntries ? ` (top ${source.pointsEntries}${source.pointsCapped ? "+, capped" : ""})` : ""} and is joined by wallet, so a wallet outside that table shows —.</p>
       ${source.reason ? `<p>Partial verification: ${esc(source.reason)}</p>` : ""}
     </details>`;
+  const newScroll = root.querySelector?.(".desk-table-scroll");
+  if (newScroll) [newScroll.scrollTop, newScroll.scrollLeft] = scroll;
 }

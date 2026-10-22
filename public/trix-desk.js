@@ -1,10 +1,12 @@
 import { sourceDescription } from "./provenance.js";
 import { renderVoidBoard } from "./trix-void-board.js";
+import { renderPoolVoid } from "./poolvoid.js";
 
 const TABS = ["boxes", "coins", "activity", "voiders", "points", "art", "money"];
 const STATUS = { coins: "coinSummary", boxes: "boxStatus", activity: "activityStatus", voiders: "voidStatus", points: "pointsStatus", art: "artStatus", money: "moneyStatus" };
 const SOURCES = { coins: ["trix.meme.market", "trix.frontpage"], boxes: ["trix.boxes", "trix.boxboard", "trix.boxchain", "trix.preorder"], activity: ["trix.money"], voiders: ["trix.voids"], points: ["trix.market", "trix.tiers"], art: ["trix.market"], money: ["trix.money", "trix.fee.config"] };
 const state = { tab: "boxes", view: "all", search: "", chain: "", limit: 20 };
+const voidUI = {};
 const htmlCache = new WeakMap();
 const brokenImages = new Set();
 let root = null;
@@ -382,7 +384,19 @@ export function renderTrixDesk(value) {
   renderPoints(sources["trix.market"], sources["trix.tiers"]);
   renderArt(sources["trix.market"]);
   renderMoney(sources["trix.money"], sources["trix.fee.config"]);
-  renderVoidBoard(sources["trix.voids"]);
+  renderVoidBoard(sources["trix.voids"], voidUI);
+  let archive = document.getElementById("poolVoidArchive");
+  if (!archive) {
+    const panel = document.getElementById("desk-voiders");
+    if (panel) {
+      archive = document.createElement("section");
+      archive.id = "poolVoidArchive";
+      archive.className = "pv-archive";
+      archive.setAttribute("aria-label", "Pool Void cross-chain archive");
+      panel.appendChild(archive);
+    }
+  }
+  renderPoolVoid(sources["poolvoid.archive"]);
   status("voiders", sources["trix.voids"], !!sources["trix.voids"]?.leaderboard?.length, "Observed receipt-verified voids · holdings-independent");
   const names = [...SOURCES[state.tab], ...(state.tab === "activity" && generations ? ["trix.geoff"] : [])];
   const descriptions = names.flatMap((name) => {
