@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { voidCandidate, verifyVoidTransfer, collectVoids, summarizeVoids, summarizeVoidsWith, restoreVoidHistory, candidatesFromTreasuryReceipt, publicVoidSource, VOID_TREASURY, SHOCKER_MINT, TOKEN_2022 } from "../server/trix-voids.js";
-import { rankVoiders, voidAmount, filterVoiders, mergeVoidRows, sortVoidRows, voidCoinOptions, renderVoidBoard } from "../public/trix-void-board.js";
+import { rankVoiders, voidAmount, filterVoiders, mergeVoidRows, sortVoidRows, voidCoinOptions, renderVoidBoard, allVoidRows } from "../public/trix-void-board.js";
 import { normalizeBundle } from "../server/shared-store.js";
 import { filterEvidence } from "../public/evidence.js";
 
@@ -20,6 +20,114 @@ const receipt = () => ({ slot: 42, blockTime: 1790812800,
     ] } },
 });
 const json = (items, nextBefore = null) => ({ ok: true, json: { items, nextBefore } });
+
+test("Token-2022 discovery works even when classic SPL inventory is unavailable", async () => {
+  const filters = [];
+  const tx = receipt();
+  tx.transaction.message.instructions[0].programId = TOKEN_2022;
+  const out = await collectVoids({ fetchJson: async () => json([]), rpc: async (method, params) => {
+    if (method === "getTokenAccountsByOwner") {
+      filters.push(params[1]);
+      if (params[1].programId === TOKEN) throw Error("classic unavailable");
+      return { value: [{ pubkey: destination, account: { data: { parsed: { info: { owner: VOID_TREASURY, mint, tokenAmount: { amount: "0" } } } } } }] };
+    }
+    if (method === "getSignaturesForAddress") return [{ signature, err: null }];
+    if (method === "getTokenSupply") return { value: { amount: "100000000", decimals: 6 } };
+    if (method === "getTransaction") return tx;
+    throw Error(method);
+  } });
+  assert.deepEqual(filters, [{ programId: TOKEN }, { programId: TOKEN_2022 }]);
+  assert.equal(out.verifiedEvents, 1);
+  assert.equal(out.ledger.chainToken2022Unavailable, false);
+  assert.equal(out.ledger.chainClassicUnavailable, true);
+});
+
+test("a retained null receipt can be recovered later without losing its identity", async () => {
+  let available = false;
+  const rpc = async (method) => method === "getTokenAccountsByOwner" ? { value: [] } : method === "getTransaction" ? available ? receipt() : null : null;
+  const previous = { ledger: { version: 1, receiptRetentionVersion: 2, records: [], totals: {}, keys: [], samples: [], verifiedCount: 0,
+    historyComplete: true, chainPending: [{ signature, mint, symbol: "COIN", attempts: 0 }] } };
+  const first = await collectVoids({ previous, rpc, fetchJson: async () => json([]) });
+  assert.equal(first.ledger.chainRetry.length, 1);
+  first.ledger.chainRetry[0].deferUntil = 0;
+  available = true;
+  const second = await collectVoids({ previous: first, rpc, fetchJson: async () => json([]) });
+  assert.equal(second.verifiedEvents, 1);
+  assert.equal(second.ledger.chainRetry.length, 0);
+  assert.equal(second.leaderboard[0].latestAt, new Date(receipt().blockTime * 1000).toISOString());
+  assert.equal(second.leaderboard[0].assets[mint].latestSignature, signature);
+});
+
+test("feed and treasury discovery cannot credit the same deposit twice in one pass", async () => {
+  const out = await collectVoids({ fetchJson: async (url) => url.includes("/feed/") ? json([event]) : json([]), rpc: async (method) => {
+    if (method === "getTokenAccountsByOwner") return { value: [{ pubkey: destination, account: { data: { parsed: { info: { owner: VOID_TREASURY, mint, tokenAmount: { amount: "0" } } } } } }] };
+    if (method === "getSignaturesForAddress") return [{ signature, err: null }];
+    if (method === "getTokenSupply") return { value: { amount: "100000000", decimals: 6 } };
+    if (method === "getTransaction") return receipt();
+    throw Error(method);
+  } });
+  assert.equal(out.verifiedEvents, 1);
+  assert.equal(out.leaderboard[0].assets[mint].amountRaw, "5000000");
+});
+
+test("catalog distinguishes other-chain launches from unverified Solana coins", async () => {
+  const evm = `0x${"a".repeat(40)}`;
+  const out = await collectVoids({ rpc: async () => ({ value: [] }), fetchJson: async (url) => url.includes('/launches')
+    ? { ok: true, json: { total: 2, items: [{ mintAddress: mint, symbol: "SOLCOIN" }, { mintAddress: evm, symbol: "OTHER", chain: "robinhood" }] } }
+    : json([]) });
+  assert.equal(out.catalogTotal, 1);
+  assert.equal(out.catalogAllChainsTotal, 2);
+  assert.equal(out.catalogOtherChains, 1);
+  assert.equal(out.catalogComplete, true);
+  assert.equal(voidCoinOptions(out).find((a) => a.mint === evm).outsideScope, true);
+});
+
+test("legacy recovery starts only with a complete dedup journal", async () => {
+  const base = { version: 1, records: [], totals: {}, keys: [], samples: [], verifiedCount: 0, chainUnreadable: 3,
+    chainAccounts: [{ address: destination, mint, complete: true, before: signature, named: true }], historyComplete: true };
+  const run = (ledger) => collectVoids({ previous: { ledger }, fetchJson: async () => json([]), rpc: async (method) => {
+    if (method === "getTokenAccountsByOwner") return { value: [] };
+    if (method === "getSignaturesForAddress") return [];
+    if (method === "getTokenSupply") return { value: { amount: "1", decimals: 6 } };
+    throw Error(method);
+  } });
+  const safe = await run(base);
+  assert.ok(safe.ledger.recoveryStartedAt);
+  assert.equal(safe.ledger.chainAccounts[0].before, null);
+  const blocked = await run({ ...base, verifiedCount: 4 });
+  assert.equal(blocked.ledger.recoveryStartedAt, undefined);
+  assert.match(blocked.ledger.recoveryBlockedReason, /dedup/);
+  assert.equal(blocked.ledger.chainAccounts[0].before, signature);
+});
+
+test("legacy double credits are corrected only after re-verifying the receipt", async () => {
+  const key = `${signature}:${wallet}:${mint}`;
+  const ledger = { version: 1, records: [], keys: [key, key], samples: [], verifiedCount: 2, historyComplete: true,
+    totals: { [`${wallet}|${mint}`]: { wallet, asset: mint, symbol: "COIN", decimals: 6, deposits: 2, amountRaw: "10000000" } } };
+  const run = (tx) => collectVoids({ previous: { ledger }, fetchJson: async () => json([]), rpc: async (method) => method === "getTransaction" ? tx : { value: [] } });
+  const failed = await run(null);
+  assert.equal(failed.verifiedEvents, 2);
+  assert.equal(failed.ledger.duplicateCreditsPending, 1);
+  const fixed = await run(receipt());
+  assert.equal(fixed.verifiedEvents, 1);
+  assert.equal(fixed.ledger.totals[`${wallet}|${mint}`].amountRaw, "5000000");
+  assert.deepEqual(fixed.ledger.keys, [key]);
+  assert.equal(fixed.ledger.corrections[0].removedDeposits, 1);
+  assert.equal(fixed.ledger.corrections[0].removedAmountRaw, "5000000");
+  assert.equal(ledger.verifiedCount, 2, "repair works on the collector copy, not the caller's saved ledger");
+});
+
+test("wallets beyond the top 50 remain searchable and can lead the Value ranking", () => {
+  const leaderboard = Array.from({ length: 70 }, (_, i) => ({ wallet: `wallet${i}`, username: i === 69 ? "jimmy" : null,
+    transactions: 100 - i, assets: { [mint]: { mint, symbol: "HOE", amountRaw: "100", decimals: 0,
+      transactions: 1, valueUsd: i === 69 ? 103588 : 1, unitPriceUsd: i === 69 ? 1035.88 : 0.01 } } }));
+  const published = publicVoidSource({ ledger: { records: [] }, assets: [{ mint, symbol: "HOE" }], leaderboard });
+  const all = allVoidRows(published);
+  assert.equal(all.length, 70);
+  assert.equal(filterVoiders(all, "jimmy").rows[0].wallet, "wallet69");
+  assert.equal(sortVoidRows(all, "value", "")[0].username, "jimmy");
+  assert.equal(rankVoiders(all, mint).length, 70);
+});
 
 test("catalog coins remain discoverable without manufacturing verified deposits", () => {
   const ledger = { records: [], catalog: { total: 1, mints: { [mint]: { symbol: "COIN", name: "Catalog coin" } } } };
@@ -224,7 +332,8 @@ test("direct treasury history recovers a depositor missing from both feed and ho
   const rpc = async (method, params) => {
     if (method === "getTokenAccountsByOwner") {
       assert.equal(params[0], VOID_TREASURY);
-      assert.deepEqual(params[1].programIds, [TOKEN, TOKEN_2022], "both token programs are inventoried, not just classic SPL");
+      assert.ok([TOKEN, TOKEN_2022].includes(params[1].programId), "each token program uses a standard programId filter");
+      assert.equal(params[1].programIds, undefined);
       return { value: [{ pubkey: destination, account: { data: { program: TOKEN_2022, parsed: { info: { owner: VOID_TREASURY, mint: SHOCKER_MINT, tokenAmount: { amount: "0" } } } } } }] };
     }
     if (method === "getSignaturesForAddress") { assert.equal(params[0], destination); return [{ signature, err: null, blockTime: tx.blockTime }]; }
@@ -455,7 +564,7 @@ test("one unreadable account is deferred, not retried forever while the rest wai
   assert.equal(again.ledger.chainAccounts.find((a) => a.address === GOOD).complete, true);
 });
 
-test("a receipt that stays unreadable is dropped instead of retried forever", async () => {
+test("an unavailable receipt leaves the active queue but retains its identity for recovery", async () => {
   const GOOD = "X".repeat(32);
   const tx = receipt();
   for (const b of [...tx.meta.preTokenBalances, ...tx.meta.postTokenBalances]) b.mint = SHOCKER_MINT;
@@ -478,6 +587,8 @@ test("a receipt that stays unreadable is dropped instead of retried forever", as
   assert.equal(out.verifiedEvents, 1, "the readable receipt is still credited beside the pruned one");
   assert.equal(deadCalls, 1, "a signature the provider does not hold is asked for exactly once");
   assert.equal(out.ledger.chainPending.some((p) => p.signature === deadSig), false, "pruned history leaves the queue immediately");
-  assert.equal(out.ledger.chainPruned, 1);
+  assert.equal(out.ledger.chainPruned, undefined, "a null response does not prove permanently pruned history");
+  assert.equal(out.ledger.chainRetry[0].signature, deadSig);
+  assert.ok(out.ledger.chainRetry[0].deferUntil > Date.now());
   assert.equal(out.verifiedEvents, 1);
 });

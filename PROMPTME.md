@@ -78,6 +78,15 @@ lead with highest rank.
 
 ## Onward
 
+VOIDers coverage: use the public `walletIndex` for search and sorting, not the
+legacy top-50 `leaderboard` or byte-capped `assetLeaderboards`. Other-chain launch
+catalog entries are labeled catalog-only, not credited as Solana deposits.
+Token inventories use one standard `programId` request per SPL program. Failed
+historical receipts persist in `chainRetry`; a null RPC response is not proof of
+pruned history. Legacy unreadable history is rescanned only with a complete
+dedup journal; verified duplicate corrections are recorded in `ledger.corrections`.
+All discovered accounts paginated does NOT mean all receipts verified.
+
 Pool Void (`poolvoid.archive`) is collected on full passes from public
 `https://poolvoid.app/api/status` and `/api/transfers?target=all&category=all`.
 The VOIDers tab shows source-reported Ethereum/Base counts, target sync times,
