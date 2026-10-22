@@ -339,6 +339,29 @@ async function sniffStacknetX402() {
   };
 }
 
+/**
+ * Free SOL/USD spot as an independent fallback for the treasury price.
+ * stacknet.network carries solPriceUsd but is auth-gated (401) whenever its
+ * /network/summary route is private; this keeps a real price on the desk from
+ * a public source rather than leaving the figure blank or stale.
+ */
+async function sniffSolPrice() {
+  const res = await fetchJson(
+    "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
+    { timeoutMs: 8000 },
+  );
+  const price = Number(res.json?.solana?.usd);
+  return {
+    source: "solana.price",
+    ok: res.ok && Number.isFinite(price),
+    status: res.status,
+    ms: res.ms,
+    priceUsd: Number.isFinite(price) ? price : null,
+    provider: "coingecko",
+    fingerprint: simpleHash(`sol|${Number.isFinite(price) ? price : ""}`),
+  };
+}
+
 async function sniffStacknetNode(options = {}) {
   const res = await fetchJson(`${config.stacknetBaseUrl}/node`, options);
   return {
@@ -5961,6 +5984,7 @@ export async function runSniff({ forceMiningSurface = false, previous = null } =
     DEVNET_TEST_TREASURY_ADDRESS;
   sources.push(await observeSource("solana.treasury", sniffSolanaTreasury(treasuryAddress)));
   sources.push(await observeSource("solana.tokens", sniffSolanaTokens()));
+  sources.push(await observeSource("solana.price", sniffSolPrice()));
 
   const bySource = Object.fromEntries(sources.map((s) => [s.source, s]));
   // service.js can retain old mint values after an empty/failed read.
@@ -6331,7 +6355,8 @@ function summarizeStacknet(bySource, checkedAt = null) {
     models: network.totalModels ?? null,
     apiModels: bySource["stacknet.models"]?.count ?? null,
     capabilities: network.capabilities?.length ?? null,
-    solPriceUsd: network.treasury?.solPriceUsd ?? null,
+    solPriceUsd:
+      network.treasury?.solPriceUsd ?? bySource["solana.price"]?.priceUsd ?? null,
     treasuryAddress: network.treasury?.treasuryAddress ?? null,
     treasuryCluster: network.treasury?.cluster ?? null,
     treasuryStaleSeconds: network.treasury?.staleSeconds ?? null,

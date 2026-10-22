@@ -49,10 +49,16 @@ export function mergeVoidRows(rows) {
   return [...byWallet.values()];
 }
 
+export function voidCoinOptions(source) {
+  const coins = new Map((source.catalogAssets || []).map((coin) => [coin.mint, { ...coin, verified: false }]));
+  for (const coin of source.assets || []) coins.set(coin.mint, { ...coins.get(coin.mint), ...coin, verified: true });
+  return [...coins.values()].sort((a, b) => String(a.symbol).localeCompare(String(b.symbol)) || a.mint.localeCompare(b.mint));
+}
+
 // Column sorting. Every metric here is measured; a null metric sorts last
 // rather than being treated as zero, so "no price data" never looks like "$0".
 const COLUMNS = {
-  rank: { label: "#", get: (row, ctx) => ctx.rank.get(row) ?? Number.MAX_SAFE_INTEGER, asc: true },
+  rank: { label: "#", get: (row, ctx) => ctx.rank.get(row.wallet) ?? ctx.rank.get(row) ?? Number.MAX_SAFE_INTEGER, asc: true },
   wallet: { label: "VOIDer", get: (row) => row.username || row.wallet, asc: true, text: true },
   deposits: { label: "Deposits", get: (row, ctx) => ctx.deposits(row) },
   amount: { label: "Amount", get: (row, ctx) => ctx.amount(row), big: true },
@@ -78,6 +84,7 @@ export function sortVoidRows(rows, key, asset, rank = new Map()) {
   const dir = column.asc ? 1 : -1;
   return [...rows].sort((a, b) => {
     const x = column.get(a, ctx), y = column.get(b, ctx);
+    if ((x === null || x === undefined) && (y === null || y === undefined)) return a.wallet.localeCompare(b.wallet);
     if (x === null || x === undefined) return 1;
     if (y === null || y === undefined) return -1;
     if (x < y) return -dir;
@@ -95,25 +102,19 @@ export function renderVoidBoard(source, ui = {}) {
     root.innerHTML = `<p class="desk-context">${esc(source?.reason || "The collector is discovering historical void events and verifying receipts. No holdings are required to appear here.")} Stored credits are retained across refreshes; an unavailable read is not zero activity.</p>`;
     return;
   }
-  if (search && !search.dataset.bound) {
-    search.dataset.bound = "1";
-    search.addEventListener("input", () => renderVoidBoard(source, ui));
-  }
+  if (search) search.oninput = () => renderVoidBoard(source, ui);
   const clickSort = (event) => {
     const th = event.target.closest("th[data-sort]");
     if (!th) return;
-    const next = ui.sort === th.dataset.sort ? th.dataset.sort : th.dataset.sort;
-    ui.sort = next;
+    ui.sort = th.dataset.sort;
     renderVoidBoard(source, ui);
   };
-  if (!root.dataset.sortBound) {
-    root.dataset.sortBound = "1";
-    root.addEventListener("click", clickSort);
-    root.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); clickSort(e); } });
-  }
+  root.onclick = clickSort;
+  root.onkeydown = (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.closest("th[data-sort]")) { e.preventDefault(); clickSort(e); } };
   const selected = select.value;
-  const options = '<option value="">Most verified void deposits</option>' + source.assets.map((a) => `<option value="${esc(a.mint)}">Amount · ${esc(a.symbol)}${a.mint !== "SOL" ? ` · ${esc(short(a.mint))}` : ""}</option>`).join("");
-  if (select.innerHTML !== options) { select.innerHTML = options; select.value = source.assets.some((a) => a.mint === selected) ? selected : ""; }
+  const coins = voidCoinOptions(source);
+  const options = '<option value="">All verified coins · most deposits</option>' + coins.map((a) => `<option value="${esc(a.mint)}">${esc(a.symbol)}${a.mint !== "SOL" ? ` · ${esc(short(a.mint))}` : ""}${a.verified ? "" : " · not yet verified"}</option>`).join("");
+  if (select.innerHTML !== options) { select.innerHTML = options; select.value = coins.some((a) => a.mint === selected) ? selected : ""; }
   select.onchange = () => renderVoidBoard(source, ui);
   const boardRows = select.value && source.assetLeaderboards ? source.assetLeaderboards[select.value] || [] : source.leaderboard;
   const query = search?.value || "";
@@ -123,9 +124,9 @@ export function renderVoidBoard(source, ui = {}) {
   const sortKey = ui.sort || "rank";
   const ranked = sortVoidRows(found.rows, sortKey, select.value, baseRank);
   const matchNote = query.trim()
-    ? `<p class="desk-context"><b>Search "${esc(query.trim())}":</b> ${ranked.length} row${ranked.length === 1 ? "" : "s"}${found.coinMatches ? `, ${found.coinMatches} credited that coin or its creator` : ""}${ranked.length ? "" : " in this ranking"}. A wallet or coin outside the current ranking has no verified deposit yet — it is not ranked as zero.</p>`
+    ? `<p class="desk-context"><b>Search "${esc(query.trim())}":</b> ${ranked.length} row${ranked.length === 1 ? "" : "s"}${found.coinMatches ? `, ${found.coinMatches} credited that coin or its creator` : ""}. Results cover the rankings included in this response; absence does not prove zero deposits. Catalog-only coins are available in the coin picker.</p>`
     : "";
-  const asset = select.value ? source.assets?.find((a) => a.mint === select.value) : null;
+  const asset = select.value ? coins.find((a) => a.mint === select.value) : null;
   const header = (key, title) => `<th class="void-sortable${sortKey === key ? " sorted" : ""}" data-sort="${key}" title="${title}" tabindex="0" role="button">${COLUMNS[key].label}</th>`;
   const rows = ranked.slice(0, 50).map((row, index) => {
     if (select.value && row.assets[select.value]?.latestAt) row = { ...row, latestAt: row.assets[select.value].latestAt };
@@ -149,11 +150,12 @@ export function renderVoidBoard(source, ui = {}) {
   const head = `${source.totalWallets ?? source.leaderboard.length} wallets · ${source.verifiedEvents.toLocaleString("en-US")} verified deposits${Number.isFinite(source.catalogTotal) ? ` · ${source.catalogCovered}/${source.catalogTotal} coins` : ""}${sweep ? ` · sweep ${sweep}${sweepComplete ? " complete" : ""}` : ""}${source.stale ? " · last check " + stamp(source.dataUpdatedAt) : ""}`;
   root.innerHTML = `${matchNote}
     <p class="void-head"><b>${esc(head)}</b>${source.stale ? " · showing stored history, feed is not current" : ""}</p>
-    ${rows ? `<div class="desk-table-scroll"><table class="desk-table void-table"><caption class="sr-only">Top VOIDers — observed receipt-verified transfers</caption><thead><tr>${header("rank", "Default ranking order")}${header("wallet", "Sort by VOIDer name")}${header("deposits", "Sort by number of verified deposits")}${header("share", "Share of this coin's total verified void volume")}${header("value", "Value at the published market price")}${header("points", "TRIX points, where published")}<th>Amounts verified</th><th>Latest</th><th>Proof</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    ${asset && !asset.verified ? `<p class="desk-context"><b>${esc(asset.symbol)}</b> is in the launch catalog. No deposit for this coin has been verified in the stored evidence yet; its balance and deposit count are unknown.</p>` : ""}
+    ${rows ? `<div class="desk-table-scroll"><table class="desk-table void-table"><caption class="sr-only">Top VOIDers — observed receipt-verified transfers</caption><thead><tr>${header("rank", "Default ranking order")}${header("wallet", "Sort by VOIDer name")}${header("deposits", "Sort by number of verified deposits")}${header("share", "Share of this coin's total verified void volume")}${header("value", "Value at the published market price")}${header("points", "TRIX points, where published")}<th>Amounts verified</th>${header("latest", "Sort by latest verified deposit")}<th>Proof</th></tr></thead><tbody>${rows}</tbody></table></div>`
       : query.trim() ? '<p class="desk-context">No verified row matches that search in this response. The scan is still running, so a coin or wallet can appear later without anything changing.</p>'
       : '<p class="desk-context">No verified rows yet for this view. Pending or failed checks are not counted as credits.</p>'}
     <details class="void-notes"><summary>How this is measured</summary>
-      <p>Receipts verify transfers into ${explorer("account", source.treasury, "the TRIX treasury")} — not token burning or awarded points. Current holdings never affect inclusion, and a coin missing here has no verified deposit yet rather than an excluded holder. Percentages use on-chain supply sampled at the time shown.</p>
+      <p>Receipts verify transfers into ${explorer("account", source.treasury, "the TRIX treasury")} — not token burning or awarded points. Current holdings never affect inclusion. Missing rows may reflect unscanned history, unreadable receipts or compact ranking limits. Percentages use on-chain supply sampled at the time shown.</p>
       <p>Discovery reads both TRIX's void feed and the treasury's own token-account history, including Token-2022 and zero-balance accounts. Every verified receipt is rolled into permanent totals; only the most recent ${source.proofSamples ?? source.retainedProofs ?? 250} are kept as inline proof. ${l.historyComplete && !l.recentGapBefore ? "The feed's available history is exhausted; the sweep below is the remainder." : "Feed history backfill is still running."} Oldest feed page: ${esc(stamp(l.historyOldestAt))}.${l.coverageGaps ? " High-volume gaps were detected; coverage is incomplete." : ""}</p>
       <p>Sweep: ${l.chainReceiptsChecked || 0} historical receipts inspected, ${queued} queued, ${l.chainUnverified || 0} transfer checks did not verify${l.chainUnreadable ? `, ${l.chainUnreadable} unreadable (${l.chainPruned || 0} pruned beyond provider history)` : ""}.${l.chainAccountErrors ? ` ${l.chainAccountErrors} account scan(s) deferred; each retries later instead of blocking the rest.` : ""}${l.chainInventoryCapped ? " Account inventory cap reached." : ""} Pagination completion is not receipt verification.${l.chainRateLimited ? ` ${l.chainRateLimited} calls were rate-limited by the provider — that is RPC capacity, not missing data, and it is the only thing slowing the sweep.` : ""}</p>
       <p>Rows show up to six coins per wallet; pick a coin above to rank by its amount. Click any column heading to re-sort${asset ? `; with ${esc(asset.symbol)} selected, amount, share and value refer to that coin only` : ""}. ${source.rankingsLimited ? "Some coin rankings are omitted from this compact response; missing rows do not imply zero credit." : ""} This is an observed, bounded leaderboard, not a guaranteed all-time ranking.</p>

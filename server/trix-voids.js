@@ -229,7 +229,11 @@ export function summarizeVoids(ledger) {
   leaderboard.sort((a, b) => b.transactions - a.transactions || a.wallet.localeCompare(b.wallet));
   const list = [...assets.values()];
   const covered = ledger.catalog?.total ? list.filter((a) => ledger.catalog.mints[a.mint]).length : null;
-  return { leaderboard, assets: list, verifiedEvents: rolled ? (ledger.verifiedCount || 0) : events.length,
+  const catalogAssets = Object.entries(ledger.catalog?.mints || {}).map(([mint, coin]) => ({
+    mint, symbol: coin.symbol, name: coin.name, creator: coin.creator,
+    verified: assets.has(mint),
+  }));
+  return { leaderboard, assets: list, catalogAssets, verifiedEvents: rolled ? (ledger.verifiedCount || 0) : events.length,
     pendingEvents: ledger.records.filter((r) => r.status === "pending").length,
     unverifiedEvents: ledger.records.filter((r) => r.status === "unverified").length,
     catalogTotal: ledger.catalog?.total ?? null, catalogCovered: covered, catalogAt: ledger.catalog?.at ?? null };
@@ -557,7 +561,7 @@ export function restoreVoidHistory(latest, ledger) {
 export function publicVoidSource(source) {
   if (!source?.ledger || source.publicView) return source;
   const { ledger, leaderboard = [], ...summary } = source;
-  const compactRow = (row, asset) => ({ ...row, assets: asset ? { [asset]: row.assets[asset] } : Object.fromEntries(Object.entries(row.assets).slice(0, 4)) });
+  const compactRow = (row, asset) => ({ ...row, assets: asset ? { [asset]: row.assets[asset] } : row.assets });
   const output = { ...summary, publicView: true, totalWallets: leaderboard.length, retainedProofs: (ledger.samples || []).length,
     verifiedEvents: ledger.verifiedCount ?? summary.verifiedEvents,
     marketAt: ledger.market?.at ?? null, marketTotal: ledger.market?.total ?? null,

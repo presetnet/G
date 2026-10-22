@@ -120,8 +120,8 @@ const previous = { sources: {
 } };
 const before = JSON.stringify(previous);
 const full = await api.runSniff({ previous });
-// Includes the receipt-backed void leaderboard source.
-assert.equal(Object.keys(full.sources).length, 53);
+// Includes the receipt-backed void leaderboard source and the free SOL price feed.
+assert.equal(Object.keys(full.sources).length, 54);
 assert.equal(Object.keys(full.sources).some((key) => key.startsWith("source-")), false);
 // stubCollectors() fails every sniff* collector, so this source is a failure
 // entry here. The gate fields are asserted in scripts/trix-live-test.js instead;

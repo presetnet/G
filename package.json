@@ -16,5 +16,9 @@
   "dependencies": {
     "ethers": "^6.17.0",
     "express": "^5.1.0"
+  },
+  "overrides": {
+    "proxy-addr": "^2.0.8",
+    "qs": "^6.16.0"
   }
 }

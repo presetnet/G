@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { voidCandidate, verifyVoidTransfer, collectVoids, summarizeVoids, summarizeVoidsWith, restoreVoidHistory, candidatesFromTreasuryReceipt, publicVoidSource, VOID_TREASURY, SHOCKER_MINT, TOKEN_2022 } from "../server/trix-voids.js";
-import { rankVoiders, voidAmount, filterVoiders, mergeVoidRows, sortVoidRows } from "../public/trix-void-board.js";
+import { rankVoiders, voidAmount, filterVoiders, mergeVoidRows, sortVoidRows, voidCoinOptions, renderVoidBoard } from "../public/trix-void-board.js";
 import { normalizeBundle } from "../server/shared-store.js";
 import { filterEvidence } from "../public/evidence.js";
 
@@ -20,6 +20,45 @@ const receipt = () => ({ slot: 42, blockTime: 1790812800,
     ] } },
 });
 const json = (items, nextBefore = null) => ({ ok: true, json: { items, nextBefore } });
+
+test("catalog coins remain discoverable without manufacturing verified deposits", () => {
+  const ledger = { records: [], catalog: { total: 1, mints: { [mint]: { symbol: "COIN", name: "Catalog coin" } } } };
+  const board = summarizeVoids(ledger);
+  const published = publicVoidSource({ ...board, ledger });
+  assert.equal(published.leaderboard.length, 0);
+  assert.equal(published.assets.length, 0);
+  assert.deepEqual(voidCoinOptions(published).map((a) => [a.mint, a.verified]), [[mint, false]]);
+  assert.equal(voidCoinOptions({ ...published, assets: [{ mint, symbol: "COIN" }] })[0].verified, true);
+});
+
+test("compact overall rows preserve coins beyond the former four-coin cutoff", () => {
+  const assets = Object.fromEntries(Array.from({ length: 7 }, (_, i) => [`coin${i}`, { mint: `coin${i}`, amountRaw: "1" }]));
+  const published = publicVoidSource({ ledger: { records: [] }, leaderboard: [{ wallet, assets }], assets: [] });
+  assert.equal(Object.keys(published.leaderboard[0].assets).length, 7);
+});
+
+test("default rank restores deposit order after another column is selected", () => {
+  const rows = [{ wallet: "a", assets: {} }, { wallet: "b", assets: {} }];
+  assert.deepEqual(sortVoidRows(rows, "rank", "", new Map([["b", 1], ["a", 2]])).map((r) => r.wallet), ["b", "a"]);
+});
+
+test("search and sort use the refreshed snapshot rather than the initial render", () => {
+  const previousDocument = globalThis.document;
+  const elements = { voidRows: { innerHTML: "" }, voidAsset: { innerHTML: "", value: "" }, voidSearch: { value: "" } };
+  globalThis.document = { getElementById: (id) => elements[id] };
+  try {
+    const board = { ok: true, ledger: { records: [] }, assets: [], leaderboard: [], verifiedEvents: 0, totalWallets: 1 };
+    renderVoidBoard(board);
+    renderVoidBoard({ ...board, totalWallets: 2 });
+    elements.voidSearch.oninput();
+    assert.match(elements.voidRows.innerHTML, /2 wallets/);
+    elements.voidRows.onclick({ target: { closest: () => ({ dataset: { sort: "latest" } }) } });
+    assert.match(elements.voidRows.innerHTML, /2 wallets/);
+  } finally {
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+  }
+});
 
 test("an emptied token account remains credited, without counting its SOL fee", () => {
   const verified = verifyVoidTransfer(voidCandidate(event), receipt());
