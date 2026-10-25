@@ -109,6 +109,31 @@ export function sortVoidRows(rows, key, asset, rank = new Map()) {
 
 const usd = (v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : v >= 1 ? `$${v.toFixed(2)}` : `$${v.toFixed(4)}`;
 
+export function voidRecoveryStatus(source, now = Date.now()) {
+  const l = source.ledger || {};
+  const accounts = l.chainAccountCount ?? l.chainAccounts?.length ?? 0;
+  const paginated = l.chainCompleteCount ?? l.chainAccounts?.filter((a) => a.complete).length ?? 0;
+  const queued = l.chainPendingCount ?? l.chainPending?.length ?? 0;
+  const retry = l.chainRetryCount ?? l.chainRetry?.length ?? 0;
+  const feed = l.feedPendingCount ?? source.pendingEvents ?? 0;
+  const blocked = l.verificationRescanBlocked || l.recoveryBlockedReason;
+  const cooling = Date.parse(l.chainRpcRetryAt || "") > now;
+  const paginationDone = accounts > 0 && paginated >= accounts;
+  const finished = paginationDone && !queued && !retry && !feed && !blocked && !l.duplicateCreditsPending
+    && l.historyComplete && !l.recentGapBefore && !l.coverageGaps && !l.chainInventoryCapped
+    && !l.chainToken2022Unavailable && !l.chainClassicUnavailable;
+  const recheck = !!(l.verificationRescanStartedAt || l.recoveryStartedAt);
+  return {
+    title: source.stale || !source.ok ? "Recovery status is stale" : blocked ? "Historical recovery needs attention"
+      : cooling ? "Historical re-verification · provider cooldown" : finished ? "Current recheck pass finished"
+      : recheck ? "Historical re-verification in progress" : "Historical discovery in progress",
+    detail: `${paginated}/${accounts} discovered account histories paginated · ${queued} receipts queued · ${retry} deferred · ${feed} feed receipts pending.`,
+    note: blocked || (cooling ? `Retries resume automatically after ${stamp(l.chainRpcRetryAt)}. Existing verified records remain available.`
+      : finished ? "No queued work remains for this pass. This does not establish complete all-time coverage or remove rejected-record and closed-account limitations."
+      : "Previously verified records remain available. The account counter measures this pass, not the proportion of trustworthy rows. The scheduled collector resumes automatically."),
+  };
+}
+
 export function renderVoidBoard(source, ui) {
   const root = document.getElementById("voidRows"), select = document.getElementById("voidAsset"), search = document.getElementById("voidSearch");
   if (!root || !select) return;
@@ -166,17 +191,13 @@ export function renderVoidBoard(source, ui) {
     return `<tr><td class="void-rank">${baseRank.get(row.wallet) ?? index + 1}</td><td><b title="${esc(row.wallet)}">${esc(row.username || `Unnamed wallet`)}</b> <small>${walletTag(row.wallet)}</small></td><td class="desk-number">${select.value ? row.assets[select.value].transactions : row.transactions}</td><td class="desk-number">${Number.isFinite(share) && share >= 0 ? `${share.toFixed(2)}%` : "—"}</td><td class="desk-number">${Number.isFinite(value) && value >= 0 ? usd(value) : `<span class="void-nodata" title="No published market cap for this coin">n/a</span>`}</td><td class="desk-number">${Number.isFinite(row.points) ? row.points.toLocaleString("en-US") : `<span class="void-nodata" title="Not in TRIX's published points table">—</span>`}</td><td class="void-assets">${amounts.slice(0, 6).map(chip).join("")}${extraCoins}</td><td class="void-when">${esc(stamp(row.latestAt))}</td><td><details data-void-detail="proof:${esc(row.wallet)}"><summary>Receipt evidence</summary>${receipts.map((r) => `<p>${explorer("tx", r.signature, short(r.signature))}<br><small>${esc(stamp(r.at))} · ${esc(voidAmount(r.amountRaw, r.decimals))} ${esc(r.symbol)}</small></p>`).join("")}${latestProofs}${!receipts.length && !latestProofs ? '<p>No inline proof sample in this response; stored totals are retained.</p>' : ""}</details></td></tr>`;
   }).join("");
   const l = source.ledger;
-  const accounts = l.chainAccountCount ?? l.chainAccounts?.length ?? 0;
   const queued = l.chainPendingCount ?? l.chainPending?.length ?? 0;
-  const complete = l.chainCompleteCount ?? l.chainAccounts?.filter((a) => a.complete).length ?? 0;
-  const sweep = accounts ? `${complete}/${accounts} accounts` : "";
-  // "Finished" is a real, checkable state: every discovered account paginated to
-  // its end with nothing queued. Until then the ranking is partial.
-  const sweepComplete = accounts > 0 && complete >= accounts && queued === 0;
-  const head = `${source.totalWallets ?? source.leaderboard.length} wallets · ${source.verifiedEvents.toLocaleString("en-US")} verified deposits${Number.isFinite(source.catalogCovered) ? ` · ${source.catalogCovered} Solana catalog coins with verified deposits` : ""}${sweep ? ` · account scan ${sweep}${sweepComplete ? " paginated" : ""}` : ""}${source.stale ? " · last check " + stamp(source.dataUpdatedAt) : ""}`;
+  const recovery = voidRecoveryStatus(source);
+  const head = `${source.totalWallets ?? source.leaderboard.length} wallets · ${source.verifiedEvents.toLocaleString("en-US")} verified deposits${Number.isFinite(source.catalogCovered) ? ` · ${source.catalogCovered} Solana catalog coins with verified deposits` : ""}${source.stale ? " · last check " + stamp(source.dataUpdatedAt) : ""}`;
   root.innerHTML = `${matchNote}
     ${completeRows ? `<p class="desk-context">Search and sorting cover all ${completeRows.length.toLocaleString("en-US")} stored wallets. Showing ${Math.min(ranked.length, rowLimit)} of ${ranked.length.toLocaleString("en-US")} matching rows. Stored evidence is not a guarantee of complete on-chain history.</p>` : ""}
     <p class="void-head"><b>${esc(head)}</b>${source.stale ? " · showing stored history, feed is not current" : ""}</p>
+    <section class="void-recovery" aria-label="Historical recovery status"><strong>${esc(recovery.title)}</strong><p>${esc(recovery.detail)}</p><small>${esc(recovery.note)}</small></section>
     ${source.coverage ? `<p class="desk-context"><b>Catalog:</b> ${source.coverage.catalogCoins} Solana coins indexed. <b>Deposit evidence:</b> ${source.coverage.creditedCoins ?? "unknown"} coins credited. These are different counts, not a completion percentage.${source.coverage.inventoryAvailable ? ` ${source.coverage.withoutDiscoveredAccount} catalog coins have no discovered treasury account; ${source.coverage.uncreditedTreasuryCoins.length} have an account but no verified depositor yet.` : " Treasury inventory coverage is unavailable."}</p>${source.coverage.uncreditedTreasuryCoins.length ? `<details class="void-notes"><summary>Coins needing deposit attribution (${source.coverage.uncreditedTreasuryCoins.length})</summary><p>${source.coverage.uncreditedTreasuryCoins.map((a) => `<span title="${esc(a.mint)}">${esc(a.symbol)}</span>`).join(" · ")}</p><p>These accounts are prioritized for receipt scanning. Treasury holdings alone do not identify who deposited.</p></details>` : ""}` : ""}
     ${l.verificationRescanStartedAt || l.verificationRescanBlocked ? `<p class="desk-context">Receipt-format recovery: ${l.verificationRescanBlocked ? esc(l.verificationRescanBlocked) : `started ${esc(stamp(l.verificationRescanStartedAt))}; signed alternate-authority receipts are being rechecked.`}</p>` : ""}
     <p class="desk-context">${asset ? `Share is the wallet's portion of recorded deposits for ${esc(asset.symbol)}, not its circulating supply. 100% means the only depositor in our recorded evidence, not necessarily the only depositor on-chain.` : "Select a coin to compare shares of its recorded deposits. There is no meaningful combined percentage across different coins."}</p>

@@ -24,6 +24,10 @@
 .pv-proof { margin-top: 20px; font-size: 12px; color: #b9c4bc; line-height: 1.6; }
 .pv-proof summary { cursor: pointer; color: #d5f5b1; }
 .pv-proof code { overflow-wrap: anywhere; }
+.void-recovery { margin: 12px 0 18px; padding: 14px 16px; border: 1px solid #96b6a333; border-left: 3px solid #9fbf82; border-radius: 8px; background: #96b6a30a; }
+.void-recovery strong { font-size: 13px; }
+.void-recovery p { margin: 6px 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.void-recovery small { display: block; font-size: 11px; line-height: 1.5; opacity: .8; }
 .pv-feed { max-height: 360px; overflow-y: auto; scrollbar-gutter: stable; overscroll-behavior: contain; }
 #voidRows .desk-table-scroll { max-height: 420px; overflow: auto; scrollbar-gutter: stable; overscroll-behavior: contain; }
 #voidRows .desk-table thead { position: sticky; top: 0; z-index: 2; background: var(--panel, #151b18); }

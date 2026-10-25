@@ -91,6 +91,9 @@ credited catalog coins, coins without a discovered treasury account, and account
 still lacking attribution. Verification v2 accepts `multisigAuthority` when the
 credited owner actually signed the transaction, with unchanged balance checks.
 It initiates one deduplicated rescan and prioritizes coins without credits.
+The UI separates stored verified totals from historical re-verification progress.
+The receipt worker persists a one-minute RPC cooldown after HTTP 429 instead of
+attempting the remainder of a throttled batch; queued receipt identities survive.
 
 Pool Void (`poolvoid.archive`) is collected on full passes from public
 `https://poolvoid.app/api/status` and `/api/transfers?target=all&category=all`.

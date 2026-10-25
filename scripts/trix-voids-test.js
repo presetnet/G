@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { voidCandidate, verifyVoidTransfer, collectVoids, summarizeVoids, summarizeVoidsWith, restoreVoidHistory, candidatesFromTreasuryReceipt, publicVoidSource, VOID_TREASURY, SHOCKER_MINT, TOKEN_2022 } from "../server/trix-voids.js";
-import { rankVoiders, voidAmount, filterVoiders, mergeVoidRows, sortVoidRows, voidCoinOptions, renderVoidBoard, allVoidRows } from "../public/trix-void-board.js";
+import { rankVoiders, voidAmount, filterVoiders, mergeVoidRows, sortVoidRows, voidCoinOptions, renderVoidBoard, allVoidRows, voidRecoveryStatus } from "../public/trix-void-board.js";
 import { normalizeBundle } from "../server/shared-store.js";
 import { filterEvidence } from "../public/evidence.js";
 
@@ -20,6 +20,39 @@ const receipt = () => ({ slot: 42, blockTime: 1790812800,
     ] } },
 });
 const json = (items, nextBefore = null) => ({ ok: true, json: { items, nextBefore } });
+
+test("recovery status distinguishes rechecking, queued receipts and a finished pass", () => {
+  const s = { ok: true, ledger: { verificationRescanStartedAt: "2026-10-25T00:00:00Z", chainAccountCount: 654,
+    chainCompleteCount: 136, chainPendingCount: 1200, historyComplete: true } };
+  assert.equal(voidRecoveryStatus(s).title, "Historical re-verification in progress");
+  assert.match(voidRecoveryStatus(s).note, /Previously verified records remain available/);
+  s.ledger.chainCompleteCount = 654;
+  assert.notEqual(voidRecoveryStatus(s).title, "Current recheck pass finished", "pagination cannot hide pending verification");
+  s.ledger.chainPendingCount = 0;
+  assert.equal(voidRecoveryStatus(s).title, "Current recheck pass finished");
+  assert.match(voidRecoveryStatus(s).note, /does not establish complete all-time coverage/);
+  s.stale = true;
+  assert.equal(voidRecoveryStatus(s).title, "Recovery status is stale");
+});
+
+test("a rate-limited receipt batch pauses instead of hammering every queued receipt", async () => {
+  let calls = 0;
+  const ledger = { version: 1, verificationVersion: 2, receiptRetentionVersion: 2, records: [], totals: {}, keys: [], samples: [], verifiedCount: 0,
+    historyComplete: true, chainPending: Array.from({ length: 30 }, (_, i) => ({ signature: `${signature}${i}`, mint, symbol: "COIN", attempts: 0 })) };
+  const rpc = async (method) => {
+    if (method === "getTokenAccountsByOwner") return { value: [] };
+    if (method === "getTransaction") { calls++; throw Error("Solana RPC HTTP 429"); }
+    throw Error(method);
+  };
+  const first = await collectVoids({ previous: { ledger }, rpc, fetchJson: async () => json([]) });
+  assert.ok(calls > 0 && calls < 30);
+  assert.equal(first.ledger.chainPending.length, 30);
+  assert.equal(first.ledger.chainPending.every((r) => r.attempts === 0), true);
+  assert.ok(Date.parse(first.ledger.chainRpcRetryAt) > Date.now());
+  const before = calls;
+  await collectVoids({ previous: first, rpc, fetchJson: async () => json([]) });
+  assert.equal(calls, before, "persisted cooldown prevents another burst next pass");
+});
 
 test("signed alternate-authority transfers verify without bypassing ownership or signatures", () => {
   const tx = receipt();
@@ -301,6 +334,7 @@ test("pending receipts retry after outages and history cursor advances without d
   assert.equal(first.ledger.historyComplete, true);
   assert.equal(urls.filter((u) => u.includes("/api/launches")).length, 1, "the launch catalog is read once per refresh, not per page");
   assert.equal(urls.filter((u) => u.includes("feed/trades")).length, 2);
+  first.ledger.chainRpcRetryAt = new Date(Date.now() - 1).toISOString(); // provider cooldown has elapsed
   const next = await collectVoids({ previous: first, fetchJson, rpc: async () => receipt() });
   assert.equal(next.verifiedEvents, 1);
   assert.equal(next.pendingEvents, 0);

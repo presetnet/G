@@ -503,6 +503,11 @@ const deadline = Date.now() + 35000;
   }
   ledger.capped = false;
   const failures = [];
+  const rpcCoolingDown = () => Date.parse(ledger.chainRpcRetryAt || "") > Date.now();
+  const pauseRpc = () => {
+    ledger.chainRateLimited = (ledger.chainRateLimited || 0) + 1;
+    ledger.chainRpcRetryAt = new Date(Date.now() + 60_000).toISOString();
+  };
   let recentOk = false, pagesRead = 0;
   // Catalog first: it supplies coin symbols and creator wallets for this tick.
   if (Date.now() < deadline) {
@@ -564,20 +569,21 @@ const deadline = Date.now() + 35000;
       }
     } catch (e) { failures.push(e.message); }
   }
-  if ((recentOk || ledger.chainAccounts?.length) && Date.now() < deadline) {
+  if ((recentOk || ledger.chainAccounts?.length) && !rpcCoolingDown() && Date.now() < deadline) {
     try { await discoverTreasuryHistory(ledger, rpc, fetchJson, now); }
     catch (e) { failures.push(`Chain discovery: ${e.message}`); }
   }
   const pending = ledger.records.filter((r) => r.status === "pending").sort((a, b) => a.attempts - b.attempts).slice(0, 4);
   // Two at a time to respect public RPC limits and the collector's deadline.
   for (let offset = 0; offset < pending.length; offset += 2) await Promise.all(pending.slice(offset, offset + 2).map(async (record) => {
-    if (Date.now() >= deadline) return;
+    if (Date.now() >= deadline || rpcCoolingDown()) return;
     record.attempts++;
     let tx;
     try {
       tx = await rpc("getTransaction", [record.signature, { encoding: "jsonParsed", commitment: "finalized", maxSupportedTransactionVersion: 0 }], { timeoutMs: 4500 });
       assert(tx, "Receipt not yet available");
     } catch (e) {
+      if (String(e.message).includes("429")) { pauseRpc(); record.attempts--; }
       record.reason = String(e.message).slice(0, 200);
       failures.push(`Receipt check: ${record.reason}`);
       return;
@@ -604,7 +610,7 @@ const deadline = Date.now() + 35000;
   }
   const chainBatch = (ledger.chainPending || []).filter((e) => !e.deferUntil || e.deferUntil <= Date.now()).sort((a, b) => a.attempts - b.attempts).slice(0, RPC_TIER.receiptBatch);
   for (let offset = 0; offset < chainBatch.length; offset += RPC_TIER.receiptParallel) await Promise.all(chainBatch.slice(offset, offset + RPC_TIER.receiptParallel).map(async (entry) => {
-if (Date.now() >= deadline) return;
+if (Date.now() >= deadline || rpcCoolingDown()) return;
     const drop = () => { ledger.chainPending = ledger.chainPending.filter((p) => p !== entry); };
     const park = (reason) => {
       if (!entry.unreadableCounted) { ledger.chainUnreadable = (ledger.chainUnreadable || 0) + 1; entry.unreadableCounted = true; }
@@ -621,7 +627,7 @@ if (Date.now() >= deadline) return;
       // retry: doing so turned a quiet period into permanently discarded
       // deposits. Park the entry briefly so the rest of the queue gets a turn.
       if (String(e.message).includes("429")) {
-        ledger.chainRateLimited = (ledger.chainRateLimited || 0) + 1;
+        pauseRpc();
         entry.deferUntil = Date.now() + 5 * 60_000;
       } else {
         entry.attempts++;
@@ -690,6 +696,8 @@ export function publicVoidSource(source) {
       chainUnreadable: ledger.chainUnreadable || 0, chainPruned: ledger.chainPruned || 0, chainRateLimited: ledger.chainRateLimited || 0, chainAccountErrors: ledger.chainAccountErrors || 0, chainDeferred: ledger.chainDeferred || [],
       chainToken2022Accounts: ledger.chainToken2022Accounts || 0, chainToken2022Unavailable: !!ledger.chainToken2022Unavailable,
       chainClassicUnavailable: !!ledger.chainClassicUnavailable, chainRetryCount: ledger.chainRetry?.length || 0,
+      chainRpcRetryAt: ledger.chainRpcRetryAt || null,
+      feedPendingCount: ledger.records.filter((r) => r.status === "pending").length,
       recoveryStartedAt: ledger.recoveryStartedAt || null, recoveryLegacyUnreadable: ledger.recoveryLegacyUnreadable || 0,
       recoveryBlockedReason: ledger.recoveryBlockedReason || null,
       verificationRescanStartedAt: ledger.verificationRescanStartedAt || null,
