@@ -21,6 +21,31 @@ const receipt = () => ({ slot: 42, blockTime: 1790812800,
 });
 const json = (items, nextBefore = null) => ({ ok: true, json: { items, nextBefore } });
 
+test("signed alternate-authority transfers verify without bypassing ownership or signatures", () => {
+  const tx = receipt();
+  const info = tx.transaction.message.instructions[0].parsed.info;
+  delete info.authority;
+  info.multisigAuthority = wallet;
+  info.signers = [wallet];
+  assert.equal(verifyVoidTransfer(voidCandidate(event), tx).amountRaw, "5000000");
+  info.multisigAuthority = "Z".repeat(32);
+  assert.throws(() => verifyVoidTransfer(voidCandidate(event), tx), /No matching transfer/);
+  info.multisigAuthority = wallet;
+  tx.transaction.message.accountKeys[0].signer = false;
+  assert.throws(() => verifyVoidTransfer(voidCandidate(event), tx), /did not sign/);
+});
+
+test("catalog coverage separates no-account coins from uncredited treasury accounts", () => {
+  const second = "F".repeat(32), third = "G".repeat(32);
+  const s = summarizeVoids({ records: [verifyVoidTransfer(voidCandidate(event), receipt())],
+    catalog: { total: 3, solanaTotal: 3, mints: { [mint]: { symbol: "ONE" }, [second]: { symbol: "TWO" }, [third]: { symbol: "THREE" } } },
+    chainInventoryVersion: 2, chainAccounts: [{ mint }, { mint: second }] });
+  assert.equal(s.coverage.catalogCoins, 3);
+  assert.equal(s.coverage.creditedCoins, 1);
+  assert.equal(s.coverage.withoutDiscoveredAccount, 1);
+  assert.deepEqual(s.coverage.uncreditedTreasuryCoins, [{ mint: second, symbol: "TWO" }]);
+});
+
 test("Token-2022 discovery works even when classic SPL inventory is unavailable", async () => {
   const filters = [];
   const tx = receipt();
@@ -449,6 +474,32 @@ test("columns sort by real metrics and a missing metric never sorts as zero", ()
   assert.deepEqual(sortVoidRows(rows, "wallet", "", rank).map((r) => r.username), ["Amy", "Mid", "Zed"]);
   assert.deepEqual(sortVoidRows(rows, "amount", mint, rank).map((r) => r.wallet), [A, C, B], "amount compares exact raw integers");
   assert.deepEqual(sortVoidRows(rows, "latest", "", rank)[0].wallet, rows[0].wallet, "latest is stable for equal timestamps");
+});
+
+test("share is coin-specific; an unrelated sole-depositor coin cannot inflate the overall column", () => {
+  const rows = [
+    { wallet: "b", assets: { [mint]: { sharePct: 10 }, OTHER: { sharePct: 100 } } },
+    { wallet: "a", assets: { [mint]: { sharePct: 90 } } },
+  ];
+  assert.deepEqual(sortVoidRows(rows, "share", "").map((r) => r.wallet), ["a", "b"], "all-coins shares are unavailable and tie deterministically");
+  assert.deepEqual(sortVoidRows(rows, "share", mint).map((r) => r.wallet), ["a", "b"]);
+  const original = globalThis.document;
+  const root = { innerHTML: "" }, select = { value: "", innerHTML: "" };
+  globalThis.document = { getElementById: (id) => ({ voidRows: root, voidAsset: select, voidSearch: { value: "" } })[id] };
+  try {
+    const source = { ok: true, ledger: { records: [] }, verifiedEvents: 1, assets: [{ mint, symbol: "COIN" }],
+      leaderboard: [{ wallet: "b", transactions: 1, assets: { [mint]: { mint, symbol: "COIN", sharePct: 100, amountRaw: "1", decimals: 0, transactions: 1 } } }] };
+    renderVoidBoard(source);
+    assert.match(root.innerHTML, /Select a coin to compare shares/);
+    assert.doesNotMatch(root.innerHTML, /class="desk-number">100\.00%/);
+    select.value = mint;
+    renderVoidBoard(source);
+    assert.match(root.innerHTML, /class="desk-number">100\.00%/);
+    assert.match(root.innerHTML, /not its circulating supply/);
+  } finally {
+    if (original === undefined) delete globalThis.document;
+    else globalThis.document = original;
+  }
 });
 
 test("published market cap and TRIX points join the rows without inventing values", async () => {

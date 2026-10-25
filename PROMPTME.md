@@ -86,6 +86,11 @@ historical receipts persist in `chainRetry`; a null RPC response is not proof of
 pruned history. Legacy unreadable history is rescanned only with a complete
 dedup journal; verified duplicate corrections are recorded in `ledger.corrections`.
 All discovered accounts paginated does NOT mean all receipts verified.
+Catalog coin counts are not deposit-scan progress: `coverage` distinguishes
+credited catalog coins, coins without a discovered treasury account, and accounts
+still lacking attribution. Verification v2 accepts `multisigAuthority` when the
+credited owner actually signed the transaction, with unchanged balance checks.
+It initiates one deduplicated rescan and prioritizes coins without credits.
 
 Pool Void (`poolvoid.archive`) is collected on full passes from public
 `https://poolvoid.app/api/status` and `/api/transfers?target=all&category=all`.

@@ -54,7 +54,11 @@ export function verifyVoidTransfer(candidate, tx) {
     if (!i) continue;
     if (candidate.asset === "SOL") {
       if (instruction.programId === "11111111111111111111111111111111" && p.type === "transfer" && i.source === candidate.wallet && i.destination === VOID_TREASURY) amount += rawAmount(i.lamports);
-    } else if (TOKENS.has(instruction.programId) && ["transfer", "transferChecked"].includes(p.type) && i.authority === candidate.wallet) {
+    } else if (TOKENS.has(instruction.programId) && ["transfer", "transferChecked"].includes(p.type)
+      && (i.authority ?? i.multisigAuthority) === candidate.wallet) {
+      // jsonParsed can expose the signed owner as multisigAuthority, even when
+      // that owner is itself a transaction signer. The signature check above and
+      // the same mint/treasury/balance checks below still apply unchanged.
       const from = account(i.source, candidate.wallet), to = account(i.destination, VOID_TREASURY);
       // The treasury side is mandatory; the sender's row may legitimately be
       // absent when the sender held nothing before the transfer.
@@ -231,12 +235,21 @@ export function summarizeVoids(ledger) {
   leaderboard.sort((a, b) => b.transactions - a.transactions || a.wallet.localeCompare(b.wallet));
   const list = [...assets.values()];
   const covered = ledger.catalog?.total ? list.filter((a) => ledger.catalog.mints[a.mint]).length : null;
+  const inventory = new Set((ledger.chainAccounts || []).map((a) => a.mint));
+  const uncredited = Object.keys(ledger.catalog?.mints || {}).filter((mint) => !assets.has(mint));
+  const coverage = {
+    catalogCoins: Object.keys(ledger.catalog?.mints || {}).length,
+    creditedCoins: covered,
+    withoutDiscoveredAccount: uncredited.filter((mint) => !inventory.has(mint)).length,
+    uncreditedTreasuryCoins: uncredited.filter((mint) => inventory.has(mint)).map((mint) => ({ mint, symbol: ledger.catalog.mints[mint].symbol })),
+    inventoryAvailable: ledger.chainInventoryVersion === 2 && !ledger.chainToken2022Unavailable && !ledger.chainClassicUnavailable,
+  };
   const catalogAssets = Object.entries(ledger.catalog?.mints || {}).map(([mint, coin]) => ({
     mint, symbol: coin.symbol, name: coin.name, creator: coin.creator, chain: "solana",
     verified: assets.has(mint),
   }));
   catalogAssets.push(...Object.values(ledger.catalog?.otherChains || {}).map((coin) => ({ ...coin, verified: false, outsideScope: true })));
-  return { leaderboard, assets: list, catalogAssets, verifiedEvents: rolled ? (ledger.verifiedCount || 0) : events.length,
+  return { leaderboard, assets: list, catalogAssets, coverage, verifiedEvents: rolled ? (ledger.verifiedCount || 0) : events.length,
     pendingEvents: ledger.records.filter((r) => r.status === "pending").length,
     unverifiedEvents: ledger.records.filter((r) => r.status === "unverified").length,
     catalogTotal: ledger.catalog?.solanaTotal ?? ledger.catalog?.total ?? null,
@@ -343,6 +356,8 @@ async function discoverTreasuryHistory(ledger, rpc, fetchJson, now) {
     ledger.chainInventoryAt = now;
     if (results.every((r) => r.status === "fulfilled")) ledger.chainInventoryVersion = 2;
   }
+  const creditedMints = new Set(Object.values(ledger.totals || {}).map((r) => r.asset));
+  ledger.chainAccounts.sort((a, b) => Number(creditedMints.has(a.mint)) - Number(creditedMints.has(b.mint)));
   if (ledger.chainPending.length >= RPC_TIER.accountQueue) return;
   const deadline = Date.now() + 18000;
   const deferred = [];
@@ -472,6 +487,20 @@ const deadline = Date.now() + 35000;
     }
   }
   ledger.receiptRetentionVersion = 2;
+  // The authority parser previously rejected valid signed transferChecked
+  // receipts. Revisit those histories once, retaining every existing credit and
+  // using the full dedup journal to prevent replay inflation.
+  if (ledger.verificationVersion !== 2) {
+    if (new Set(ledger.keys || []).size === (ledger.verifiedCount || 0)) {
+      if (old) {
+        for (const account of ledger.chainAccounts || []) { account.complete = false; account.before = null; account.retryAfter = null; }
+        ledger.chainSeen = [];
+        ledger.verificationRescanStartedAt = now;
+      }
+      ledger.verificationVersion = 2;
+      ledger.verificationRescanBlocked = null;
+    } else ledger.verificationRescanBlocked = "Receipt-format recovery awaits a complete dedup journal";
+  }
   ledger.capped = false;
   const failures = [];
   let recentOk = false, pagesRead = 0;
@@ -663,6 +692,8 @@ export function publicVoidSource(source) {
       chainClassicUnavailable: !!ledger.chainClassicUnavailable, chainRetryCount: ledger.chainRetry?.length || 0,
       recoveryStartedAt: ledger.recoveryStartedAt || null, recoveryLegacyUnreadable: ledger.recoveryLegacyUnreadable || 0,
       recoveryBlockedReason: ledger.recoveryBlockedReason || null,
+      verificationRescanStartedAt: ledger.verificationRescanStartedAt || null,
+      verificationRescanBlocked: ledger.verificationRescanBlocked || null,
       duplicateCreditsPending: ledger.duplicateCreditsPending || 0, correctedCredits: (ledger.corrections || []).reduce((sum, c) => sum + c.removedDeposits, 0),
       duplicateRepairError: ledger.duplicateRepairError || null,
       chainInventoryCapped: ledger.chainInventoryCapped, records: [] },
