@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { voidCandidate, verifyVoidTransfer, collectVoids, summarizeVoids, summarizeVoidsWith, restoreVoidHistory, candidatesFromTreasuryReceipt, publicVoidSource, VOID_TREASURY, SHOCKER_MINT, TOKEN_2022 } from "../server/trix-voids.js";
-import { rankVoiders, voidAmount, filterVoiders, mergeVoidRows, sortVoidRows, voidCoinOptions, renderVoidBoard, allVoidRows, voidRecoveryStatus } from "../public/trix-void-board.js";
+import { rankVoiders, voidAmount, filterVoiders, mergeVoidRows, sortVoidRows, voidCoinOptions, renderVoidBoard, allVoidRows, voidRecoveryStatus, voidShare } from "../public/trix-void-board.js";
 import { normalizeBundle } from "../server/shared-store.js";
 import { filterEvidence } from "../public/evidence.js";
 
@@ -510,21 +510,26 @@ test("columns sort by real metrics and a missing metric never sorts as zero", ()
   assert.deepEqual(sortVoidRows(rows, "latest", "", rank)[0].wallet, rows[0].wallet, "latest is stable for equal timestamps");
 });
 
-test("share is coin-specific; an unrelated sole-depositor coin cannot inflate the overall column", () => {
+test("overall share uses deposit counts; coin share uses amounts and search never changes the total", () => {
   const rows = [
-    { wallet: "b", assets: { [mint]: { sharePct: 10 }, OTHER: { sharePct: 100 } } },
-    { wallet: "a", assets: { [mint]: { sharePct: 90 } } },
+    { wallet: "b", transactions: 4, assets: { [mint]: { sharePct: 10 }, OTHER: { sharePct: 100 } } },
+    { wallet: "a", transactions: 1, assets: { [mint]: { sharePct: 90 } } },
   ];
-  assert.deepEqual(sortVoidRows(rows, "share", "").map((r) => r.wallet), ["a", "b"], "all-coins shares are unavailable and tie deterministically");
+  assert.deepEqual(sortVoidRows(rows, "share", "").map((r) => r.wallet), ["b", "a"]);
   assert.deepEqual(sortVoidRows(rows, "share", mint).map((r) => r.wallet), ["a", "b"]);
+  assert.equal(voidShare(rows[0], "", 10), 40);
+  assert.equal(voidShare(rows[0], mint, 10), 10);
+  assert.equal(voidShare(rows[0], "", 0), null);
   const original = globalThis.document;
   const root = { innerHTML: "" }, select = { value: "", innerHTML: "" };
   globalThis.document = { getElementById: (id) => ({ voidRows: root, voidAsset: select, voidSearch: { value: "" } })[id] };
   try {
-    const source = { ok: true, ledger: { records: [] }, verifiedEvents: 1, assets: [{ mint, symbol: "COIN" }],
+    const source = { ok: true, ledger: { records: [] }, verifiedEvents: 10, assets: [{ mint, symbol: "COIN" }],
       leaderboard: [{ wallet: "b", transactions: 1, assets: { [mint]: { mint, symbol: "COIN", sharePct: 100, amountRaw: "1", decimals: 0, transactions: 1 } } }] };
     renderVoidBoard(source);
-    assert.match(root.innerHTML, /Select a coin to compare shares/);
+    assert.match(root.innerHTML, /Share of deposit count/);
+    assert.match(root.innerHTML, /class="desk-number">10\.00%/);
+    assert.match(root.innerHTML, /Search does not change the total/);
     assert.doesNotMatch(root.innerHTML, /class="desk-number">100\.00%/);
     select.value = mint;
     renderVoidBoard(source);

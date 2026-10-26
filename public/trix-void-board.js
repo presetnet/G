@@ -82,13 +82,20 @@ const COLUMNS = {
   latest: { label: "Latest", get: (row) => Date.parse(row.latestAt) || 0 },
 };
 
-export function sortVoidRows(rows, key, asset, rank = new Map()) {
+export function voidShare(row, asset, totalDeposits) {
+  if (asset) return row.assets?.[asset]?.sharePct ?? null;
+  const count = row.transactions;
+  return Number.isFinite(count) && count >= 0 && Number.isFinite(totalDeposits) && totalDeposits > 0 && count <= totalDeposits
+    ? count / totalDeposits * 100 : null;
+}
+
+export function sortVoidRows(rows, key, asset, rank = new Map(), totalDeposits = rows.reduce((sum, r) => sum + (r.transactions || 0), 0)) {
   const column = COLUMNS[key] || COLUMNS.rank;
   const ctx = {
     rank,
     deposits: (row) => asset ? (row.assets[asset]?.transactions ?? 0) : (row.transactions ?? 0),
     amount: (row) => { const a = asset ? row.assets[asset] : null; return a ? BigInt(a.amountRaw) : null; },
-    share: (row) => asset ? row.assets[asset]?.sharePct ?? null : null,
+    share: (row) => voidShare(row, asset, totalDeposits),
     value: (row) => {
       if (asset) return row.assets?.[asset]?.valueUsd ?? null;
       const best = Object.values(row.assets || {}).reduce((b, x) => (x.valueUsd ?? -1) > (b?.valueUsd ?? -1) ? x : b, null);
@@ -169,12 +176,16 @@ export function renderVoidBoard(source, ui) {
   const found = filterVoiders(rankVoiders(corpus, select.value), query);
   const baseRank = new Map(found.rows.map((row, i) => [row.wallet, i + 1]));
   const sortKey = ui.sort || "rank";
-  const ranked = sortVoidRows(found.rows, sortKey, select.value, baseRank);
+  const ranked = sortVoidRows(found.rows, sortKey, select.value, baseRank, source.verifiedEvents);
   const matchNote = query.trim()
     ? `<p class="desk-context"><b>Search "${esc(query.trim())}":</b> ${ranked.length} row${ranked.length === 1 ? "" : "s"}${found.coinMatches ? `, ${found.coinMatches} credited that coin or its creator` : ""}. Results cover the rankings included in this response; absence does not prove zero deposits. Catalog-only coins are available in the coin picker.</p>`
     : "";
   const asset = select.value ? coins.find((a) => a.mint === select.value) : null;
-  const header = (key, title) => `<th class="void-sortable${sortKey === key ? " sorted" : ""}" data-sort="${key}" title="${title}" tabindex="0" role="button">${COLUMNS[key].label}</th>`;
+  const header = (key, title) => {
+    const label = key === "share" ? (select.value ? "Share of coin deposits" : "Share of deposit count") : COLUMNS[key].label;
+    if (key === "share") title = select.value ? "Wallet amount divided by all recorded deposited amounts of the selected coin" : "Wallet verified deposit count divided by all verified deposits; search does not change this total";
+    return `<th class="void-sortable${sortKey === key ? " sorted" : ""}" data-sort="${key}" title="${title}" tabindex="0" role="button">${label}</th>`;
+  };
   const rowLimit = ui.limit || 50;
   const rows = ranked.slice(0, rowLimit).map((row, index) => {
     if (select.value && row.assets[select.value]?.latestAt) row = { ...row, latestAt: row.assets[select.value].latestAt };
@@ -184,7 +195,7 @@ export function renderVoidBoard(source, ui) {
     // One wrapped line per row instead of a stacked block per asset.
     const chip = (a) => `<span class="void-amount" title="${esc(a.mint)}${a.creator ? ` · created by ${esc(a.creator)}` : ""}${Number.isFinite(a.sharePct) ? ` · ${a.sharePct.toFixed(2)}% of this coin's void volume` : ""}${Number.isFinite(a.valueUsd) ? ` · ${usd(a.valueUsd)} at ${usd(a.unitPriceUsd)}/token` : ""}${Number.isFinite(a.supplyPct) ? ` · ${a.supplyPct.toFixed(4)}% of sampled supply` : ""}">${esc(voidAmount(a.amountRaw, a.decimals))} ${esc(a.symbol)}${a.creator ? ` <i>· ${esc(a.creator)}</i>` : ""}${Number.isFinite(a.valueUsd) ? ` <u>${usd(a.valueUsd)}</u>` : ""}${Number.isFinite(a.supplyPct) ? ` <b>${a.supplyPct.toFixed(4)}%</b>` : ""}</span>`;
     const value = main ? main.valueUsd : amounts.reduce((best, a) => Math.max(best, a.valueUsd ?? -1), -1);
-    const share = main?.sharePct ?? null;
+    const share = voidShare(row, select.value, source.verifiedEvents);
     const extraCoins = amounts.length > 6 ? `<details data-void-detail="coins:${esc(row.wallet)}"><summary>Show ${amounts.length - 6} more coins</summary>${amounts.slice(6).map(chip).join("")}</details>` : "";
     const latestProofs = amounts.filter((a) => a.latestSignature && !receipts.some((r) => r.signature === a.latestSignature))
       .map((a) => `<p>${explorer("tx", a.latestSignature, `${a.symbol} · latest receipt`)}<br><small>${esc(stamp(a.latestAt))}</small></p>`).join("");
@@ -200,7 +211,7 @@ export function renderVoidBoard(source, ui) {
     <section class="void-recovery" aria-label="Historical recovery status"><strong>${esc(recovery.title)}</strong><p>${esc(recovery.detail)}</p><small>${esc(recovery.note)}</small></section>
     ${source.coverage ? `<p class="desk-context"><b>Catalog:</b> ${source.coverage.catalogCoins} Solana coins indexed. <b>Deposit evidence:</b> ${source.coverage.creditedCoins ?? "unknown"} coins credited. These are different counts, not a completion percentage.${source.coverage.inventoryAvailable ? ` ${source.coverage.withoutDiscoveredAccount} catalog coins have no discovered treasury account; ${source.coverage.uncreditedTreasuryCoins.length} have an account but no verified depositor yet.` : " Treasury inventory coverage is unavailable."}</p>${source.coverage.uncreditedTreasuryCoins.length ? `<details class="void-notes"><summary>Coins needing deposit attribution (${source.coverage.uncreditedTreasuryCoins.length})</summary><p>${source.coverage.uncreditedTreasuryCoins.map((a) => `<span title="${esc(a.mint)}">${esc(a.symbol)}</span>`).join(" · ")}</p><p>These accounts are prioritized for receipt scanning. Treasury holdings alone do not identify who deposited.</p></details>` : ""}` : ""}
     ${l.verificationRescanStartedAt || l.verificationRescanBlocked ? `<p class="desk-context">Receipt-format recovery: ${l.verificationRescanBlocked ? esc(l.verificationRescanBlocked) : `started ${esc(stamp(l.verificationRescanStartedAt))}; signed alternate-authority receipts are being rechecked.`}</p>` : ""}
-    <p class="desk-context">${asset ? `Share is the wallet's portion of recorded deposits for ${esc(asset.symbol)}, not its circulating supply. 100% means the only depositor in our recorded evidence, not necessarily the only depositor on-chain.` : "Select a coin to compare shares of its recorded deposits. There is no meaningful combined percentage across different coins."}</p>
+    <p class="desk-context">${asset ? `Share is the wallet's portion of recorded deposited amounts for ${esc(asset.symbol)}, not its circulating supply. 100% means the only depositor in our recorded evidence, not necessarily the only depositor on-chain.` : `Share is the wallet's verified deposit count divided by all ${source.verifiedEvents.toLocaleString("en-US")} verified deposits, not dollar value or token supply. Search does not change the total. Select a coin to compare deposited amounts instead.`}</p>
     ${l.duplicateCreditsPending || l.correctedCredits ? `<p class="desk-context">Duplicate-credit audit: ${l.correctedCredits || 0} corrected after receipt verification; ${l.duplicateCreditsPending || 0} pending.${l.duplicateRepairError ? ` ${esc(l.duplicateRepairError)}.` : ""}</p>` : ""}
     <p class="desk-context">${source.catalogOtherChains ? `${source.catalogOtherChains} other-chain catalog coins are listed separately; this receipt collector covers Solana. ` : ""}${l.chainRetryCount || 0} receipts retained for retry. ${l.chainUnreadable || 0} historical unreadable checks; ${l.chainUnverified || 0} rejected transfer checks.${l.chainToken2022Unavailable ? " Token-2022 inventory is unavailable." : ""}${l.chainClassicUnavailable ? " Classic SPL inventory is unavailable." : ""}${l.recoveryStartedAt ? ` Recovery rescan started ${esc(stamp(l.recoveryStartedAt))}.` : ""}${l.recoveryBlockedReason ? ` ${esc(l.recoveryBlockedReason)}.` : ""}</p>
     ${asset && !asset.verified ? `<p class="desk-context"><b>${esc(asset.symbol)}</b> is in the launch catalog. ${asset.outsideScope ? `${esc(asset.chain)} deposits are outside this Solana collector's coverage.` : "No deposit for this coin has been verified in the stored evidence yet; its balance and deposit count are unknown."}</p>` : ""}
