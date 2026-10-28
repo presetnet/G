@@ -102,5 +102,14 @@ and up to 12 recent transfers. These are not independently verified here and
 must never be added to Solana TRIX totals. Source JSON and curl proofs are in
 the panel. An unavailable feed is not zero activity; the panel flags old reads.
 
+Hall of VOID is a separate Ethereum/Base tab with a read-only on-demand adapter
+at `/api/poolvoid?view=hall` (leaderboard, seven-day board, rule catalog) and
+`?view=profile&address=0x...` (profile + identity). It loads only when opened,
+caches each upstream GET for five minutes, and never posts to Pool Void's receipt
+endpoint or connects a wallet. All valid published ranking rows remain searchable;
+the UI paginates rather than discarding data. Profile badges come from `unlocks`,
+with source dates and explorer receipt links. Rule catalog cards are not earned
+awards. Source recalculation flags and cached failure states must remain visible.
+
 If you extend this project, extend PROMPTME.md with it. Machines reading blind guess;
 machines reading this don't.

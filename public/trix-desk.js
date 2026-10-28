@@ -1,10 +1,12 @@
 import { sourceDescription } from "./provenance.js";
 import { renderVoidBoard } from "./trix-void-board.js";
 import { renderPoolVoid } from "./poolvoid.js";
+import { initPoolVoidHall } from "./poolvoid-hall.js";
 
-const TABS = ["boxes", "coins", "activity", "voiders", "points", "art", "money"];
+const TABS = ["boxes", "coins", "activity", "voiders", "poolvoid", "points", "art", "money"];
 const STATUS = { coins: "coinSummary", boxes: "boxStatus", activity: "activityStatus", voiders: "voidStatus", points: "pointsStatus", art: "artStatus", money: "moneyStatus" };
 const SOURCES = { coins: ["trix.meme.market", "trix.frontpage"], boxes: ["trix.boxes", "trix.boxboard", "trix.boxchain", "trix.preorder"], activity: ["trix.money"], voiders: ["trix.voids"], points: ["trix.market", "trix.tiers"], art: ["trix.market"], money: ["trix.money", "trix.fee.config"] };
+SOURCES.poolvoid = ["poolvoid.archive"];
 const state = { tab: "boxes", view: "all", search: "", chain: "", limit: 20 };
 const voidUI = {};
 const htmlCache = new WeakMap();
@@ -331,7 +333,7 @@ function selectTab(tab, focus = false) {
   }
 }
 
-/** Wire the existing desk once. The shared collector owns all requests. */
+/** Wire the desk once. Hall profile reads are explicitly on-demand and cached. */
 export function initTrixDesk() {
   const desk = document.getElementById("trixDesk");
   if (!desk || desk === root) return;
@@ -372,7 +374,7 @@ export function initTrixDesk() {
   selectTab(state.tab);
 }
 
-/** Render only shared latest.sources; never substitute dashboard summary snapshots. */
+/** Shared panels use latest.sources; the Hall preserves its separate read-only state. */
 export function renderTrixDesk(value) {
   latest = value;
   initTrixDesk();
@@ -385,9 +387,10 @@ export function renderTrixDesk(value) {
   renderArt(sources["trix.market"]);
   renderMoney(sources["trix.money"], sources["trix.fee.config"]);
   renderVoidBoard(sources["trix.voids"], voidUI);
+  initPoolVoidHall(state.tab === "poolvoid");
   let archive = document.getElementById("poolVoidArchive");
   if (!archive) {
-    const panel = document.getElementById("desk-voiders");
+    const panel = document.getElementById("desk-poolvoid");
     if (panel) {
       archive = document.createElement("section");
       archive.id = "poolVoidArchive";

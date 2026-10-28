@@ -12,10 +12,12 @@ import { buildStoredMarketPayload } from "./market.js";
 import { inspectWallets } from "./wallet-assets.js";
 import { inspectSimListings } from "./sim-listing.js";
 import simCollapseHandler from "../api/sim-collapse.js";
+import poolVoidHandler from "../api/poolvoid.js";
 
 const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "2mb" }));
+app.all("/api/poolvoid", poolVoidHandler);
 
 app.use((req, res, next) => {
   const shouldCount =
