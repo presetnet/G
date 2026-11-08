@@ -1,6 +1,18 @@
 /* Pool Void-inspired restraint, with Geoff's yellow identity. Loaded last. */
 :root { --accent:#f4d447; --heat:#a7c9a9; --muted:#a5a5a0; --line:#292927; --panel:#101010; --bg:#080808; }
 body { background:#080808; color:#eeeee8; }
+.stacknet-brief { padding:clamp(18px,3vw,32px); margin:20px 0; border:1px solid #343229; border-radius:12px; background:linear-gradient(125deg,#f4d44709,#10100f 60%); }
+.stacknet-brief h2 { margin:12px 0 18px; font-size:clamp(23px,3vw,36px); line-height:1.18; letter-spacing:-.04em; }
+.stacknet-brief h2 span,.stacknet-brief a { color:#f4d447; }
+.stacknet-brief p { color:#b9b9ae; font-size:13px; line-height:1.7; max-width:95ch; }
+.stacknet-brief-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; margin:24px 0; }
+.stacknet-brief-grid article { border-top:1px solid #3a382b; padding-top:15px; }
+.stacknet-brief h3 { font-size:14px; color:#efeee4; }
+.stacknet-brief strong { color:#eee5b5; }
+.stacknet-brief details { border-top:1px solid #303026; padding-top:14px; font-size:12px; }
+.stacknet-brief summary { cursor:pointer; color:#ddcf8b; }
+.stacknet-brief code { overflow-wrap:anywhere; }
+@media(max-width:680px) { .stacknet-brief-grid { grid-template-columns:1fr; gap:10px; } }
 .topbar { background:#0b0b0bf5; border-bottom:1px solid #292927; backdrop-filter:blur(12px); box-shadow:none; }
 .topbar h1 { letter-spacing:-.045em; }
 .topbar .tag { color:#92928b; letter-spacing:.14em; }

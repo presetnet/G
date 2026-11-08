@@ -97,6 +97,16 @@
       </section>
       <details class="data-disclosure"><summary>Public data. Independently observed, not guaranteed.</summary><p>Source-reported values may include development or test activity. Collection time is not event time. Open a source to inspect its age and limitations; verify material conclusions against the source and current network.</p></details>
       <p id="stacknetChangeNotice" class="desk-notice" role="status" hidden>Stacknet is responding, but reports no available GPU capacity.</p>
+      <section class="stacknet-brief" aria-labelledby="stacknetBriefTitle">
+        <header><p class="eyebrow">SOURCE CHECK / <time datetime="2026-11-08">NOV 08, 2026</time> / DATED BRIEFING</p><h2 id="stacknetBriefTitle">Stacknet's calculator is visible.<br><span>The economics are still assumptions.</span></h2></header>
+        <p>The public developer console renders an interactive key-sale calculator. This confirms a public tool, not a newly verified release, live sale quote, or demonstrated operator earnings.</p>
+        <div class="stacknet-brief-grid">
+          <article><h3>Calculator inspected</h3><p>Its price is computed in the browser from a 90-day cycle starting February 26, 2026. At inspection: cycle 3, day 75, <strong>$467.19 modeled price</strong>.</p></article>
+          <article><h3>Projection ≠ payout</h3><p>One key, 50% utilization and $2 per million tokens produce a modeled $1,000/month. The formula does not deduct operating costs or decrement a finite allocation across months.</p></article>
+          <article><h3>Client release unverified</h3><p>The download sites failed TLS checks from our environment. Pricing and PILE APIs required authentication. No public testnet-points feed was established.</p></article>
+        </div>
+        <details><summary>Evidence, limits &amp; original sources</summary><p>This is a manually verified November 8 observation, not a live metric. The documentation displays September 12, 2026 as its last-updated date; a new deployment date has not been established.</p><p><code>price = 100 + 400 × √(cycleDay / 89)</code></p><p><a href="https://devconsole-indol.vercel.app/docs/key-calculator" target="_blank" rel="noopener noreferrer">Key calculator ↗</a> · <a href="https://devconsole-indol.vercel.app/aisp/node-keys" target="_blank" rel="noopener noreferrer">Node-key documentation ↗</a> · <a href="https://devconsole-indol.vercel.app/aisp/running-nodes" target="_blank" rel="noopener noreferrer">Running nodes ↗</a> · <a href="https://devconsole-indol.vercel.app/_next/static/immutable/chunks/0b0ekuxuzb-se.js" target="_blank" rel="noopener noreferrer">Inspected calculator code ↗</a></p><p>The docs link to <code>stacknet.org/download</code>; the reported site uses <code>www.stacknet.org/downloads</code>. Neither was verified reachable here. A local TLS failure does not establish a global outage or a release delay.</p><code>curl 'https://devconsole-indol.vercel.app/docs/key-calculator'</code></details>
+      </section>
 
       <div class="section-heading"><p class="deck-label"><span>01</span> Vitals</p><div id="vitalsTools"></div></div>
       <section class="metrics" aria-label="Live network vitals">
