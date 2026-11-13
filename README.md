@@ -2,7 +2,7 @@
 
 Live **sniffer · translator · dashboard** for [geoff.ai](https://geoff.ai) deploys and [Stacknet](https://stacknet.magma-rpc.com) API heat.
 
-Designed to deploy on **Vercel** with a **shared live desk** (same feed in every browser, including incognito) or run locally with a persistent file store.
+Designed to deploy on **Vercel or Netlify** with a **shared live desk** (same feed in every browser, including incognito) or run locally with a persistent file store.
 
 ## Signals
 
@@ -46,6 +46,20 @@ Optional:
 - `GEOFF_BASE_URL` / `STACKNET_BASE_URL`
 - `GT_GITHUB_TOKEN` (GitHub shared desk or optional Redis cold mirror)
 - `GT_REDIS_KEY` (default `gt:live:desk`)
+
+## Deploy on Netlify
+
+`netlify.toml` publishes `public/`, routes `/api/*` through a Netlify function
+adapter, and schedules the protected collector once per minute. Import the
+repository at its root with the configuration file enabled.
+
+Required environment variables:
+- `CRON_SECRET` or `GT_TICK_SECRET`
+- `GT_GITHUB_TOKEN` when Redis is not configured
+
+Optional Redis variables are the same as Vercel: `UPSTASH_REDIS_REST_URL` and
+`UPSTASH_REDIS_REST_TOKEN`. Without Redis or a GitHub token, serverless storage
+is ephemeral and the shared dashboard cannot retain its feed between invocations.
 
 ## Local
 

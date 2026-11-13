@@ -22,14 +22,16 @@ import {
   saveState,
 } from "./store.js";
 
-function isVercel() {
-  // Real Vercel runtime only — ignore VERCEL= from a pulled .env.local
-  return Boolean(process.env.VERCEL) && Boolean(process.env.VERCEL_ENV || process.env.VERCEL_URL);
+function serverlessPlatform() {
+  // Ignore VERCEL= from a pulled .env.local; Netlify uses this same shared desk.
+  if (Boolean(process.env.NETLIFY)) return "netlify";
+  if (Boolean(process.env.VERCEL) && Boolean(process.env.VERCEL_ENV || process.env.VERCEL_URL)) return "vercel";
+  return null;
 }
 
 /** Local + Vercel both use Redis when configured — one desk, no empty local wipe. */
 function useSharedDesk() {
-  return sharedStoreConfig().redis || isVercel();
+  return sharedStoreConfig().redis || Boolean(serverlessPlatform());
 }
 
 export function publicConfig() {
@@ -41,7 +43,7 @@ export function publicConfig() {
     geoffBaseUrl: config.geoffBaseUrl,
     stacknetBaseUrl: config.stacknetBaseUrl,
     catalogAuthConfigured: Boolean(config.geoffCookie || config.geoffPreviewCode),
-    mode: isVercel() ? "vercel" : sharedDesk ? "local-shared" : "local",
+    mode: serverlessPlatform() || (sharedDesk ? "local-shared" : "local"),
     trackWindowHours: config.trackWindowHours,
     heatmapDays: config.heatmapDays,
     sharedStore: sharedDesk,
