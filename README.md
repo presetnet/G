@@ -49,9 +49,10 @@ Optional:
 
 ## Deploy on Netlify
 
-`netlify.toml` publishes `public/`, routes `/api/*` through a Netlify function
-adapter, and schedules the protected collector once per minute. Import the
-repository at its root with the configuration file enabled.
+`netlify.toml` publishes `public/` and routes `/api/*` through a Netlify
+function adapter. Import the repository at its root with the configuration file
+enabled. The collector is intentionally not scheduled on Netlify; invoke the
+protected `/api/tick` endpoint only when a refresh is wanted.
 
 Required environment variables:
 - `CRON_SECRET` or `GT_TICK_SECRET`
