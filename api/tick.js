@@ -96,6 +96,7 @@ export default async function handler(req, res) {
         latest: snapshot,
         voidLedger: previous.voidLedger,
         events,
+        historicalEvents: previous.historicalEvents,
         dailyActivity,
         state: {
           startedAt: previous.state?.startedAt || new Date().toISOString(),

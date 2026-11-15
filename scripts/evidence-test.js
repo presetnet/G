@@ -17,4 +17,7 @@ assert.equal(snapshot.sources["stacknet.pile"].pile, 999);
 assert.equal(summarizeSnapshot(filtered.sources, current).pile, null);
 assert.equal(evidenceState({ ok: false, status: 401, checkedAt: current }, now), "ACCESS REQUIRED");
 assert.equal(evidenceState({ ok: true }, now), "UNAVAILABLE");
+assert.equal(filtered.historicalSources["trix.boxboard"].mintedTotal, 100);
+assert.equal(filtered.historicalSources["trix.boxboard"].dataUpdatedAt, old);
+assert.deepEqual(filterEvidence(filtered, now), filtered, "browser filtering must preserve the API's history");
 console.log("PASS: source expiry, underlying data age, access status, immutable filtering and derived summary");

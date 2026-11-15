@@ -12,9 +12,18 @@ export function evidenceState(source, now = Date.now()) {
 
 export function filterEvidence(snapshot, now = Date.now()) {
   if (!snapshot) return null;
+  // Separate dated observations from current values. This survives the API and
+  // browser filtering passes without resurrecting stale summary metrics.
+  const historicalSources = { ...(snapshot.historicalSources || {}) };
   const sources = Object.fromEntries(Object.entries(snapshot.sources || {}).map(([id, source]) => {
     const state = evidenceState(source, now);
-    if (["CURRENT", "DELAYED"].includes(state)) return [id, source];
+    if (["CURRENT", "DELAYED"].includes(state)) {
+      delete historicalSources[id];
+      return [id, source];
+    }
+    if (!source.evidenceState && id !== "trix.voids") {
+      historicalSources[id] = { ...source, historical: true };
+    }
     if (id === "trix.voids" && source.ledger?.version === 1 && Array.isArray(source.ledger.records)) {
       return [id, { ...source, stale: true, evidenceState: state,
         reason: source.reason || `${state}: collection is not current; stored historical receipts are retained.` }];
@@ -23,8 +32,8 @@ export function filterEvidence(snapshot, now = Date.now()) {
       source: id, ok: false, status: source.status, checkedAt: source.checkedAt,
       dataUpdatedAt: source.dataUpdatedAt, sourceUrl: source.sourceUrl,
       evidenceState: state, stale: true,
-      reason: `${state}: values withheld. ${source.reason || "No usable recent observation."}`,
+      reason: source.evidenceState ? source.reason : `${state}: values withheld. ${source.reason || "No usable recent observation."}`,
     }];
   }));
-  return { ...snapshot, sources };
+  return { ...snapshot, sources, historicalSources };
 }

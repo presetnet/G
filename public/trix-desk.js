@@ -2,6 +2,7 @@ import { sourceDescription } from "./provenance.js";
 import { renderVoidBoard } from "./trix-void-board.js";
 import { renderPoolVoid } from "./poolvoid.js";
 import { initPoolVoidHall } from "./poolvoid-hall.js";
+import { renderPackShop } from "./trix-shop.js";
 
 const TABS = ["boxes", "coins", "activity", "voiders", "poolvoid", "points", "art", "money"];
 const STATUS = { coins: "coinSummary", boxes: "boxStatus", activity: "activityStatus", voiders: "voidStatus", points: "pointsStatus", art: "artStatus", money: "moneyStatus" };
@@ -176,7 +177,7 @@ function renderPreorder(preorder) {
     <td>${esc(gate.cause)}</td>
     <td class="desk-secondary">${gate.walletScoped ? "per-wallet" : "global"}</td>
   </tr>`).join("");
-  return `<h4 class="board-subhead">Preorder gate</h4>
+  return `${renderPackShop(preorder)}<h4 class="board-subhead">Preorder gate</h4>
     <p class="desk-context">Global round: <b>${esc(preorder.saleVerdict || "unknown")}</b> · ${esc(cap)}${corroboration ? ` · ${esc(corroboration)}` : ""} · checked ${clock(preorder.checkedAt, "Preorder gate")}</p>
     <p class="desk-context"><b>Whether YOUR wallet may order is not published.</b> ${esc(preorder.eligibilityRoute?.note || "The per-wallet eligibility route is session-scoped.")}${retired.length ? ` Retired routes: ${esc(retired.map((route) => `${route.route} (${fmt(route.status, 0)})`).join(", "))}.` : ""} This gate read does not verify purchases; the DOSWAPZ receipt census is attributed separately below.</p>
     ${gateBody ? table("TRIX preorder button states, in evaluation order", [["#", "desk-number"], ["Button", "desk-secondary"], ["What it means"], ["Scope", "desk-secondary"]], gateBody) : ""}`;

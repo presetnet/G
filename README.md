@@ -2,7 +2,7 @@
 
 Live **sniffer · translator · dashboard** for [geoff.ai](https://geoff.ai) deploys and [Stacknet](https://stacknet.magma-rpc.com) API heat.
 
-Designed to deploy on **Vercel or Netlify** with a **shared live desk** (same feed in every browser, including incognito) or run locally with a persistent file store.
+Designed to deploy on **Vercel** with a **shared live desk** (same feed in every browser, including incognito) or run locally with a persistent file store.
 
 ## Signals
 
@@ -47,22 +47,30 @@ Optional:
 - `GT_GITHUB_TOKEN` (GitHub shared desk or optional Redis cold mirror)
 - `GT_REDIS_KEY` (default `gt:live:desk`)
 
-## Deploy on Netlify
-
-`netlify.toml` publishes `public/` and routes `/api/*` through a Netlify
-function adapter. Import the repository at its root with the configuration file
-enabled. The collector is intentionally not scheduled on Netlify; invoke the
-protected `/api/tick` endpoint only when a refresh is wanted.
-
-Required environment variables:
-- `CRON_SECRET` or `GT_TICK_SECRET`
-- `GT_GITHUB_TOKEN` when Redis is not configured
-
-Optional Redis variables are the same as Vercel: `UPSTASH_REDIS_REST_URL` and
-`UPSTASH_REDIS_REST_TOKEN`. Without Redis or a GitHub token, serverless storage
-is ephemeral and the shared dashboard cannot retain its feed between invocations.
-
 ## Local
+
+### History and outage recovery
+
+Storage retains the last source snapshot across outages. The live metrics still
+use a 24-hour evidence window; expired source details are displayed separately
+as dated history in Diagnostics, with docs pages also available in their panel.
+Events have a separate bounded archive (30 days, up to 2,000 events); historical
+events do not contribute to the live temperature score. This cannot reconstruct
+records already removed from older backups.
+
+Before recovering missing sources, preview a pinned GitHub backup:
+
+```bash
+node scripts/recover-shared-history.js --repo OWNER/REPO --revision FULL_COMMIT_SHA
+```
+
+Use the **storage repository from `/api/status`**, which may differ from the app
+repository. The tool defaults to `gt-live/shared.json`; `--branch` and `--path`
+override these. It is read-only unless `--apply` is supplied. Apply only after
+deploying the retention fix, and only for a GitHub-backed desk, not a Redis desk.
+It preserves existing live sources and ledgers, restores only missing source
+observations, and refuses concurrent-write conflicts. It does not merge wallet
+aggregates or claim a complete historical recovery.
 
 ```bash
 npm install

@@ -71,9 +71,22 @@ function emptyBundle() {
 // Keep only the current-day queue tape. Surface always reserved first.
 const MAX_QUEUE_EVENTS = 1800;
 
-function freshLatest(latest) {
-  const takenAt = Date.parse(latest?.takenAt || "");
-  return latest && Number.isFinite(takenAt) && Date.now() - takenAt <= 24 * 60 * 60 * 1000 ? latest : null;
+// Storage is a recovery baseline, not a live-data assertion. Expiry belongs in
+// the presentation layer; dropping this after an outage resets the whole desk.
+function retainedLatest(latest) {
+  return latest && typeof latest.sources === "object" ? latest : null;
+}
+
+export function archiveEvents(events = []) {
+  const seen = new Set();
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  return events.filter((event) => {
+    const at = Date.parse(event.at);
+    const key = event.id || JSON.stringify([event.at, event.kind, event.source, event.title, event.summary]);
+    if (!Number.isFinite(at) || at < cutoff || at > Date.now() || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 2000);
 }
 
 export function pruneEvents(events = []) {
@@ -101,9 +114,10 @@ export function normalizeBundle(raw) {
   if (!raw || typeof raw !== "object") return base;
   return {
     updatedAt: raw.updatedAt || null,
-    latest: freshLatest(raw.latest),
+    latest: retainedLatest(raw.latest),
     voidLedger: raw.latest?.sources?.["trix.voids"]?.ledger || raw.voidLedger || null,
     events: pruneEvents(raw.events || []),
+    historicalEvents: archiveEvents([...(raw.events || []), ...(raw.historicalEvents || [])]),
     dailyActivity: pruneDailyActivity(raw.dailyActivity || [], config.heatmapDays),
     pond0x: prunePond0x(raw.pond0x || null, config.heatmapDays),
     state: { ...base.state, ...(raw.state || {}) },
@@ -233,25 +247,16 @@ async function saveToGithub(bundle, message) {
 
 export async function loadSharedBundle() {
   // Instant path
-  const redisBundle = await loadFromRedis().catch(() => null);
-  if (redisBundle?.latest || redisBundle?.events?.length) return redisBundle;
+  const redisBundle = await loadFromRedis();
+  if (redisBundle) return redisBundle;
 
-  // Optional one-time cold seed from GitHub when Redis is empty. A cold-seed
-  // outage (e.g. bad/stale token) must NOT kill the whole desk: when Redis is
-  // configured it simply gets seeded fresh by the next live sniff, so degrade to
-  // an empty bundle instead of throwing. Only re-throw when there is truly no
-  // readable desk (neither Redis nor GitHub).
-  try {
-    const githubBundle = await loadFromGithub();
-    if (githubBundle.latest || githubBundle.events?.length) {
-      if (redisUrl() && redisToken()) await saveToRedis(githubBundle).catch(() => {});
-      return githubBundle;
-    }
-    return emptyBundle();
-  } catch (error) {
-    if (!(redisUrl() && redisToken())) throw error;
-    return emptyBundle();
+  // Cold seed only when Redis is actually empty. A storage outage must fail a
+  // collector run rather than overwrite the desk with a fresh empty baseline.
+  const githubBundle = await loadFromGithub();
+  if (githubBundle.latest || githubBundle.events?.length || githubBundle.voidLedger || githubBundle.state?.pollCount || githubBundle.historicalEvents?.length) {
+    if (redisUrl() && redisToken()) await saveToRedis(githubBundle).catch(() => {});
   }
+  return githubBundle;
 }
 
 export async function saveSharedBundle(bundle, { message, mirrorGithub = true } = {}) {

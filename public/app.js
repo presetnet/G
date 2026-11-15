@@ -2372,7 +2372,7 @@ function applyPayload(payload) {
 
   setTrust(payload);
   renderSync(payload);
-  renderWorkspace(payload.latest, feedEvents);
+  renderWorkspace(latest, feedEvents, payload.historicalEvents || [], payload.state || {});
 }
 
 async function pollNow() {

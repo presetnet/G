@@ -20,14 +20,16 @@ export function sourceCondition(s) {
   return ({ CURRENT: "Current", DELAYED: "Delayed", EXPIRED: "Expired", UNAVAILABLE: "Unavailable" })[evidenceState(s)] || "Unavailable";
 }
 
-export function docsView(source, catalog, events = []) {
+export function docsView(source, catalog, events = [], historical = null) {
   const available = usable(source);
-  const pages = available ? source.pages || [] : [];
-  const docsModels = available ? source.publishedModelLayers || [] : [];
+  const observation = available ? source : historical;
+  const pages = observation?.pages || [];
+  const docsModels = observation?.publishedModelLayers || [];
   const apiModels = usable(catalog) ? (catalog.models || []).map((m) => typeof m === "string" ? m : m.id).filter(Boolean) : [];
   return {
-    available, pages, docsModels, apiModels,
-    missingFromCatalog: usable(catalog) ? docsModels.filter((id) => !apiModels.includes(id)) : [],
+    available, pages, docsModels, apiModels, observation,
+    historical: !available && pages.length > 0,
+    missingFromCatalog: available && usable(catalog) ? docsModels.filter((id) => !apiModels.includes(id)) : [],
     changes: events.filter((e) => e.kind === "docs" && Date.now() - Date.parse(e.at) >= 0 && Date.now() - Date.parse(e.at) <= EVIDENCE_WINDOW).sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 6),
     failures: pages.filter((p) => !p.ok),
   };
@@ -92,6 +94,7 @@ export function initWorkspace() {
   panels.miningWorkspace.innerHTML = '<div id="miningEvidence"></div>';
   move("#sourceStrip", "diagnosticsWorkspace");
   panels.diagnosticsWorkspace.insertAdjacentHTML("afterbegin", '<section aria-labelledby="sourceIssuesTitle"><div class="workspace-heading"><h3 id="sourceIssuesTitle">Source health</h3><label>View <select id="sourceHealthFilter"><option value="issues">Needs attention</option><option value="all">All sources</option></select></label></div><div id="sourceIssues"></div></section>');
+  panels.diagnosticsWorkspace.insertAdjacentHTML("beforeend", '<section><h3>Last observed details · historical</h3><p class="workspace-note">Stored observations retain their original dates. These values are not current quotes, balances or availability.</p><div id="historicalSources"></div><details class="workspace-drill"><summary>Recorded event archive · up to 30 days / 2,000 events</summary><div id="historicalEvents"></div></details></section>');
   move(".metrics", "diagnosticsWorkspace", true);
   move(".signal-details", "diagnosticsWorkspace");
   move(".feed-panel", "diagnosticsWorkspace", true);
@@ -118,7 +121,7 @@ function renderIssues(latest) {
   put("sourceIssues", sources.length ? `<div class="workspace-table"><table><thead><tr><th>Source</th><th>State</th><th>Observed</th><th>Detail</th></tr></thead><tbody>${sources.map(([id, s]) => `<tr><td>${esc(id)}</td><td><span class="source-badge ${usable(s) ? "is-current" : "is-unavailable"}">${esc(sourceCondition(s))}</span></td><td title="${esc(time(s.checkedAt))}">${esc(age(s.dataUpdatedAt || s.checkedAt))}</td><td>${esc(s.reason || s.error || (s.status ? `HTTP ${s.status}` : "No detail"))}</td></tr>`).join("")}</tbody></table></div>` : '<p class="workspace-note">No matching observations. A timeout is not proof a service is retired.</p>');
 }
 
-export function renderWorkspace(latest, events = []) {
+export function renderWorkspace(latest, events = [], history = [], state = {}) {
   if (!document.getElementById("docsDesk")) return;
   lastSnapshot = latest;
   const sources = latest?.sources || {};
@@ -126,12 +129,13 @@ export function renderWorkspace(latest, events = []) {
   const current = all.filter((s) => evidenceState(s) === "CURRENT").length;
   put("workspaceHealth", `<span><strong>${current}/${all.length}</strong> source checks current</span><span>${all.length - current} delayed, restricted or unavailable</span><a href="#diagnosticsWorkspace">Inspect source health ↓</a>`);
   const source = sources["geoff.docs.surface"];
-  const view = docsView(source, sources["stacknet.models"], events);
-  put("docsOverview", `<div class="workspace-kpis"><div><strong>${view.available ? `${view.pages.filter((p) => p.ok).length}/${source.total}` : "—"}</strong><span>tracked pages responding</span></div><div><strong>${view.available ? fmt(view.failures.length) : "—"}</strong><span>unavailable page reads</span></div><div><strong>${view.changes.length}</strong><span>recent fingerprint events shown</span></div></div><p class="workspace-note">${esc(sourceCondition(source))} · ${esc(time(source?.checkedAt))}. This is a tracked sample, not a complete docs inventory. A changed hash is not a verified feature release; a 404 is not evidence of when a page disappeared.</p>`);
-  put("docsPageCount", view.available ? `(${view.pages.length})` : "");
-  put("docsPages", view.available ? [
+  const view = docsView(source, sources["stacknet.models"], events, latest?.historicalSources?.["geoff.docs.surface"]);
+  const hasPages = view.pages.length > 0;
+  put("docsOverview", `<div class="workspace-kpis"><div><strong>${hasPages ? `${view.pages.filter((p) => p.ok).length}/${view.observation.total ?? view.pages.length}` : "—"}</strong><span>${view.historical ? "pages responding at last observation" : "tracked pages responding"}</span></div><div><strong>${hasPages ? fmt(view.failures.length) : "—"}</strong><span>${view.historical ? "failed reads in that observation" : "unavailable page reads"}</span></div><div><strong>${view.changes.length}</strong><span>recent fingerprint events shown</span></div></div><p class="workspace-note">${view.historical ? "Historical observation — not a live docs check" : esc(sourceCondition(source))} · ${esc(time(view.observation?.checkedAt || source?.checkedAt))}. Last full collection: ${esc(time(state.lastPollAt))}. This is a tracked sample, not a complete docs inventory. A changed hash is not a verified feature release; a 404 is not evidence of when a page disappeared.</p>`);
+  put("docsPageCount", hasPages ? `(${view.pages.length}${view.historical ? " · historical" : ""})` : "");
+  put("docsPages", hasPages ? [
     ["Introduction", "/introduction/"], ["Geoff Code", "/geoff-code/"], ["API reference", "/api-reference/"], ["Token plans", "/token-plan/"],
-  ].map(([title, prefix]) => `<section class="docs-group"><h4>${title}</h4><div>${view.pages.filter((p) => p.path?.startsWith(prefix)).map((p) => `<a class="docs-page" href="https://docs.geoff.ai${esc(p.path)}" target="_blank" rel="noopener noreferrer"><span>${esc(p.label || p.id)} ↗</span><small class="${p.ok ? "is-current" : "is-unavailable"}">${p.ok ? "Responding" : p.status ? `HTTP ${p.status}` : "Read failed"}</small></a>`).join("")}</div></section>`).join("") : '<p class="workspace-note">No usable docs snapshot. Previous page details are withheld until the collector succeeds.</p>');
+   ].map(([title, prefix]) => `<section class="docs-group"><h4>${title}</h4><div>${view.pages.filter((p) => p.path?.startsWith(prefix)).map((p) => `<a class="docs-page" href="https://docs.geoff.ai${esc(p.path)}" target="_blank" rel="noopener noreferrer"><span>${esc(p.label || p.id)} ↗</span><small class="${p.ok && !view.historical ? "is-current" : "is-unavailable"}">${view.historical ? "Last read: " : ""}${p.ok ? "Responding" : p.status ? `HTTP ${p.status}` : "Read failed"}</small></a>`).join("")}</div></section>`).join("") : '<p class="workspace-note">No docs observation in this desk yet. Minute TRIX checks do not collect docs; a successful full collection or backup recovery is needed.</p>');
   put("docsChanges", `<p><b>Documented model layers:</b> ${esc(view.docsModels.join(", ") || "Unavailable")}</p><p><b>Anonymous API catalog:</b> ${esc(view.apiModels.join(", ") || "Unavailable")}</p>${view.missingFromCatalog.length ? `<p class="workspace-note">Docs-only in these samples: ${esc(view.missingFromCatalog.join(", "))}. This does not establish release timing or authenticated availability.</p>` : ""}${view.changes.map((e) => `<article class="docs-event"><strong>${esc(e.title)}</strong><time>${esc(time(e.at))}</time><p>${esc(e.summary)}</p></article>`).join("") || '<p class="workspace-note">No docs changes recorded in the retained 24-hour event window. This does not prove the docs are unchanged.</p>'}`);
   const mining = sources["surface.mining"];
   put("miningEvidence", `<div class="workspace-kpis"><div><strong>${usable(mining) ? fmt(mining.miners60m) : "—"}</strong><span>paid recipients · 60m sample</span></div><div><strong>${usable(mining) ? fmt(mining.payouts60m) : "—"}</strong><span>payouts · 60m sample</span></div><div><strong>${usable(mining) ? mining.claimsOn === true ? "On" : mining.claimsOn === false ? "Off" : "Unknown" : "Unknown"}</strong><span>third-party claims indicator</span></div></div><p class="workspace-note">${esc(sourceCondition(mining))} · checked ${esc(time(mining?.checkedAt))}. ${usable(mining) ? `Latest observed payout: ${esc(time(mining.payoutLatestAt))}.` : "Payout values withheld."} Paid recipients are not a count of running rigs. Prepaid activation requires account recognition; this public desk cannot confirm an individual entitlement.</p><details class="workspace-drill"><summary>Scope & historical archive</summary><p>Historical archive generated ${esc(usable(mining) ? time(mining.archiveGeneratedAt) : "not available")}. Archive windows are not live activity.</p><p>${external("https://www.pond0x.com/mining", "Pond mining")} · ${external("https://wpond-mining-dashboard.vercel.app/", "Reward source")}</p></details>`);
@@ -141,4 +145,6 @@ export function renderWorkspace(latest, events = []) {
     if (card) card.hidden = !usable(sources[key]);
   }
   renderIssues(latest);
+  put("historicalSources", Object.entries(latest?.historicalSources || {}).map(([id, s]) => `<details class="workspace-drill"><summary>${esc(id)} · observed ${esc(time(s.dataUpdatedAt || s.checkedAt))}</summary><p class="workspace-note">${esc(s.reason || s.error || "Last stored source response; not current.")}</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:28rem;overflow:auto">${esc(JSON.stringify(s, null, 2))}</pre></details>`).join("") || '<p class="workspace-note">No older source detail is available in this response.</p>');
+  put("historicalEvents", history.filter((e) => Date.now() - Date.parse(e.at) > EVIDENCE_WINDOW).map((e) => `<article class="docs-event"><strong>${esc(e.title)}</strong><time>${esc(time(e.at))}</time><p>${esc(e.summary)}</p></article>`).join("") || '<p class="workspace-note">No older events retained yet. This archive does not imply there were no earlier changes.</p>');
 }

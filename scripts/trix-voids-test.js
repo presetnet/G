@@ -350,10 +350,10 @@ test("pending receipts retry after outages and history cursor advances without d
 test("ledger backup outlives the display snapshot's 24h expiry", () => {
   const ledger = { version: 1, records: [verifyVoidTransfer(voidCandidate(event), receipt())] };
   const bundle = normalizeBundle({ latest: { takenAt: "2020-01-01", sources: { "trix.voids": { ledger } } } });
-  assert.equal(bundle.latest, null);
+  assert.equal(bundle.latest.takenAt, "2020-01-01", "the dated storage baseline survives an outage");
   assert.deepEqual(bundle.voidLedger, ledger);
   assert.deepEqual(restoreVoidHistory(bundle.latest, bundle.voidLedger).sources["trix.voids"].ledger, ledger);
-  const historical = filterEvidence(restoreVoidHistory(bundle.latest, bundle.voidLedger)).sources["trix.voids"];
+  const historical = filterEvidence(restoreVoidHistory(null, bundle.voidLedger)).sources["trix.voids"];
   assert.equal(historical.stale, true);
   assert.equal(historical.leaderboard[0].transactions, 1, "display expiry cannot erase historical credit");
 });

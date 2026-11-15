@@ -2934,6 +2934,18 @@ export async function sniffTrixBoxChain({ previous = null } = {}) {
  * It never infers a per-wallet verdict, because no public source can, and it
  * makes no purchase-program claim from the gate response alone.
  */
+export function parseTrixShop(shop) {
+  if (!shop || typeof shop !== "object") return null;
+  const lamports = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
+  return {
+    open: typeof shop.open === "boolean" ? shop.open : null,
+    levels: (Array.isArray(shop.levels) ? shop.levels : []).filter((row) => row && typeof row.id === "string").map((row) => ({
+      id: row.id, name: typeof row.name === "string" ? row.name : row.id,
+      priceLamports: lamports(row.priceLamports), mintFeeLamports: lamports(row.mintFeeLamports),
+    })),
+  };
+}
+
 export async function sniffTrixPreorder({ previous = null } = {}) {
   if (!trixPreorderInFlight) {
     trixPreorderInFlight = (async () => {
@@ -2985,6 +2997,7 @@ export async function sniffTrixPreorder({ previous = null } = {}) {
             maxOrderQty: trixNumber(json.maxOrderQty),
             memeCreatorFees: trixNumber(json.memeCreatorFees),
           };
+          value.shop = parseTrixShop(json.shop);
           value.maxOrderQty = value.globalState.maxOrderQty;
           value.saleOpen = canReserve;
           value.saleVerdict = canReserve === true
