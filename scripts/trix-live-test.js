@@ -6,6 +6,7 @@ import vm from "node:vm";
 import * as crypto from "node:crypto";
 import * as tokenPlan from "../server/token-plan.js";
 import * as trixVoids from "../server/trix-voids.js";
+import * as packPace from "../public/pack-pace.js";
 
 let now = Date.parse("2026-09-08T12:00:00Z");
 const iso = () => new Date(now).toISOString();
@@ -264,6 +265,7 @@ const dependencies = {
   "node:crypto": crypto,
   "token-plan.js": tokenPlan,
   "trix-voids.js": trixVoids,
+  "pack-pace.js": packPace,
   "config.js": { config },
   "store.js": {
     loadMiningSurfaceCache: async () => null, saveMiningSurfaceCache: noWrite,

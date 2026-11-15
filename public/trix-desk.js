@@ -3,6 +3,7 @@ import { renderVoidBoard } from "./trix-void-board.js";
 import { renderPoolVoid } from "./poolvoid.js";
 import { initPoolVoidHall } from "./poolvoid-hall.js";
 import { renderPackShop } from "./trix-shop.js";
+import { packPace, packLabel } from "./pack-pace.js";
 
 const TABS = ["boxes", "coins", "activity", "voiders", "poolvoid", "points", "art", "money"];
 const STATUS = { coins: "coinSummary", boxes: "boxStatus", activity: "activityStatus", voiders: "voidStatus", points: "pointsStatus", art: "artStatus", money: "moneyStatus" };
@@ -190,13 +191,13 @@ function renderBoxes(official, board, chain, preorder) {
   const hasData = fromBoard || [official?.topCoins, official?.biggestPulls, official?.topCollectors].some((list) => rows(list).length);
   const chainLive = good(chain) && number(chain.eventsSinceLaunch) !== null;
   status("boxes", src, hasData, fromBoard
-    ? `Round ${fmt(board.round, 0)} ${esc(board.roundStatus || "warming")} · ${fmt(board.mintedTotal, 0)} boxes reported by DOSWAPZ`
-    : !good(official) && hasData ? unavailable(official, "Last-known box results") : "Official box leaderboard");
+    ? `Round ${fmt(board.round, 0)} ${esc(board.roundStatus || "warming")} · ${fmt(board.mintedTotal, 0)} packs reported by DOSWAPZ`
+    : !good(official) && hasData ? unavailable(official, "Last-known pack results") : "Official pack leaderboard");
   if (fromBoard) {
     const chainStamp = chainLive
-      ? `Treasury signatures ${fmt(chain.eventsSinceLaunch, 0)} · newest ${clock(chain.newestAt, "Newest treasury event")} · treasury ${short(chain.treasury)} · signatures are not a box count`
+      ? `Treasury signatures ${fmt(chain.eventsSinceLaunch, 0)} · newest ${clock(chain.newestAt, "Newest treasury event")} · treasury ${short(chain.treasury)} · signatures are not a pack count`
       : `Separate treasury read unavailable${chain?.reason ? ` · ${esc(chain.reason)}` : ""}`;
-    const snapshotStamp = `DOSWAPZ reports ${fmt(board.mintedTotal, 0)} boxes · remaining allocation ${number(board.boxesLeft) === null ? "not published" : fmt(board.boxesLeft, 0)} · feed updated ${clock(board.dataUpdatedAt, "DOSWAPZ feed")}${board.fallbackReason ? ` · upstream ${esc(board.fallbackReason)}` : ""}`;
+    const snapshotStamp = `DOSWAPZ reports ${fmt(board.mintedTotal, 0)} packs · remaining allocation ${number(board.boxesLeft) === null ? "not published" : fmt(board.boxesLeft, 0)} · feed updated ${clock(board.dataUpdatedAt, "DOSWAPZ feed")}${board.fallbackReason ? ` · upstream ${esc(board.fallbackReason)}` : ""}`;
     const chainBit = board.chain?.walletsScanned != null
       ? `DOSWAPZ census · ${fmt(board.chain.walletsScanned, 0)} wallets · ${fmt(board.chain.receipts, 0)} receipts · ${clock(board.chain.updatedAt, "Receipt census")}`
       : "";
@@ -205,10 +206,10 @@ function renderBoxes(official, board, chain, preorder) {
       ? ` · ${fmt(stickerCount, 0)} stickers in wallet scan${stickerWallets !== null ? ` · ${fmt(stickerWallets, 0)} wallet${stickerWallets === 1 ? "" : "s"}` : ""}`
       : "";
     const stamp = `<p class="desk-context">${chainStamp} · ${snapshotStamp}${chainBit ? ` · ${chainBit}` : ""}${stickerBit}</p>`;
-    const count = number(board.chain?.packMinted) ?? number(board.mintedTotal);
-    const watch = `<h4 class="board-subhead">Box watch · 8,000 target</h4><p class="desk-context"><b>${count === null ? "Count unavailable" : `${fmt(count, 0)} reported · ${fmt(Math.max(0, 8000 - count), 0)} to 8,000`}</b> · ${good(preorder) ? preorder.globalState?.canOpen === true ? "opening enabled" : preorder.globalState?.canOpen === false ? "opening still disabled" : "opening status unknown" : "opening status unavailable"}. User-supplied watch target, not a verified unlock condition.</p>${board.chain?.program ? `<p class="desk-context">Program attributed by DOSWAPZ: ${link("https://solscan.io/account/", board.chain.program, short(board.chain.program))} · account layout and release trigger are not verified by this feed reader.</p>` : ""}`;
+    const pace = packPace(board.chain, board.pace?.samples || []);
+    const watch = `<h4 class="board-subhead">Packs per hour · estimated census growth</h4><p class="desk-context"><b>${pace.perHour === null ? "—" : `${fmt(pace.perHour, 1)} packs/hour`}</b>${pace.delta !== null ? ` · +${fmt(pace.delta, 0)} receipts over ${fmt(pace.minutes, 1)} minutes` : ""}. ${esc(pace.reason)}</p><p class="desk-context">Based on DOSWAPZ's on-chain BuyPack receipt census, not an independent transaction-time count. Census checked ${clock(board.chain?.updatedAt, "Receipt census")}${pace.from ? ` · measured from ${esc(pace.from)} to ${esc(pace.to)}` : ""}.</p>`;
     const boxTiles = board.boxes.map((b) => `<section class="box-tile${b.inRound ? " in-round" : ""}" style="--box-hex:${esc(b.hex || "#444")}">
-      <b>${esc(b.type)}</b><span class="box-color">${esc(b.color)}</span>
+      <b>${esc(packLabel(b.type))}</b><span class="box-color">${esc(b.color)}</span>
       <dl><dt>Minted · snap</dt><dd>${fmt(b.minted, 0)}</dd><dt>Left · snap</dt><dd title="Last published by TRIX before the state API retired; not verifiable now">${fmt(b.left, 0)}</dd><dt>Price · snap</dt><dd>${usd(b.priceUsd)} · ${sol(b.priceSol)}</dd></dl>
       <span class="desk-badge">${b.stale ? "Historical row · not live" : b.inRound ? "Reported in round" : "Reported out of round"}</span>
     </section>`).join("");
@@ -216,19 +217,19 @@ function renderBoxes(official, board, chain, preorder) {
       <td class="desk-number">${fmt(c.rank, 0)}</td>
       <td><b>${esc(c.username || short(c.wallet) || "--")}</b>${c.verified === true ? ' <span class="desk-badge">Verified</span>' : ""}</td>
       <td class="desk-number">${fmt(c.boxes, 0)}</td>
-      <td>${c.kinds ? Object.entries(c.kinds).map(([kind, n]) => `${esc(kind)} ${fmt(n, 0)}`).join(" · ") : "--"}</td>
+      <td>${c.kinds ? Object.entries(c.kinds).map(([kind, n]) => `${esc(packLabel(kind))} ${fmt(n, 0)}`).join(" · ") : "--"}</td>
       <td class="desk-secondary">${link("https://solscan.io/account/", c.wallet, short(c.wallet))}</td>
     </tr>`).join("");
     const rarityChips = board.rarities.map((r) => `<span class="rarity-chip" title="${esc(`${r.type} odds from snapshot`)}">${esc(r.type)} ${fmt(r.oddsPct)}%</span>`).join("");
     const cardChips = board.cards.map((c) => `<span class="rarity-chip muted" title="${esc(`${c.type} shop card`)}">${esc(c.type)} ${fmt(c.multiplier)}x · ${sol(c.priceSol)}</span>`).join("");
     setHTML("boxRows", `<aside class="box-source-credit" aria-label="Community data credit">
-      <div><strong>Big thanks to DOSWAPZ</strong><p>The public box feed and collector census behind this board come from DOSWAPZ. Serious detective work for the community — go check out the full deep dive.</p></div>
-      <a href="https://doswapz.com/classic/pages/geoffwatch-box.html" target="_blank" rel="noopener noreferrer">Explore DOSWAPZ's box dashboard ↗</a>
+      <div><strong>Big thanks to DOSWAPZ</strong><p>The public pack feed and collector census behind this board come from DOSWAPZ. Serious detective work for the community — go check out the full deep dive.</p></div>
+      <a href="https://doswapz.com/classic/pages/geoffwatch-box.html" target="_blank" rel="noopener noreferrer">Explore DOSWAPZ's pack dashboard ↗</a>
       </aside>${watch}${stamp}
       ${renderPreorder(preorder)}
       <div class="box-type-grid">${boxTiles}</div>
-      <h4 class="board-subhead">Most boxes · on-chain wallet scan</h4>
-      ${collectorBody ? table("Most boxes per public wallet", [["#", "desk-number"], ["User"], ["Boxes", "desk-number"], ["Kinds"], ["Wallet", "desk-secondary"]], collectorBody) : empty("No collector rows reported.")}
+      <h4 class="board-subhead">Most packs · on-chain wallet scan</h4>
+      ${collectorBody ? table("Most packs per public wallet", [["#", "desk-number"], ["User"], ["Packs", "desk-number"], ["Kinds"], ["Wallet", "desk-secondary"]], collectorBody) : empty("No collector rows reported.")}
       ${Object.keys(board.kindTotals || {}).length ? `<div class="rarity-strip"><small>Wallet scan inventory</small>${Object.entries(board.kindTotals).map(([kind, amount]) => `<span class="rarity-chip muted" title="${esc(`${kind} count across the reported wallet scan`)}">${esc(kind)} ${fmt(amount, 0)} · ${fmt(board.kindWallets?.[kind], 0)} wallet${board.kindWallets?.[kind] === 1 ? "" : "s"}</span>`).join("")}</div>` : ""}
       ${rarityChips ? `<div class="rarity-strip"><small>Rarity odds · snapshot</small>${rarityChips}</div>` : ""}
       ${cardChips ? `<div class="rarity-strip"><small>Shop card types</small>${cardChips}</div>` : ""}`);
@@ -236,7 +237,7 @@ function renderBoxes(official, board, chain, preorder) {
   }
   const data = [official?.topCoins, official?.biggestPulls, official?.topCollectors];
   if (!hasData && (!good(official) || !data.some(Array.isArray))) {
-    setHTML("boxRows", empty(unavailable(official, "Box leaderboard unavailable")));
+    setHTML("boxRows", `${renderPreorder(preorder)}${empty(unavailable(official, "Pack leaderboard unavailable"))}`);
     return;
   }
   const boards = [

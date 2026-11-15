@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { packPace } from "../public/pack-pace.js";
 import { config } from "./config.js";
 import { collectVoids } from "./trix-voids.js";
 import { loadMiningSurfaceCache, saveMiningSurfaceCache } from "./store.js";
@@ -4342,6 +4343,7 @@ export async function sniffTrixBoxBoard({ previous = null } = {}) {
         rarities: Array.isArray(j.rarities) ? j.rarities.map(rarity).filter(Boolean) : [],
         cards: Array.isArray(j.cards) ? j.cards.map(card).filter(Boolean) : [],
         chain,
+        pace: packPace(chain, previous?.pace?.samples || []),
         publicState: state,
         kindTotals,
         kindWallets,
@@ -5972,7 +5974,7 @@ function trixAttempts(previous) {
     ["trix.money", sniffTrixMoney()],
     ["trix.voids", sniffTrixVoids({ previous: previous?.sources?.["trix.voids"], siblings: previous?.sources || null })],
     ["trix.boxes", sniffTrixBoxes()],
-    ["trix.boxboard", sniffTrixBoxBoard()],
+    ["trix.boxboard", sniffTrixBoxBoard({ previous: previous?.sources?.["trix.boxboard"] || null })],
     ["trix.boxchain", sniffTrixBoxChain()],
     ["trix.preorder", sniffTrixPreorder({ previous: previous?.sources?.["trix.preorder"] || null })],
     ["trix.meme.market", sniffTrixMemeMarket()],

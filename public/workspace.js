@@ -62,7 +62,7 @@ export function initWorkspace() {
   nav.setAttribute("aria-label", "Dashboard sections");
   const sections = [
     ["geoffWorkspace", "Geoff · docs & platform", "Page changes, model catalog and published pricing", true],
-    ["marketWorkspace", "Markets · TRIX & DIBZI", "Box watch, auctions and attributed community data"],
+    ["marketWorkspace", "Markets · TRIX & DIBZI", "Pack activity, auctions and attributed community data"],
     ["simulationWorkspace", "The Simulation", "4,500 supply watch, paid sales and collapse recipes"],
     ["miningWorkspace", "Mining · payout evidence", "Activation, sessions and payouts are separate signals"],
     ["toolsWorkspace", "Research tools", "On-demand asset and listing checks"],

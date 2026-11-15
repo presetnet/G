@@ -1,5 +1,6 @@
 // Run: node --experimental-vm-modules scripts/trix-odds-test.js
 import assert from "node:assert/strict";
+import * as packPace from "../public/pack-pace.js";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import * as crypto from "node:crypto";
@@ -14,6 +15,7 @@ const code = await readFile(new URL("../server/sniffer.js", import.meta.url), "u
 const module = new vm.SourceTextModule(code, { context });
 await module.link(async (specifier) => {
   const exports = specifier === "node:crypto" ? crypto
+    : specifier === "../public/pack-pace.js" ? packPace
     : specifier === "./token-plan.js" ? tokenPlan
     : specifier === "./trix-voids.js" ? trixVoids
     : specifier === "./config.js" ? { config: {} }

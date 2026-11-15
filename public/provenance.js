@@ -51,7 +51,7 @@ const NAMES = {
   "trix.market": "TRIX collectibles APIs",
   "trix.terms": "TRIX Terms of Use",
   "trix.privacy": "TRIX Privacy Policy",
-  "trix.boxboard": "DOSWAPZ public box board",
+  "trix.boxboard": "DOSWAPZ public pack board",
   "trix.preorder": "TRIX preorder gates",
   "trix.voids": "TRIX void feed + verified treasury transfers",
   "trix.meme.market": "TRIX launch ranking",

@@ -1,5 +1,6 @@
 // Run: node --experimental-vm-modules scripts/source-freshness-test.js
 import assert from "node:assert/strict";
+import * as packPace from "../public/pack-pace.js";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import * as crypto from "node:crypto";
@@ -49,6 +50,7 @@ export function stubCollectors() {
 context.nowAdvance = () => { now += 1000; };
 await module.link(async (specifier) => {
   const exports = specifier === "node:crypto" ? crypto
+    : specifier === "../public/pack-pace.js" ? packPace
     : specifier === "./token-plan.js" ? tokenPlan
     : specifier === "./trix-voids.js" ? trixVoids
     : specifier === "./config.js" ? { config: {} }
