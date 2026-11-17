@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PACK_PROGRAM, parsePackFlow, collectPackFlow } from "../server/pack-flow.js";
+import { PACK_PROGRAM, parsePackFlow, collectPackFlow, collectPackCensus } from "../server/pack-flow.js";
 
 const payer = "payer";
 const destinations = ["D8LYYHufXvEVAfMKfmv9amKLJjdJejpXAwsM5Wqp3iQe", "78zsqg7rhoBGMra57Nq1kiLGM8KxFBYefoKZDXDRFhHb"];
@@ -22,6 +22,29 @@ test("counts multiple instructions in one transaction and rejects unmatched or f
   assert.equal(parsePackFlow(tx), null);
   tx.meta.err = { failed: true };
   assert.equal(parsePackFlow(tx), null);
+});
+
+test("receipt census counts tier bytes, reports unknown tiers, and caches the scan", async () => {
+  const now = Date.now();
+  let calls = 0;
+  const rpc = async (method, params) => {
+    calls++;
+    assert.equal(method, "getProgramAccounts");
+    assert.deepEqual(params[1].dataSlice, { offset: 104, length: 1 });
+    return { context: { slot: 123 }, value: [0, 0, 1, 2, 9].map((n) => ({ account: { data: [Buffer.from([n]).toString("base64"), "base64"] } })) };
+  };
+  const census = await collectPackCensus(rpc, null, now);
+  assert.deepEqual(census.counts, { base: 2, hype: 1, viral: 1, unknown: 1 });
+  assert.equal(census.total, 5);
+  assert.equal(census.slot, 123);
+  assert.equal(await collectPackCensus(rpc, census, now + 60000), census);
+  assert.equal(calls, 1);
+  const failed = await collectPackCensus(async () => { throw Error("offline"); }, census, now + 16 * 60000);
+  assert.equal(failed.ok, false);
+  assert.equal(failed.stale, true);
+  assert.equal(failed.counts.hype, 1);
+  const invalid = await collectPackCensus(async () => ({ context: { slot: 1 }, value: [{ account: { data: ["", "base64"] } }] }), null, now);
+  assert.equal(invalid.ok, false);
 });
 test("bounded collector deduplicates and reports unresolved observations without fabricating totals", async () => {
   const now = Date.now(), tx = transaction(now);

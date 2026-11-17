@@ -2,6 +2,38 @@ import { createHash } from "node:crypto";
 export const PACK_PROGRAM = "HTrrq6C6j9NYySUrpSLn9nDjFbKNBD6pS3xBuLppfW4F";
 const DESTINATIONS = ["D8LYYHufXvEVAfMKfmv9amKLJjdJejpXAwsM5Wqp3iQe", "78zsqg7rhoBGMra57Nq1kiLGM8KxFBYefoKZDXDRFhHb"];
 const DAY = 86400000;
+const CENSUS_INTERVAL = 15 * 60000;
+
+// Receipt discriminator and byte 104 mapping are empirically cross-checked
+// against BuyPack transaction prices, not an officially published account ABI.
+export async function collectPackCensus(rpc, previous = null, now = Date.now()) {
+  const attempted = Date.parse(previous?.lastAttemptAt || previous?.checkedAt || "");
+  if (Number.isFinite(attempted) && now >= attempted && now - attempted < CENSUS_INTERVAL) return previous;
+  const at = new Date(now).toISOString();
+  try {
+    const result = await rpc("getProgramAccounts", [PACK_PROGRAM, {
+      encoding: "base64", withContext: true, commitment: "confirmed",
+      filters: [{ dataSize: 107 }, { memcmp: { offset: 0, bytes: "LacdB1MoxcT" } }],
+      dataSlice: { offset: 104, length: 1 },
+    }], { timeoutMs: 15000 });
+    if (!result || !Array.isArray(result.value) || !Number.isSafeInteger(result.context?.slot)) throw Error("Invalid receipt census response");
+    const counts = { base: 0, hype: 0, viral: 0, unknown: 0 };
+    for (const row of result.value) {
+      const data = row?.account?.data;
+      if (!Array.isArray(data) || data[1] !== "base64" || typeof data[0] !== "string") throw Error("Invalid receipt data");
+      const bytes = Buffer.from(data[0], "base64");
+      if (bytes.length !== 1) throw Error("Incomplete receipt data");
+      const tier = ["base", "hype", "viral"][bytes[0]] || "unknown";
+      counts[tier]++;
+    }
+    return { source: "trix.packcensus", ok: true, checkedAt: at, lastAttemptAt: at, slot: result.context.slot,
+      total: result.value.length, counts, sourceUrl: `https://solscan.io/account/${PACK_PROGRAM}`,
+      note: "Current program-owned receipt accounts, not guaranteed lifetime purchases. Tier byte mapping is empirically checked against sample transactions, not an official ABI." };
+  } catch (error) {
+    return { ...(previous || {}), source: "trix.packcensus", ok: false, stale: true, checkedAt: previous?.checkedAt || at,
+      lastAttemptAt: at, reason: error.message || "Receipt census unavailable" };
+  }
+}
 const BUY_PACK = createHash("sha256").update("global:buy_pack").digest().subarray(0, 8);
 function isBuyPack(data) {
   if (typeof data !== "string" || !data) return false;

@@ -214,6 +214,7 @@ const context = vm.createContext({
     else if (url.hostname === "api.mainnet-beta.solana.com") {
       const rpc = JSON.parse(options.body);
       if (rpc.method === "getBalance") json = { result: { value: 0 } };
+      else if (rpc.method === "getProgramAccounts") json = { result: { context: { slot: 123 }, value: [] } };
       else if (rpc.method === "getTransaction") json = { result: { meta: { err: null }, transaction: { message: {
         instructions: providerTransfers.map((destination) => ({ program: "system", parsed: { type: "transfer", info: { destination } } })),
       } } } };
@@ -887,8 +888,8 @@ failures.clear();
 
 // Full/minute summaries use the same source contract, including coverage.
 const coldMinute = await api.runMinuteSniff();
-assert.equal(Object.keys(coldMinute.sources).length, 29);
-assert.equal(coldMinute.summary.totalSources, 29);
+assert.equal(Object.keys(coldMinute.sources).length, 30);
+assert.equal(coldMinute.summary.totalSources, 30);
 assert.equal(coldMinute.sources["trix.boxes"].status, 404);
 assert.equal(coldMinute.sources["trix.preorder"].ok, true);
 assert.equal(coldMinute.sources["trix.preorder"].walletAnswerAvailable, false);
@@ -902,7 +903,7 @@ assert.equal(coldMinute.sources["pond0x.geoff"].paired, false);
 assert.equal(coldMinute.sources["pond0x.geoff"].chatEmbedded, true);
 assert.equal(coldMinute.sources["pond0x.geoff"].providerEmbedded, true);
 const full = service.preserveTrixHistory(null, await api.runSniff());
-assert.equal(Object.keys(full.sources).length, 56);
+assert.equal(Object.keys(full.sources).length, 57);
 assert.equal(full.sources["trix.preorder"].saleVerdict, "open to reserve");
 assert.equal(full.sources["trix.boxes"].status, 404);
 assert.equal(full.summary.trixBoxesOk, false);
@@ -1096,6 +1097,7 @@ assert.ok(timed.durationMs < 60000);
 assert.ok(requests.length - timedRequestStart <= 37);
 assert.ok(timeouts.every((timeout) => timeout <= 18000));
 for (const [name, source] of Object.entries(timed.sources)) {
+  if (name === "trix.packcensus" && source.ok) continue; // 15-minute cached census does not make a hung RPC request.
   if (name.startsWith("trix.") || ["stacknet.health", "stacknet.root", "stacknet.network", "stacknet.node", "stacknet.models"].includes(name)) {
     assert.equal(source.ok, false, name);
     assert.equal(source.stale, true, name);

@@ -42,12 +42,14 @@ export function renderOverview(latest, events = []) {
   const price = (p) => Number.isSafeInteger(p?.priceLamports) && p.priceLamports >= 0 ? `${fmt(p.priceLamports / 1e9, 9)} SOL` : "Not reported";
   const pace = current(boxes) ? packPace(boxes.chain, boxes.pace?.samples || []) : null;
   const flow = sources["trix.packflow"];
+  const census = sources["trix.packcensus"];
   const deposited = Array.isArray(flow?.depositsLamports24h) && flow.depositsLamports24h.length === 2 && flow.depositsLamports24h.every(Number.isSafeInteger)
     ? flow.depositsLamports24h.reduce((a, b) => a + b, 0) / 1e9 : null;
   const card = (title, value, note, src, target, action) => `<article><h3>${esc(title)}</h3><p class="glance-value">${esc(value)}</p><small>${esc(note)}</small><small>${evidenceState(src)} · ${age(src?.dataUpdatedAt || src?.checkedAt)}</small><a class="glance-drill" href="#${target}">${action} ↓</a></article>`;
   document.getElementById("quickFacts").innerHTML = [
     card("TRIX pack shop", shop ? shop.open === true ? "Open" : shop.open === false ? "Closed" : "Status unknown" : "Shop unavailable", `Opening ${gate?.globalState?.canOpen === true ? "enabled" : gate?.globalState?.canOpen === false ? "disabled" : "unknown"} · global gate`, gate, "trixDesk", "Inspect pack shop"),
     card("Packs · last 24h", current(flow) && Number.isSafeInteger(flow?.packs24h) ? `At least ${fmt(flow.packs24h)} observed` : "Awaiting deposit scan", current(flow) && deposited !== null ? `${fmt(deposited, 4)} SOL matched · partial scan, not total sales` : "Matched on-chain deposits · incomplete scan, not total sales", flow, "trixDesk", "Inspect pack activity"),
+    card("Pack receipts by tier", current(census) && census.counts ? `${fmt(census.counts.base)} / ${fmt(census.counts.hype)} / ${fmt(census.counts.viral)}` : "Census unavailable", current(census) && census.counts ? `Base / Hype / Viral · ${fmt(census.total)} accounts${census.counts.unknown ? ` · ${fmt(census.counts.unknown)} unknown tier` : ""} · empirical mapping` : "Current receipt accounts · tier mapping is empirical", census, "trixDesk", "Inspect packs"),
     card("Hype / Viral", shop ? `${price(hype)} / ${price(viral)}` : "Prices unavailable", "Reported prices · mint fees and checkout details in pack shop", gate, "trixDesk", "Inspect pack prices"),
     card("TRIX pack pace", pace?.perHour != null ? `${fmt(pace.perHour, 1)} packs/hour` : "Pace unavailable", pace?.perHour != null ? `Estimated census growth · ${fmt(pace.minutes, 1)}m window` : pace?.reason || "Awaiting fresh receipt census", boxes, "trixDesk", "Inspect pack activity"),
     card("Geoff documentation", current(docs) ? `${docs.scraped}/${docs.total} pages responding` : "Snapshot unavailable", "Tracked sample · fingerprints, not release confirmations", docs, "docsDesk", "Inspect docs & changes"),
