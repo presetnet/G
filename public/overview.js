@@ -1,6 +1,14 @@
 import { evidenceState, EVIDENCE_WINDOW } from "./evidence.js";
 import { packPace } from "./pack-pace.js";
 const esc = (v) => String(v ?? "—").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+export function compactChange(value) {
+  return String(value ?? "").replace(/(?<![\w.])-?\d+\.\d{4,}(?![\w.])/g, (raw) => {
+    const n = Number(raw);
+    if (!Number.isFinite(n) || Math.abs(n) >= Number.MAX_SAFE_INTEGER) return raw;
+    if (n !== 0 && Math.abs(n) < 0.001) return n > 0 ? "<0.001" : ">-0.001";
+    return `≈${n.toLocaleString("en-US", { maximumFractionDigits: 3 })}`;
+  });
+}
 const groups = [["Geoff","geoff.","https://www.geoff.ai/"],["StackNet","stacknet.","https://stacknet.magma-rpc.com/health"],["TRIX","trix.","https://trix.market/"],["DIBZI","dibzi.","https://dibzi.ai/"],["SIM","sim.","https://sim.tech/"],["AZY","azy.","https://azy.life/"],["MAGMA","magma.","https://opensea.io/collection/the-simulation-958481099"]];
 const link = (url, label) => `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`;
 const age = (at) => {
@@ -32,25 +40,35 @@ export function renderOverview(latest, events = []) {
   const usable = d && ["CURRENT","DELAYED"].includes(evidenceState(d));
   const nft = sources["magma.eth"];
   const nftUsable = nft?.magmaSupplyVersion === 2 && ["CURRENT", "DELAYED"].includes(evidenceState(nft));
-  const fmt = (n, digits = 0) => Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: digits }) : "unread";
+  const fmt = (n, digits = 0) => {
+    if (!Number.isFinite(n)) return "unread";
+    const precision = Math.min(3, digits);
+    if (precision && n !== 0 && Math.abs(n) < 10 ** -precision) return n > 0 ? `<${(10 ** -precision).toFixed(precision)}` : `>-${(10 ** -precision).toFixed(precision)}`;
+    return n.toLocaleString("en-US", { maximumFractionDigits: precision });
+  };
   const current = (s) => ["CURRENT", "DELAYED"].includes(evidenceState(s));
   const docs = sources["geoff.docs.surface"], boxes = sources["trix.boxboard"], mining = sources["surface.mining"], azy = sources["azy.chain"];
   const gate = sources["trix.preorder"];
   const shop = current(gate) ? gate.shop : null;
   const packs = Array.isArray(shop?.levels) ? shop.levels : [];
   const hype = packs.find((p) => p.id === "hype"), viral = packs.find((p) => p.id === "viral");
-  const price = (p) => Number.isSafeInteger(p?.priceLamports) && p.priceLamports >= 0 ? `${fmt(p.priceLamports / 1e9, 9)} SOL` : "Not reported";
+  const price = (p) => {
+    if (!Number.isSafeInteger(p?.priceLamports) || p.priceLamports < 0) return "—";
+    if (p.priceLamports > 0 && p.priceLamports < 1000000) return "<0.001";
+    return (p.priceLamports / 1e9).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  };
+  const exactPrice = (p) => Number.isSafeInteger(p?.priceLamports) && p.priceLamports >= 0 ? `${(p.priceLamports / 1e9).toFixed(9)} SOL` : "not reported";
   const pace = current(boxes) ? packPace(boxes.chain, boxes.pace?.samples || []) : null;
   const flow = sources["trix.packflow"];
   const census = sources["trix.packcensus"];
   const deposited = Array.isArray(flow?.depositsLamports24h) && flow.depositsLamports24h.length === 2 && flow.depositsLamports24h.every(Number.isSafeInteger)
     ? flow.depositsLamports24h.reduce((a, b) => a + b, 0) / 1e9 : null;
-  const card = (title, value, note, src, target, action) => `<article><h3>${esc(title)}</h3><p class="glance-value">${esc(value)}</p><small>${esc(note)}</small><small>${evidenceState(src)} · ${age(src?.dataUpdatedAt || src?.checkedAt)}</small><a class="glance-drill" href="#${target}">${action} ↓</a></article>`;
+  const card = (title, value, note, src, target, action, exact = "") => `<article><h3>${esc(title)}</h3><p class="glance-value"${exact ? ` title="${esc(exact)}" aria-label="${esc(exact)}"` : ""}>${esc(value)}</p><small>${esc(note)}</small><small>${evidenceState(src)} · ${age(src?.dataUpdatedAt || src?.checkedAt)}</small><a class="glance-drill" href="#${target}">${action} ↓</a></article>`;
   document.getElementById("quickFacts").innerHTML = [
     card("TRIX pack shop", shop ? shop.open === true ? "Open" : shop.open === false ? "Closed" : "Status unknown" : "Shop unavailable", `Opening ${gate?.globalState?.canOpen === true ? "enabled" : gate?.globalState?.canOpen === false ? "disabled" : "unknown"} · global gate`, gate, "trixDesk", "Inspect pack shop"),
     card("Packs · last 24h", current(flow) && Number.isSafeInteger(flow?.packs24h) ? `At least ${fmt(flow.packs24h)} observed` : "Awaiting scan", current(flow) && deposited !== null ? `${fmt(deposited, 4)} SOL matched · partial scan` : "Partial deposit scan · not total sales", flow, "trixDesk", "Inspect activity"),
     card("Pack receipts by tier", current(census) && census.counts ? `${fmt(census.counts.base)} / ${fmt(census.counts.hype)} / ${fmt(census.counts.viral)}` : "Census unavailable", current(census) && census.counts ? `Base / Hype / Viral · ${fmt(census.total)} accounts${census.counts.unknown ? ` · ${fmt(census.counts.unknown)} unknown tier` : ""} · empirical mapping` : "Current receipt accounts · tier mapping is empirical", census, "trixDesk", "Inspect packs"),
-    card("Hype / Viral", shop ? `${price(hype)} / ${price(viral)}` : "Prices unavailable", "Mint fee reported separately", gate, "trixDesk", "Inspect prices"),
+    card("Hype / Viral", shop ? `≈ ${price(hype)} / ${price(viral)} SOL` : "Prices unavailable", "Rounded · mint fee reported separately", gate, "trixDesk", "Exact prices & fees", shop ? `Exact Hype price ${exactPrice(hype)}; exact Viral price ${exactPrice(viral)}` : ""),
     card("TRIX pack pace", pace?.perHour != null ? `${fmt(pace.perHour, 1)} packs/hour` : "Pace unavailable", pace?.perHour != null ? `Estimated census growth · ${fmt(pace.minutes, 1)}m window` : pace?.reason || "Awaiting fresh receipt census", boxes, "trixDesk", "Inspect pack activity"),
     card("Geoff documentation", current(docs) ? `${docs.scraped}/${docs.total} pages responding` : "Snapshot unavailable", "Tracked sample · fingerprints, not release confirmations", docs, "docsDesk", "Inspect docs & changes"),
     card("The Simulation · NFTs", nftUsable ? `Outstanding supply ${fmt(nft.magmaSupply)}` : "Awaiting corrected supply", nftUsable ? `${fmt(Math.max(0, nft.magmaSupply - 4500))} to 4,500 · Ethereum NFTs` : "Old peak-held counts withheld · direct chain reads in the panel", nft, "simCollapse", "Inspect supply & sales"),
@@ -67,9 +85,9 @@ export function renderOverview(latest, events = []) {
     seen.add(key); return true;
   }).slice(0,3);
   const latestSignal = document.getElementById("latestSignal");
-  if (latestSignal) latestSignal.innerHTML = changes.length ? `<span class="signal-live">LATEST</span><span class="signal-dot"></span><strong>${esc(changes[0].title)}</strong><small>${age(changes[0].at)}</small><a href="#quickChanges">All updates ↗</a>` : '<span class="signal-live">LATEST</span><span class="signal-dot"></span><span>No recent public changes recorded</span><a href="#diagnosticsWorkspace">Source health ↗</a>';
+  if (latestSignal) latestSignal.innerHTML = changes.length ? `<span class="signal-live">LATEST</span><span class="signal-dot"></span><strong title="${esc(changes[0].title)}">${esc(compactChange(changes[0].title))}</strong><small>${age(changes[0].at)}</small><a href="#quickChanges">All updates ↗</a>` : '<span class="signal-live">LATEST</span><span class="signal-dot"></span><span>No recent public changes recorded</span><a href="#diagnosticsWorkspace">Source health ↗</a>';
   document.getElementById("quickChanges").innerHTML = changes.map(e => {
-    return `<article><strong>${esc(e.title)}</strong><small>${age(e.at)} · recorded public change</small><p>${esc(e.summary)}</p><a href="#sourceStrip">Inspect source visibility ↑</a></article>`;
+    return `<article><strong title="${esc(e.title)}">${esc(compactChange(e.title))}</strong><small>${age(e.at)} · recorded public change</small><p title="${esc(e.summary)}">${esc(compactChange(e.summary))}</p><a href="#sourceStrip">Inspect source visibility ↑</a></article>`;
   }).join("") || '<p>No recent public changes recorded. This does not imply zero activity.</p>';
 }
 

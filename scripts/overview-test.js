@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderOverview, renderPackActivity } from "../public/overview.js";
+import { renderOverview, renderPackActivity, compactChange } from "../public/overview.js";
 
 test("overview rejects legacy peak-held supply and separates NFT supply from Solana tokens", () => {
   const original = globalThis.document;
@@ -29,6 +29,12 @@ test("overview rejects legacy peak-held supply and separates NFT supply from Sol
   }
 });
 
+test("overview rounds long numeric fields without turning tiny amounts into zero", () => {
+  assert.equal(compactChange("Supply 1234.56789 → 0.0000004"), "Supply ≈1,234.568 → <0.001");
+  assert.equal(compactChange("mint ABC123.456789XYZ"), "mint ABC123.456789XYZ");
+  assert.equal(compactChange("Delta -0.0004"), "Delta >-0.001");
+});
+
 test("activity chart shows bounded observed records and never implies empty bins are zero sales", () => {
   const now = Date.parse("2026-11-17T15:00:00Z");
   const flow = { ok: true, checkedAt: new Date(now).toISOString(), records: [
@@ -54,7 +60,8 @@ test("pack signals are prominent, timestamped, and never present stale prices as
     ] } };
     renderOverview({ sources: { "trix.preorder": gate } });
     assert.match(nodes.quickFacts.innerHTML, /Hype \/ Viral/);
-    assert.match(nodes.quickFacts.innerHTML, /0\.850108815 SOL \/ 1\.70021763 SOL/);
+    assert.match(nodes.quickFacts.innerHTML, /≈ 0\.850 \/ 1\.700 SOL/);
+    assert.match(nodes.quickFacts.innerHTML, /Exact Hype price 0\.850108815 SOL; exact Viral price 1\.700217630 SOL/);
     assert.match(nodes.quickFacts.innerHTML, /Opening disabled/);
     assert.ok(nodes.quickFacts.innerHTML.indexOf("TRIX pack shop") < nodes.quickFacts.innerHTML.indexOf("Geoff documentation"));
     gate.checkedAt = "2020-01-01T00:00:00.000Z";
