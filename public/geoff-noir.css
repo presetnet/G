@@ -145,3 +145,38 @@ body { background:#070707; }
 @media(max-width:999px) { #workspaceNav { position:static; overflow-x:auto; flex-wrap:nowrap; } #workspaceNav a { flex-shrink:0; display:flex; align-items:center; } }
 @media(max-width:700px) { #glance .quick-facts { grid-template-columns:repeat(2,minmax(0,1fr)); } #glance .quick-facts article { min-height:145px; padding:15px; } .latest-signal small { display:none; } .pack-activity { padding:16px; } .activity-header a { font-size:11px; } }
 @media(max-width:360px) { #glance .quick-facts { grid-template-columns:1fr; } .latest-signal a { display:none; } }
+
+/* Executive density: compact cards without hiding the underlying evidence. */
+#glance .quick-facts { gap:10px; }
+#glance .quick-facts article { min-height:126px; padding:15px 16px; gap:5px; border-radius:10px; }
+#glance .quick-facts h3 { font-size:12px; line-height:1.3; }
+#glance .glance-value { font-size:clamp(17px,1.65vw,22px); line-height:1.2; }
+#glance .quick-facts small { color:#b7b8ae; font-size:11px; line-height:1.35; }
+#glance .glance-drill { font-size:11px; padding:5px 0 0; }
+.glance-heading { margin:22px 0 12px; }
+.pack-activity { padding:18px; }
+@media(min-width:1250px) { #glance .quick-facts { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+@media(max-width:700px) {
+  .shell { padding:10px 12px 40px; }
+  .desk-intro { padding:2px 0 8px; gap:10px; }
+  .desk-intro h2 { font-size:13px; line-height:1.25; }
+  #workspaceNav { margin:0 0 10px; padding:4px; gap:2px; border-radius:8px; }
+  #workspaceNav a { min-height:44px; padding:8px 10px; font-size:12px; }
+  #workspaceNav .nav-icon { margin-right:5px; width:16px; font-size:14px; }
+  #workspaceHealth { margin:0 0 10px; gap:4px 12px; font-size:11px; }
+  #workspaceHealth strong { font-size:14px; }
+  .latest-signal { min-height:42px; padding:9px 10px; gap:8px; font-size:12px; }
+  .latest-signal > span:not(.signal-live):not(.signal-dot) { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .glance-heading { margin:20px 0 10px; }
+  .glance-heading .eyebrow { margin-bottom:5px; font-size:9px; }
+  .glance-heading h2 { font-size:21px; }
+  #glance .quick-facts { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  #glance .quick-facts article { min-height:0; padding:12px; gap:5px; }
+  #glance .quick-facts h3 { font-size:11px; margin:0; }
+  #glance .glance-value { font-size:clamp(15px,4.2vw,19px); line-height:1.2; }
+  #glance .quick-facts small { font-size:11px; line-height:1.35; }
+  #glance .glance-drill { font-size:11px; line-height:1.4; }
+  .pack-activity { margin-top:10px; padding:14px; }
+  .activity-chart { gap:4px; }
+}
+@media(max-width:320px) { #glance .quick-facts { grid-template-columns:1fr; } }
