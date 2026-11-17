@@ -8,9 +8,9 @@ const age = (at) => {
   return !Number.isFinite(minutes) || minutes < 0 ? "age unknown" : minutes < 1 ? "just checked" : minutes < 60 ? `${Math.floor(minutes)}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ago` : `${Math.floor(minutes / 1440)}d ago`;
 };
 export function initOverview() {
-  document.querySelector(".desk-intro").insertAdjacentHTML("afterend", '<section id="glance" aria-label="Public visibility overview"><div id="sourceStrip" class="source-strip"></div><div id="quickFacts" class="quick-facts"></div><details class="data-disclosure"><summary>TRIX winner routes · access check, Nov 17</summary><p>The client routes <a href="https://www.trix.market/cards/winners" target="_blank" rel="noopener noreferrer">winners</a>, <a href="https://www.trix.market/cards/winners/above-%241k" target="_blank" rel="noopener noreferrer">above $1k</a> and <a href="https://www.trix.market/cards/winners/above-%2410k" target="_blank" rel="noopener noreferrer">above $10k</a> map to an admin sign-in component. No winner data or payout amounts were publicly verified. Route names are not proof of winners or a release date.</p></details><h3>What changed · last 24 hours</h3><div id="quickChanges"></div></section>');
+  document.querySelector(".desk-intro").insertAdjacentHTML("afterend", '<section id="glance" aria-label="Public visibility overview"><div id="sourceStrip" class="source-strip"></div><div id="latestSignal" class="latest-signal"></div><div class="glance-heading"><div><p class="eyebrow">THE LIVE DESK / OVERVIEW</p><h2>Signals at a glance<span>.</span></h2></div><a href="#diagnosticsWorkspace">Source health ↗</a></div><div id="quickFacts" class="quick-facts"></div><div id="packActivity" class="pack-activity"></div><details class="data-disclosure"><summary>TRIX winner routes · access check, Nov 17</summary><p>The client routes <a href="https://www.trix.market/cards/winners" target="_blank" rel="noopener noreferrer">winners</a>, <a href="https://www.trix.market/cards/winners/above-%241k" target="_blank" rel="noopener noreferrer">above $1k</a> and <a href="https://www.trix.market/cards/winners/above-%2410k" target="_blank" rel="noopener noreferrer">above $10k</a> map to an admin sign-in component. No winner data or payout amounts were publicly verified. Route names are not proof of winners or a release date.</p></details><div class="glance-heading changes-heading"><div><p class="eyebrow">THE LATEST / PUBLIC SOURCES</p><h2>What changed<span>.</span></h2></div><span>LAST 24 HOURS</span></div><div id="quickChanges"></div></section>');
   const briefing = document.querySelector(".stacknet-brief");
-  if (briefing) document.getElementById("glance").after(briefing);
+  if (briefing) { const fold = document.createElement("details"); fold.className = "briefing-fold"; fold.innerHTML = "<summary>Research archive · Stacknet calculator</summary>"; briefing.before(fold); fold.append(briefing); }
   for (const [selector,title] of [[".metrics","Public network measurements"],["#trixDesk","TRIX · open full market desk"],["#dibziDesk","DIBZI · open full auction desk"],[".dibzi-about","About DIBZI · editorial brief"],[".dibzi-sales","Top sales · historical ranking"],["#simDesk","SIM · open the simulation desk"],[".audio-lab","Experiments · local audio synthesizer"]]) {
     const node = document.querySelector(selector);
     if (!node) continue;
@@ -56,13 +56,33 @@ export function renderOverview(latest, events = []) {
     card("Mining payouts", current(mining) ? `${fmt(mining.miners60m)} paid recipients / 60m` : "Payout read unavailable", current(mining) ? `Latest payout ${age(mining.payoutLatestAt)} · not active rig count` : "Prepaid entitlement and productive mining require separate evidence", mining, "miningWorkspace", "Inspect payout evidence"),
     card("AZY activity", current(azy) ? `${fmt(azy.azySolDepositsSol, 4)} SOL observed` : "Intake unavailable", "Campaign-only intake · not a separate Geoff node-key revenue stream", azy, "simDesk", "Inspect campaign records"),
   ].join("");
+  const activity = document.getElementById("packActivity");
+  if (activity) activity.innerHTML = renderPackActivity(current(flow) ? flow : null);
   const seen = new Set();
   const changes = events.filter(e => { const delta=Date.now()-Date.parse(e.at); return delta>=0 && delta<=EVIDENCE_WINDOW && !["agent","baseline"].includes(e.kind); }).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)).filter(e => {
     const key = `${e.kind}:${e.title}`;
     if (seen.has(key)) return false;
     seen.add(key); return true;
   }).slice(0,3);
+  const latestSignal = document.getElementById("latestSignal");
+  if (latestSignal) latestSignal.innerHTML = changes.length ? `<span class="signal-live">LATEST</span><span class="signal-dot"></span><strong>${esc(changes[0].title)}</strong><small>${age(changes[0].at)}</small><a href="#quickChanges">All updates ↗</a>` : '<span class="signal-live">LATEST</span><span class="signal-dot"></span><span>No recent public changes recorded</span><a href="#diagnosticsWorkspace">Source health ↗</a>';
   document.getElementById("quickChanges").innerHTML = changes.map(e => {
     return `<article><strong>${esc(e.title)}</strong><small>${age(e.at)} · recorded public change</small><p>${esc(e.summary)}</p><a href="#sourceStrip">Inspect source visibility ↑</a></article>`;
   }).join("") || '<p>No recent public changes recorded. This does not imply zero activity.</p>';
+}
+
+export function renderPackActivity(flow, now = Date.now()) {
+  const end = now;
+  const start = end - 24 * 3600000;
+  const bins = Array.from({ length: 12 }, () => 0);
+  const records = Array.isArray(flow?.records) ? flow.records : [];
+  for (const record of records) {
+    const at = Date.parse(record?.at);
+    if (!Number.isFinite(at) || at < start || at >= end || at > now || !Number.isSafeInteger(record?.packs) || record.packs < 1) continue;
+    bins[Math.floor((at - start) / 7200000)] += record.packs;
+  }
+  const hasData = Boolean(flow?.ok && bins.some((count) => count > 0));
+  const max = Math.max(1, ...bins);
+  const bars = bins.map((count, i) => `<div class="activity-column"><span class="activity-bar" style="--bar-height:${Math.round(count / max * 100)}%" title="${count} observed · ${new Date(start + i * 7200000).toISOString().slice(11, 16)} UTC"></span>${i % 3 === 0 ? `<small>${new Date(start + i * 7200000).toISOString().slice(11, 16)}</small>` : "<small></small>"}</div>`).join("");
+  return `<div class="activity-header"><div><p class="eyebrow">ON-CHAIN / TRIX</p><h3>Pack activity</h3><p>Observed BuyPack instructions · UTC · last 24h</p></div><a href="#trixDesk">Open TRIX desk ↗</a></div>${hasData ? `<div class="activity-total"><strong>${bins.reduce((a, b) => a + b, 0).toLocaleString("en-US")}</strong><span>minimum observed · partial scan</span></div><div class="activity-chart" role="img" aria-label="Observed packs in two-hour UTC bins; partial scan, blank bars do not establish zero activity">${bars}</div><p class="activity-footnote">Two-hour bins. Bounded collection can miss transactions; empty bars do not establish zero activity. Last checked ${esc(age(flow.checkedAt))}.</p>` : '<div class="activity-empty">No current pack observations available yet.<small>The chart will appear as the bounded on-chain scan collects records.</small></div>'}`;
 }

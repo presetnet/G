@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderOverview } from "../public/overview.js";
+import { renderOverview, renderPackActivity } from "../public/overview.js";
 
 test("overview rejects legacy peak-held supply and separates NFT supply from Solana tokens", () => {
   const original = globalThis.document;
@@ -27,6 +27,20 @@ test("overview rejects legacy peak-held supply and separates NFT supply from Sol
     if (original === undefined) delete globalThis.document;
     else globalThis.document = original;
   }
+});
+
+test("activity chart shows bounded observed records and never implies empty bins are zero sales", () => {
+  const now = Date.parse("2026-11-17T15:00:00Z");
+  const flow = { ok: true, checkedAt: new Date(now).toISOString(), records: [
+    { at: new Date(now - 3600000).toISOString(), packs: 2 },
+    { at: new Date(now - 25 * 3600000).toISOString(), packs: 20 },
+    { at: new Date(now + 1000).toISOString(), packs: 40 },
+  ] };
+  const html = renderPackActivity(flow, now);
+  assert.match(html, /<strong>2<\/strong>/);
+  assert.match(html, /partial scan/);
+  assert.match(html, /empty bars do not establish zero activity/i);
+  assert.match(renderPackActivity(null, now), /No current pack observations/);
 });
 
 test("pack signals are prominent, timestamped, and never present stale prices as current", () => {

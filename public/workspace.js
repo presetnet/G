@@ -68,7 +68,8 @@ export function initWorkspace() {
     ["toolsWorkspace", "Research tools", "On-demand asset and listing checks"],
     ["diagnosticsWorkspace", "Diagnostics & evidence", "Unavailable sources, observations and historical context"],
   ];
-  nav.innerHTML = `<a href="#glance">Overview</a>${sections.map(([id, title]) => `<a href="#${id}">${esc(title.split(" · ")[0])}</a>`).join("")}`;
+  const icons = ["◫", "◈", "▥", "◉", "◇", "⌘", "◌"];
+  nav.innerHTML = `<div class="sidebar-title"><span>G</span><div><b>GEOFF METER</b><small>INDEPENDENT SIGNAL DESK</small></div></div><p class="sidebar-label">WORKSPACE</p>${[["glance", "Overview"], ...sections.map(([id, title]) => [id, title.split(" · ")[0]])].map(([id, title], i) => `<a href="#${id}"><span class="nav-icon" aria-hidden="true">${icons[i]}</span><span>${esc(title)}</span></a>`).join("")}<div class="sidebar-foot"><span class="sidebar-pulse"></span> PUBLIC SIGNAL DESK <small>Independent intelligence</small></div>`;
   glance.before(nav);
   const health = document.createElement("div");
   health.id = "workspaceHealth";
@@ -108,7 +109,17 @@ export function initWorkspace() {
     const a = event.target.closest?.('a[href^="#"]');
     if (a && document.getElementById(a.hash.slice(1))) openWorkspaceTarget(a.hash);
   });
-  window.addEventListener("hashchange", () => openWorkspaceTarget());
+  const activeNav = () => {
+    const hash = location.hash || "#glance";
+    const target = document.getElementById(hash.slice(1));
+    const section = target?.closest?.(".workspace-section")?.id;
+    nav.querySelectorAll("a").forEach((a) => {
+      if (a.getAttribute("href") === (section ? `#${section}` : hash)) a.setAttribute("aria-current", "location");
+      else a.removeAttribute("aria-current");
+    });
+  };
+  window.addEventListener("hashchange", () => { openWorkspaceTarget(); activeNav(); });
+  activeNav();
   document.getElementById("sourceHealthFilter").addEventListener("change", () => renderIssues(lastSnapshot));
   openWorkspaceTarget();
   renderWorkspace(null, []);
