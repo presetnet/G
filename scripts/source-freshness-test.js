@@ -1,6 +1,7 @@
 // Run: node --experimental-vm-modules scripts/source-freshness-test.js
 import assert from "node:assert/strict";
 import * as packPace from "../public/pack-pace.js";
+import * as packFlow from "../server/pack-flow.js";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import * as crypto from "node:crypto";
@@ -50,6 +51,7 @@ export function stubCollectors() {
 context.nowAdvance = () => { now += 1000; };
 await module.link(async (specifier) => {
   const exports = specifier === "node:crypto" ? crypto
+    : specifier === "./pack-flow.js" ? packFlow
     : specifier === "../public/pack-pace.js" ? packPace
     : specifier === "./token-plan.js" ? tokenPlan
     : specifier === "./trix-voids.js" ? trixVoids
@@ -123,7 +125,7 @@ const previous = { sources: {
 const before = JSON.stringify(previous);
 const full = await api.runSniff({ previous });
 // Includes the receipt-backed void leaderboard source and the free SOL price feed.
-assert.equal(Object.keys(full.sources).length, 55);
+assert.equal(Object.keys(full.sources).length, 56);
 assert.equal(Object.keys(full.sources).some((key) => key.startsWith("source-")), false);
 // stubCollectors() fails every sniff* collector, so this source is a failure
 // entry here. The gate fields are asserted in scripts/trix-live-test.js instead;

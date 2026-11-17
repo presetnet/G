@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { packPace } from "../public/pack-pace.js";
+import { collectPackFlow } from "./pack-flow.js";
 import { config } from "./config.js";
 import { collectVoids } from "./trix-voids.js";
 import { loadMiningSurfaceCache, saveMiningSurfaceCache } from "./store.js";
@@ -5976,6 +5977,7 @@ function trixAttempts(previous) {
     ["trix.boxes", sniffTrixBoxes()],
     ["trix.boxboard", sniffTrixBoxBoard({ previous: previous?.sources?.["trix.boxboard"] || null })],
     ["trix.boxchain", sniffTrixBoxChain()],
+    ["trix.packflow", collectPackFlow(solanaRpc, previous?.sources?.["trix.packflow"] || null)],
     ["trix.preorder", sniffTrixPreorder({ previous: previous?.sources?.["trix.preorder"] || null })],
     ["trix.meme.market", sniffTrixMemeMarket()],
     ["trix.frontpage", sniffTrixFrontpage()],

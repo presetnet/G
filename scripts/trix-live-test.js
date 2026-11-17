@@ -7,6 +7,7 @@ import * as crypto from "node:crypto";
 import * as tokenPlan from "../server/token-plan.js";
 import * as trixVoids from "../server/trix-voids.js";
 import * as packPace from "../public/pack-pace.js";
+import * as packFlow from "../server/pack-flow.js";
 
 let now = Date.parse("2026-09-08T12:00:00Z");
 const iso = () => new Date(now).toISOString();
@@ -266,6 +267,7 @@ const dependencies = {
   "token-plan.js": tokenPlan,
   "trix-voids.js": trixVoids,
   "pack-pace.js": packPace,
+  "pack-flow.js": packFlow,
   "config.js": { config },
   "store.js": {
     loadMiningSurfaceCache: async () => null, saveMiningSurfaceCache: noWrite,
@@ -885,8 +887,8 @@ failures.clear();
 
 // Full/minute summaries use the same source contract, including coverage.
 const coldMinute = await api.runMinuteSniff();
-assert.equal(Object.keys(coldMinute.sources).length, 28);
-assert.equal(coldMinute.summary.totalSources, 28);
+assert.equal(Object.keys(coldMinute.sources).length, 29);
+assert.equal(coldMinute.summary.totalSources, 29);
 assert.equal(coldMinute.sources["trix.boxes"].status, 404);
 assert.equal(coldMinute.sources["trix.preorder"].ok, true);
 assert.equal(coldMinute.sources["trix.preorder"].walletAnswerAvailable, false);
@@ -900,7 +902,7 @@ assert.equal(coldMinute.sources["pond0x.geoff"].paired, false);
 assert.equal(coldMinute.sources["pond0x.geoff"].chatEmbedded, true);
 assert.equal(coldMinute.sources["pond0x.geoff"].providerEmbedded, true);
 const full = service.preserveTrixHistory(null, await api.runSniff());
-assert.equal(Object.keys(full.sources).length, 55);
+assert.equal(Object.keys(full.sources).length, 56);
 assert.equal(full.sources["trix.preorder"].saleVerdict, "open to reserve");
 assert.equal(full.sources["trix.boxes"].status, 404);
 assert.equal(full.summary.trixBoxesOk, false);
