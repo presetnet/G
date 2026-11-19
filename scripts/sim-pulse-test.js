@@ -3,8 +3,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Interface, parseEther } from "ethers";
 import { SIM_ABI, SIM_CONTRACT, createCollapseReader } from "../server/sim-collapse.js";
-import { SEAPORT, WETH, SUPPLY_TARGET, SEAPORT_ABI, buildSupplyPulse, supplyWindow, decodeSeaportSales, saleStats, readSalesPulse, burnTypeName, summarizeVoidMix, readVoidMix } from "../server/sim-pulse.js";
-import { supplyCard, marketCard, voidCard, nonPrimitiveTypes, leftText } from "../public/sim-collapse.js";
+import { SEAPORT, WETH, SUPPLY_TARGET, SEAPORT_ABI, buildSupplyPulse, supplyWindow, decodeSeaportSales, saleStats, readSalesPulse, burnTypeName, summarizeVoidMix, readVoidMix, readVoidOutputs } from "../server/sim-pulse.js";
+import { supplyCard, marketCard, voidCard, voidOutputCard, nonPrimitiveTypes, leftText } from "../public/sim-collapse.js";
 import handler from "../api/sim-collapse.js";
 
 const RENDERER = "0x2222222222222222222222222222222222222222";
@@ -69,6 +69,20 @@ const feed = [
 function fixture() {
   const calls = [];
   const fetchImpl = async (url, init) => {
+    if (url.startsWith("https://sim.tech/api/mainnet/social")) {
+      calls.push({ social: url });
+      return { ok: true, json: async () => ({ activity: [
+        { kind: "collapse", token: "5001", timestamp: 1795068239000 },
+        { kind: "collapse", token: "5002", timestamp: 1795068240000 },
+        { kind: "collapse", token: "5003", timestamp: 1795068241000 },
+      ] }) };
+    }
+    if (url.startsWith("https://sim.tech/api/mainnet/gallery")) {
+      calls.push({ gallery: url });
+      return { ok: true, json: async () => ({ items: [
+        { id: "5001", name: "STATIC" }, { id: "5002", name: "MATRIX" }, { id: "5003", name: "UNREAL" },
+      ], next: null }) };
+    }
     if (url.includes("blockscout")) {
       calls.push({ explorer: url });
       return { ok: true, json: async () => ({ items: feed, next_page_params: null }) };
@@ -233,6 +247,50 @@ test("the void card states its source and sample limits, and an outage is never 
   assert.match(unavailable, /Non-primitive TYPEs \(6\)/);
   assert.doesNotMatch(unavailable, /burn receipts/);
 });
+test("collapse output breakdown follows SIM activity names and stays a recent sample", async () => {
+  const urls = [];
+  const s = { json: async (url) => {
+    urls.push(url);
+    if (url.includes("/social")) return { activity: [
+      { kind: "collapse", token: "1", timestamp: 1795068239000 },
+      { kind: "collapse", token: "2", timestamp: 1795068240000 },
+      { kind: "collapse", token: "1", timestamp: 1795068241000 },
+      { kind: "sale", token: "3" },
+    ] };
+    if (url.includes("/gallery")) return url.includes("cursor=2")
+      ? { items: [{ id: "2", name: "matrix" }], next: null }
+      : { items: [{ id: "1", name: "STATIC" }], next: "2" };
+    throw new Error("unexpected URL");
+  } };
+  const o = await readVoidOutputs(s, { maxPages: 3 });
+  assert.equal(o.counted, 3, "non-collapse activity is ignored");
+  assert.equal(o.matched, 3);
+  assert.equal(o.unread, 0);
+  assert.equal(o.pages, 2);
+  assert.deepEqual(o.counts, [{ name: "STATIC", count: 2 }, { name: "MATRIX", count: 1 }]);
+  assert.match(urls[2], /cursor=2/);
+  assert.match(o.note, /outputs created by collapses, not items burned/);
+  const partial = await readVoidOutputs({ json: async (url) => url.includes("/social")
+    ? { activity: [{ kind: "collapse", token: "9" }] } : { items: [], next: null } }, { maxPages: 1 });
+  assert.equal(partial.unread, 1, "unnamed outputs are reported, not guessed");
+  assert.equal(partial.capped, true);
+  await assert.rejects(readVoidOutputs({ json: async () => ({ activity: null }) }), /activity feed unavailable/);
+});
+test("the collapse-output card shows STATIC/MATRIX counts and never calls them burns", () => {
+  const html = voidOutputCard({ ok: true, counted: 200, matched: 200, unread: 0, pages: 9, capped: true,
+    counts: [{ name: "MATRIX", count: 79 }, { name: "STATIC", count: 7 }], newestAt: "2026-11-19T06:03:59.000Z",
+    source: "https://sim.tech/api/mainnet/social", note: "Outputs created by collapses, not items burned; recent sample." });
+  assert.match(html, /Created by collapse/);
+  assert.match(html, /<b>200<\/b> collapse rows/);
+  assert.match(html, /capped sample/);
+  assert.match(html, /MATRIX/);
+  assert.match(html, /<strong>79<\/strong>/);
+  assert.match(html, /STATIC/);
+  assert.match(html, /<strong>7<\/strong>/);
+  assert.match(html, /not items burned/);
+  assert.match(html, /activity feed/);
+  assert.match(voidOutputCard({ ok: false, error: "SIM offline" }), /Collapse-output sample unavailable: SIM offline/);
+});
 test("pulse view reads supply, verified sales, and recipe changes, and caches a success", async () => {
   const { reader, calls } = fixture();
   const p = await reader.pulse();
@@ -258,6 +316,11 @@ test("pulse view reads supply, verified sales, and recipe changes, and caches a 
   assert.equal(p.market.inspectedTransactions, 5, "mints and other collections are filtered before receipt reads");
   assert.equal(p.voids.ok, true);
   assert.equal(p.voids.counted, 0, "the fixture has no zero-address burn transfers");
+  assert.equal(p.voidOutputs.ok, true);
+  assert.equal(p.voidOutputs.counted, 3);
+  assert.deepEqual(p.voidOutputs.counts, [{ name: "MATRIX", count: 1 }, { name: "STATIC", count: 1 }, { name: "UNREAL", count: 1 }]);
+  assert.equal(calls.some((c) => c.social), true);
+  assert.equal(calls.some((c) => c.gallery), true);
   assert.equal(p.market.recentStats.count, 2);
   assert.equal(p.market.latestSaleAt, new Date(8800 * 12 * 1000).toISOString());
   assert.equal(p.market.observedAt, new Date(NOW * 12 * 1000).toISOString());

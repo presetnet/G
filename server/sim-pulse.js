@@ -17,8 +17,10 @@ const integer = (n) => {
 const stamp = (seconds) => new Date(seconds * 1000).toISOString();
 const settled = async (fn) => { try { return { ok: true, ...await fn() }; } catch (e) { return { ok: false, error: e.message }; } };
 const EXPLORER = "https://eth.blockscout.com/api/v2";
+const SIM_SITE = "https://sim.tech";
 const VOID_PAGES = 8;
 const VOID_BURNS = 400;
+const SOCIAL_PAGES = 12;
 const TRANSFER = new Interface(["event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)"]);
 export const SEAPORT_ABI = new Interface([
   "event OrderFulfilled(bytes32 orderHash,address indexed offerer,address indexed zone,address recipient,tuple(uint8 itemType,address token,uint256 identifier,uint256 amount)[] offer,tuple(uint8 itemType,address token,uint256 identifier,uint256 amount,address recipient)[] consideration)",
@@ -240,6 +242,49 @@ export async function readVoidMix(s, { contract, maxPages = VOID_PAGES, maxBurns
   }
   const note = "Newest burn transfers to the zero address in a bounded explorer sample. TYPE comes from each burned token's own metadata; this is not a lifetime burn count or proof of permanent loss.";
   return summarizeVoidMix([...burns.values()], { pages, capped: burns.size >= maxBurns || more, source, note });
+}
+
+export async function readVoidOutputs(s, { maxPages = SOCIAL_PAGES } = {}) {
+  const source = `${SIM_SITE}/api/mainnet/social`;
+  const social = await s.json(source);
+  ensure(Array.isArray(social.activity), "SIM activity feed unavailable");
+  const events = social.activity.filter((a) => a?.kind === "collapse" && /^\d+$/.test(String(a.token)));
+  const ids = [...new Set(events.map((a) => String(a.token)))];
+  const names = new Map();
+  let cursor = "", pages = 0, more = false;
+  while (pages < maxPages && ids.some((id) => !names.has(id))) {
+    const gallery = `${SIM_SITE}/api/mainnet/gallery${cursor ? `?${new URLSearchParams({ cursor })}` : ""}`;
+    const j = await s.json(gallery);
+    ensure(Array.isArray(j.items), "SIM gallery feed unavailable");
+    pages++;
+    for (const item of j.items) {
+      if (/^\d+$/.test(String(item?.id)) && typeof item?.name === "string" && item.name.trim()) names.set(String(item.id), item.name.trim().toUpperCase());
+    }
+    more = j.next != null && j.next !== "";
+    cursor = more ? String(j.next) : "";
+    if (!more) break;
+  }
+  const counts = new Map();
+  let unread = 0;
+  for (const event of events) {
+    const name = names.get(String(event.token));
+    if (!name) { unread++; continue; }
+    counts.set(name, (counts.get(name) || 0) + 1);
+  }
+  const times = events.map((e) => Number.isFinite(Number(e.timestamp)) ? new Date(Number(e.timestamp)).toISOString() : null).filter(Boolean).sort();
+  return {
+    ok: true,
+    counted: events.length,
+    matched: events.length - unread,
+    unread,
+    pages,
+    capped: events.length >= 200 || more || ids.some((id) => !names.has(id)),
+    counts: [...counts].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+    newestAt: times.at(-1) || null,
+    oldestAt: times[0] || null,
+    source,
+    note: "Newest collapse rows in SIM's public activity feed, matched to TYPE names in SIM's public gallery. These are outputs created by collapses, not items burned; this is a recent sample, not a lifetime total.",
+  };
 }
 
 export async function readRuleChanges(s, { block, oldBlock }) {

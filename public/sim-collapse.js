@@ -1,7 +1,7 @@
 // This panel stores no wallet, token ID, or transaction history. Only the
 // public recipe table loads automatically; receipts require an explicit lookup.
 const esc = (v) => String(v ?? "—").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const link = (url, label) => /^https:\/\/(?:etherscan\.io|opensea\.io)\//.test(url || "")
+const link = (url, label) => /^https:\/\/(?:etherscan\.io|opensea\.io|eth\.blockscout\.com|sim\.tech)\//.test(url || "")
   ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>` : esc(label);
 const stamp = (value) => Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : "unknown time";
 let root;
@@ -187,15 +187,34 @@ export function voidCard(v, types = {}, typeSource = "") {
     <p class="sc-note">${esc(v.note || "Recent burn transfers from the SIM collection.")} Source: ${source}.</p>
   </article>`;
 }
+export function voidOutputCard(v) {
+  if (!v?.ok) return `<article class="sc-card sc-void-card"><h5>Created by collapse</h5><p class="sc-note">Collapse-output sample unavailable: ${esc(v?.error || "no data")}.</p></article>`;
+  const counts = Array.isArray(v.counts) ? v.counts : [];
+  const shown = counts.slice(0, 8);
+  const max = shown.reduce((m, r) => Math.max(m, Number(r.count) || 0), 0) || 1;
+  const rows = shown.map((r) => {
+    const count = Math.max(0, Number(r.count) || 0);
+    return `<div class="sc-void-row"><span title="${esc(r.name)}">${esc(r.name)}</span><i aria-hidden="true"><b style="width:${(count / max * 100).toFixed(1)}%"></b></i><strong>${num(count)}</strong></div>`;
+  }).join("");
+  const rest = counts.length > shown.length
+    ? `<details class="sc-void-more"><summary>All observed outputs (${counts.length})</summary><p>${counts.map((r) => `${esc(r.name)} ${esc(r.count)}`).join(" · ")}</p></details>` : "";
+  return `<article class="sc-card sc-void-card">
+    <h5>Created by collapse</h5>
+    <p class="sc-note"><b>${num(v.counted)}</b> collapse row${v.counted === 1 ? "" : "s"}${v.unread ? ` · ${num(v.unread)} unnamed token${v.unread === 1 ? "" : "s"}` : ""} in SIM's newest activity sample${v.capped ? " · capped sample" : ""}${v.newestAt ? ` · latest ${when(v.newestAt)}` : ""}.</p>
+    ${rows ? `<div class="sc-void-list">${rows}</div>` : '<p class="sc-note">No collapse outputs in this sample.</p>'}
+    ${rest}
+    <p class="sc-note">${esc(v.note || "Recent collapse outputs from SIM's activity feed.")} Source: ${link(v.source, "activity feed")}.</p>
+  </article>`;
+}
 
 function renderPulse(error = null) {
   const target = root.querySelector("#scPulse");
   if (!pulseData) {
-    target.innerHTML = `<p class="sc-note${error ? " sc-error" : ""}">${esc(error || "Reading live supply, paid prices, voided TYPE mix, and recipe changes from Ethereum…")}</p>`;
+    target.innerHTML = `<p class="sc-note${error ? " sc-error" : ""}">${esc(error || "Reading live supply, paid prices, void mix, collapse outputs, and recipe changes from Ethereum…")}</p>`;
     return;
   }
   const p = pulseData;
-  target.innerHTML = `${error ? `<p class="sc-error">Refresh failed: ${esc(error)}. The figures below are the previous snapshot.</p>` : ""}<div class="sc-cards">${supplyCard(p.supply)}${marketCard(p.market)}${voidCard(p.voids, recipeData?.types, recipeData?.source)}${changesCard(p.changes)}</div><p class="sc-note">Last completed read ${esc(stamp(p.checkedAt))} · block ${num(p.block)} · ${p.cached ? "cached response ≤ 60s" : "fresh RPC read"} · automatic refresh attempted every minute · ${link(p.source, "read the contract")}</p>`;
+  target.innerHTML = `${error ? `<p class="sc-error">Refresh failed: ${esc(error)}. The figures below are the previous snapshot.</p>` : ""}<div class="sc-cards">${supplyCard(p.supply)}${marketCard(p.market)}${voidCard(p.voids, recipeData?.types, recipeData?.source)}${voidOutputCard(p.voidOutputs)}${changesCard(p.changes)}</div><p class="sc-note">Last completed read ${esc(stamp(p.checkedAt))} · block ${num(p.block)} · ${p.cached ? "cached response ≤ 60s" : "fresh RPC read"} · automatic refresh attempted every minute · ${link(p.source, "read the contract")}</p>`;
   tickClocks();
 }
 async function refreshPulse() {
@@ -294,11 +313,11 @@ export function initSimCollapse() {
   fold.open = true;
   fold.innerHTML = `<summary>SIM burn → upgrade · recipes & collapse decoder</summary><section id="simCollapse" class="sim-collapse" aria-labelledby="scTitle">
     <div class="desk-toolbar"><h3 id="scTitle">Burn → upgrade</h3><p>Live recipes and exact burn batches. Read-only; no wallet connection, saved addresses, or saved lookup history.</p></div>
-    <div class="sc-subhead sc-pulse-head"><h4>Supply, paid prices, voided TYPEs, and rule changes</h4><button type="button" id="scPulseRefresh">Refresh now</button></div>
-    <div id="scPulse" aria-live="polite"><p class="sc-note">Reading live supply, paid prices, voided TYPE mix, and recipe changes from Ethereum…</p></div>
+    <div class="sc-subhead sc-pulse-head"><h4>Supply, paid prices, voids, collapse outputs, and rule changes</h4><button type="button" id="scPulseRefresh">Refresh now</button></div>
+    <div id="scPulse" aria-live="polite"><p class="sc-note">Reading live supply, paid prices, void mix, collapse outputs, and recipe changes from Ethereum…</p></div>
     <div class="sc-layout"><section><div class="sc-subhead"><h4>Current recipes</h4><button type="button" id="scRefresh">Reload recipes</button></div><div id="scRecipes" aria-live="polite"><p class="sc-note">Reading recipes…</p></div></section>
     <section><h4>What went into a collapse?</h4><form id="scForm" class="sc-form"><label for="scInput">Transaction hashes or output token IDs · up to four</label><textarea id="scInput" rows="2" autocomplete="off" spellcheck="false" placeholder="Paste 0x… transaction hashes or output token IDs"></textarea><div><button id="scDecode" type="submit">Decode batches</button><button id="scClear" type="button">Clear lookups</button></div></form><div id="scResults" aria-live="polite"><p class="sc-note">Each result lists the burned names and IDs together under the output they created.</p></div></section></div>
-    <details class="sc-mechanics"><summary>What determines the upgrade and its traits?</summary><p>The chosen formula defines the output TYPE pool. Your input token IDs, rarity and other traits do not enter the output seed; they only have to meet the recipe.</p><p>Seed = keccak256(abi.encode(chain ID, collection, mint recipient, new token ID)). Secondary traits are deterministic. Another mint or collapse can advance the shared token counter before your transaction lands. Direct minting is owner-only.</p><p>Existing TYPE names are intentional, including UNDEFINED. New recipes and fee changes can be introduced by the owner. The void-mix card reads the newest burn transfers from the collection's public explorer feed and groups them by each burned token's own TYPE metadata; it is a bounded recent sample, not a lifetime burn ledger. The non-primitive list below it is the live TYPE registry outside the original eight, with no counts implied. This panel reads the current state rather than assuming yesterday’s rules.</p></details>
+    <details class="sc-mechanics"><summary>What determines the upgrade and its traits?</summary><p>The chosen formula defines the output TYPE pool. Your input token IDs, rarity and other traits do not enter the output seed; they only have to meet the recipe.</p><p>Seed = keccak256(abi.encode(chain ID, collection, mint recipient, new token ID)). Secondary traits are deterministic. Another mint or collapse can advance the shared token counter before your transaction lands. Direct minting is owner-only.</p><p>Existing TYPE names are intentional, including UNDEFINED. New recipes and fee changes can be introduced by the owner. The void-mix card reads the newest burn transfers from the collection's public explorer feed and groups them by each burned token's own TYPE metadata; it is a bounded recent sample, not a lifetime burn ledger. The non-primitive list below it is the live TYPE registry outside the original eight, with no counts implied. The created-by-collapse card counts output TYPEs from SIM's newest activity rows; those are items produced, not items burned. Current recipes accept only the original eight TYPEs as inputs, so a burn breakdown and a collapse-output breakdown answer different questions. This panel reads the current state rather than assuming yesterday’s rules.</p></details>
   </section>`;
   const anchor = document.getElementById("assetViewer")?.closest("details") || document.getElementById("simDesk")?.closest("details");
   if (anchor) anchor.before(fold);
