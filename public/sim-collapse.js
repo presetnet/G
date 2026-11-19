@@ -187,7 +187,7 @@ export function voidCard(v, types = {}, typeSource = "") {
     <p class="sc-note">${esc(v.note || "Recent burn transfers from the SIM collection.")} Source: ${source}.</p>
   </article>`;
 }
-export function voidOutputCard(v, vaults, types = {}) {
+export function voidOutputCard(v, vaults, types = {}, census = null) {
   if (!v?.ok) return `<article class="sc-card sc-void-card"><h5>Created by collapse → in the void</h5><p class="sc-note">Collapse-output sample unavailable: ${esc(v?.error || "no data")}.</p></article>`;
   const made = Array.isArray(v?.counts) ? v.counts : [];
   const vaultOk = !!vaults?.ok;
@@ -198,6 +198,12 @@ export function voidOutputCard(v, vaults, types = {}) {
   for (const token of matched) voided.set(token.name, (voided.get(token.name) || 0) + 1);
   const madeTotal = Math.max(0, Number(v?.counted) || 0);
   const vaultTotal = vaultOk ? Math.max(0, Number(vaults.counted) || 0) : 0;
+  const vaultCounts = new Map();
+  for (const token of vaultTokens) {
+    const name = String(token.name || "TYPE UNREAD").toUpperCase();
+    vaultCounts.set(name, (vaultCounts.get(name) || 0) + 1);
+  }
+  const useCensus = !!census?.ok && Array.isArray(census.counts) && census.counts.length > 0;
   const primitiveNames = new Set(Object.entries(types).filter(([id]) => /^[1-8]$/.test(String(id)))
     .map(([, name]) => String(name).toUpperCase()));
   const nonPrimitiveNames = new Set(nonPrimitiveTypes(types).map((t) => t.name.toUpperCase()));
@@ -216,15 +222,23 @@ export function voidOutputCard(v, vaults, types = {}) {
     ? `<div class="sc-void-inventory"><h6>Non-primitive inventory in both vaults · ${num(inventory.size)} TYPEs</h6><div class="sc-void-inventory-grid">${inventoryRows}</div><p class="sc-note"><b>${num(nonPrimitiveTotal)}</b> non-primitive tokens · <b>${num(primitiveTotal)}</b> original primitive tokens${unclassifiedTotal ? ` · <b>${num(unclassifiedTotal)}</b> unclassified` : ""}. This is the full vault history, so it includes TYPEs absent from the newest made sample. All incoming SIM transfers to both vaults, deduped by token ID; no outgoing SIM transfers appeared in either feed.</p></div>`
     : "";
   const pctLabel = (pct) => pct > 0 && pct < 0.1 ? "<0.1%" : `${pct.toFixed(1)}%`;
-  const ranked = made.map((r, index) => {
-    const count = Math.max(0, Number(r.count) || 0);
-    const gone = Math.min(count, Math.max(0, voided.get(r.name) || 0));
-    return { name: r.name, count, gone, pct: count ? gone / count * 100 : 0, index };
-  }).sort((a, b) => b.pct - a.pct || b.gone - a.gone || b.count - a.count || a.name.localeCompare(b.name) || a.index - b.index);
-  const shown = ranked.slice(0, 9);
+  const ranked = useCensus
+    ? census.counts.map((r, index) => {
+      const name = String(r.name || `TYPE ${r.id}`).toUpperCase();
+      const count = Math.max(0, Number(r.count) || 0);
+      const gone = Math.min(count, Math.max(0, vaultCounts.get(name) || 0));
+      return { name, count, gone, pct: count ? gone / count * 100 : 0, index };
+    }).filter((r) => r.count > 0)
+    : made.map((r, index) => {
+      const count = Math.max(0, Number(r.count) || 0);
+      const gone = Math.min(count, Math.max(0, voided.get(r.name) || 0));
+      return { name: r.name, count, gone, pct: count ? gone / count * 100 : 0, index };
+    });
+  ranked.sort((a, b) => b.pct - a.pct || b.gone - a.gone || b.count - a.count || a.name.localeCompare(b.name) || a.index - b.index);
+  const shown = ranked.slice(0, useCensus ? 13 : 9);
   const rows = shown.map((r, i) => `<div class="sc-void-row"><span title="${esc(r.name)}"><em>${i + 1}</em>${esc(r.name)}</span><i aria-hidden="true"><b style="width:${Math.min(100, r.pct).toFixed(1)}%"></b></i><strong>${pctLabel(r.pct)}<small>${num(r.gone)} / ${num(r.count)} in void</small></strong></div>`).join("");
   const rest = ranked.length > shown.length
-    ? `<details class="sc-void-more"><summary>All observed outputs (${ranked.length})</summary><p>${ranked.map((r) => `${esc(r.name)} ${r.count} · ${pctLabel(r.pct)} void`).join(" · ")}</p></details>` : "";
+    ? `<details class="sc-void-more"><summary>All ${useCensus ? "live TYPEs" : "observed outputs"} (${ranked.length})</summary><p>${ranked.map((r) => `${esc(r.name)} ${r.count} · ${pctLabel(r.pct)} void`).join(" · ")}</p></details>` : "";
   const displayed = [...matched].sort((a, b) => {
     const av = a.vault === "poolvoid.eth" ? 0 : 1, bv = b.vault === "poolvoid.eth" ? 0 : 1;
     return av - bv || (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0) || String(a.tokenId).localeCompare(String(b.tokenId));
@@ -244,27 +258,31 @@ export function voidOutputCard(v, vaults, types = {}) {
   const sourceLinks = vaultOk && Array.isArray(vaults.sources) && vaults.sources.length
     ? vaults.sources.map((s) => link(s.url, s.label)).join(" · ")
     : (vaultOk && vaults.source ? link(vaults.source, "void feeds") : "void feeds unavailable");
+  const censusPct = useCensus && census.counted ? Math.min(100, vaultTotal / census.counted * 100) : 0;
   return `<article class="sc-card sc-void-card">
-    <h5>Created by collapse → in the void</h5>
-    <p class="sc-note"><b>${num(madeTotal)}</b> newest collapse outputs sampled across <b>${num(made.length)}</b> TYPEs · <b>${num(matched.length)}</b> of those exact tokens now in void vaults · <b>${num(vaultTotal)}</b> void tokens in both vault feeds${vaultOk && vaults.capped ? " · capped sample" : ""}${vaultOk && vaults.newestAt ? ` · latest void ${when(vaults.newestAt)}` : ""}${vaultOk ? "" : ` · ${esc(vaults?.error || "void feed unavailable")}`}${v?.unread ? ` · ${num(v.unread)} unnamed output${v.unread === 1 ? "" : "s"}` : ""}${v?.capped ? " · capped made sample" : ""}.</p>
-    <p class="sc-note sc-void-subset">The <b>${num(matched.length)}</b> voided tokens are a subset of the <b>${num(madeTotal)}</b> sampled outputs, not extra supply. These are sample counts, not current TYPE supply.</p>
+    <h5>${useCensus ? "Live TYPE supply → void vaults" : "Created by collapse → in the void"}</h5>
+    ${useCensus
+      ? `<p class="sc-note"><b>${num(census.counted)}</b> live SIM tokens · <b>${num(vaultTotal)}</b> held in void vaults · <b>${pctLabel(censusPct)}</b> of live supply${vaultOk && vaults.newestAt ? ` · latest void ${when(vaults.newestAt)}` : ""}.</p>
+    <p class="sc-note sc-void-subset">${esc(census.note || "")} Vault holdings come from every indexed transfer into void.eth and poolvoid.eth. “In void” is each TYPE's share of live supply held by those two vaults.</p>`
+      : `<p class="sc-note"><b>${num(madeTotal)}</b> newest collapse outputs sampled across <b>${num(made.length)}</b> TYPEs · <b>${num(matched.length)}</b> of those exact tokens now in void vaults · <b>${num(vaultTotal)}</b> void tokens in both vault feeds${vaultOk && vaults.capped ? " · capped sample" : ""}${vaultOk && vaults.newestAt ? ` · latest void ${when(vaults.newestAt)}` : ""}${vaultOk ? "" : ` · ${esc(vaults?.error || "void feed unavailable")}`}${v?.unread ? ` · ${num(v.unread)} unnamed output${v.unread === 1 ? "" : "s"}` : ""}${v?.capped ? " · capped made sample" : ""}.</p>
+    <p class="sc-note sc-void-subset">The <b>${num(matched.length)}</b> voided tokens are a subset of the <b>${num(madeTotal)}</b> sampled outputs, not extra supply. These are sample counts, not current TYPE supply.</p>`}
     ${split}
-    ${inventoryBlock}
-    ${made.length ? `<div class="sc-void-legend"><span>rank / TYPE</span><span>void share of made</span><span>% · void / made</span></div><div class="sc-void-list">${rows}</div>` : '<p class="sc-note">No collapse outputs in this sample.</p>'}
+    ${useCensus ? "" : inventoryBlock}
+    ${(useCensus ? ranked.length : made.length) ? `<div class="sc-void-legend"><span>rank / TYPE</span><span>${useCensus ? "share of live supply in void" : "void share of made"}</span><span>% · void / ${useCensus ? "live" : "made"}</span></div><div class="sc-void-list">${rows}</div>` : '<p class="sc-note">No TYPE supply read.</p>'}
     ${rest}
     ${ledger}${allTokens}
-    <p class="sc-note">${esc(v?.note || "Recent collapse outputs from SIM's activity feed.")} ${vaultOk ? esc(vaults.note || "") : `Void vault read failed: ${esc(vaults?.error || "no data")}.`} “In void” matches token IDs shared by the made rows and transfers into void.eth or poolvoid.eth; other void tokens are excluded. Sources: ${link(v?.source, "activity feed")} · ${sourceLinks}.</p>
+    <p class="sc-note">${esc(v?.note || "Recent collapse outputs from SIM's activity feed.")} ${vaultOk ? esc(vaults.note || "") : `Void vault read failed: ${esc(vaults?.error || "no data")}.`} ${useCensus ? "Vault counts are all indexed transfers into void.eth or poolvoid.eth." : "“In void” matches token IDs shared by the made rows and transfers into void.eth or poolvoid.eth; other void tokens are excluded."} Sources: ${link(v?.source, "activity feed")} · ${sourceLinks}${useCensus ? ` · ${link(census.source, "on-chain census")}` : ""}.</p>
   </article>`;
 }
 
 function renderPulse(error = null) {
   const target = root.querySelector("#scPulse");
   if (!pulseData) {
-    target.innerHTML = `<p class="sc-note${error ? " sc-error" : ""}">${esc(error || "Reading live supply, paid prices, zero-address burns, both void vaults, collapse outputs, and recipe changes from Ethereum…")}</p>`;
+    target.innerHTML = `<p class="sc-note${error ? " sc-error" : ""}">${esc(error || "Reading live supply, the full on-chain TYPE census, both void vaults, and recipe changes from Ethereum…")}</p>`;
     return;
   }
   const p = pulseData;
-  target.innerHTML = `${error ? `<p class="sc-error">Refresh failed: ${esc(error)}. The figures below are the previous snapshot.</p>` : ""}<div class="sc-cards">${supplyCard(p.supply)}${marketCard(p.market)}${voidCard(p.voids, recipeData?.types, recipeData?.source)}${voidOutputCard(p.voidOutputs, p.voidVaults, recipeData?.types)}${changesCard(p.changes)}</div><p class="sc-note">Last completed read ${esc(stamp(p.checkedAt))} · block ${num(p.block)} · ${p.cached ? "cached response ≤ 60s" : "fresh RPC read"} · automatic refresh attempted every minute · ${link(p.source, "read the contract")}</p>`;
+  target.innerHTML = `${error ? `<p class="sc-error">Refresh failed: ${esc(error)}. The figures below are the previous snapshot.</p>` : ""}<div class="sc-cards">${supplyCard(p.supply)}${marketCard(p.market)}${voidCard(p.voids, recipeData?.types, recipeData?.source)}${voidOutputCard(p.voidOutputs, p.voidVaults, recipeData?.types, p.typeCensus)}${changesCard(p.changes)}</div><p class="sc-note">Last completed read ${esc(stamp(p.checkedAt))} · block ${num(p.block)} · ${p.cached ? "cached response ≤ 60s" : "fresh RPC read"} · automatic refresh attempted every minute · ${link(p.source, "read the contract")}</p>`;
   tickClocks();
 }
 async function refreshPulse() {
@@ -364,10 +382,10 @@ export function initSimCollapse() {
   fold.innerHTML = `<summary>SIM burn → upgrade · recipes & collapse decoder</summary><section id="simCollapse" class="sim-collapse" aria-labelledby="scTitle">
     <div class="desk-toolbar"><h3 id="scTitle">Burn → upgrade</h3><p>Live recipes and exact burn batches. Read-only; no wallet connection, saved addresses, or saved lookup history.</p></div>
     <div class="sc-subhead sc-pulse-head"><h4>Supply, paid prices, zero-address burns, both void vaults, collapse outputs, and rule changes</h4><button type="button" id="scPulseRefresh">Refresh now</button></div>
-    <div id="scPulse" aria-live="polite"><p class="sc-note">Reading live supply, paid prices, zero-address burns, both void vaults, collapse outputs, and recipe changes from Ethereum…</p></div>
+    <div id="scPulse" aria-live="polite"><p class="sc-note">Reading live supply, the full on-chain TYPE census, both void vaults, and recipe changes from Ethereum…</p></div>
     <div class="sc-layout"><section><div class="sc-subhead"><h4>Current recipes</h4><button type="button" id="scRefresh">Reload recipes</button></div><div id="scRecipes" aria-live="polite"><p class="sc-note">Reading recipes…</p></div></section>
     <section><h4>What went into a collapse?</h4><form id="scForm" class="sc-form"><label for="scInput">Transaction hashes or output token IDs · up to four</label><textarea id="scInput" rows="2" autocomplete="off" spellcheck="false" placeholder="Paste 0x… transaction hashes or output token IDs"></textarea><div><button id="scDecode" type="submit">Decode batches</button><button id="scClear" type="button">Clear lookups</button></div></form><div id="scResults" aria-live="polite"><p class="sc-note">Each result lists the burned names and IDs together under the output they created.</p></div></section></div>
-    <details class="sc-mechanics"><summary>What determines the upgrade and its traits?</summary><p>The chosen formula defines the output TYPE pool. Your input token IDs, rarity and other traits do not enter the output seed; they only have to meet the recipe.</p><p>Seed = keccak256(abi.encode(chain ID, collection, mint recipient, new token ID)). Secondary traits are deterministic. Another mint or collapse can advance the shared token counter before your transaction lands. Direct minting is owner-only.</p><p>Existing TYPE names are intentional, including UNDEFINED. New recipes and fee changes can be introduced by the owner. The zero-address burn card reads the newest burn transfers from the collection's public explorer feed and groups them by each burned token's own TYPE metadata; it is a bounded recent sample, not a lifetime burn ledger. The non-primitive list below it is the live TYPE registry outside the original eight, with no counts implied. The created-by-collapse card also lists every non-primitive TYPE actually held in the two void vaults, separated from the original primitive tokens. It counts output TYPEs from SIM's newest activity rows; those are items produced, not items burned. Its “in void” column matches those exact output token IDs against separate feeds of SIM tokens transferred into void.eth and poolvoid.eth, then groups the matches by each token's own TYPE metadata. The matched tokens are a subset of the sampled outputs, not extra supply; the card's made counts are a recent sample, not current TYPE supply. Current recipes accept only the original eight TYPEs as inputs, so the burn mix, the void vaults, and the collapse-output mix answer different questions. This panel reads the current state rather than assuming yesterday’s rules.</p></details>
+    <details class="sc-mechanics"><summary>What determines the upgrade and its traits?</summary><p>The chosen formula defines the output TYPE pool. Your input token IDs, rarity and other traits do not enter the output seed; they only have to meet the recipe.</p><p>Seed = keccak256(abi.encode(chain ID, collection, mint recipient, new token ID)). Secondary traits are deterministic. Another mint or collapse can advance the shared token counter before your transaction lands. Direct minting is owner-only.</p><p>Existing TYPE names are intentional, including UNDEFINED. New recipes and fee changes can be introduced by the owner. The zero-address burn card reads the newest burn transfers from the collection's public explorer feed and groups them by each burned token's own TYPE metadata; it is a bounded recent sample, not a lifetime burn ledger. The non-primitive list below it is the live TYPE registry outside the original eight, with no counts implied. The void card reads every minted token ID on chain: ownerOf filters out burned IDs for live supply, and tokenCategory assigns the TYPE. It also reads every indexed transfer into void.eth and poolvoid.eth, so vault holdings are the full observed inventory, not a 200-row sample. Its “in void” column is the share of each TYPE's live supply held by those two vaults. Current recipes accept only the original eight TYPEs as inputs, so zero-address burns, vault holdings, and collapse outputs answer different questions. This panel reads the current state rather than assuming yesterday’s rules.</p></details>
   </section>`;
   const anchor = document.getElementById("assetViewer")?.closest("details") || document.getElementById("simDesk")?.closest("details");
   if (anchor) anchor.before(fold);

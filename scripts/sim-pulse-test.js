@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Interface, parseEther } from "ethers";
 import { SIM_ABI, SIM_CONTRACT, createCollapseReader } from "../server/sim-collapse.js";
-import { SEAPORT, WETH, SUPPLY_TARGET, SEAPORT_ABI, VOID_ETH, POOL_VOID, VOID_VAULTS, buildSupplyPulse, supplyWindow, decodeSeaportSales, saleStats, readSalesPulse, burnTypeName, summarizeVoidMix, readVoidMix, readVoidVaults, readVoidOutputs } from "../server/sim-pulse.js";
+import { SEAPORT, WETH, SUPPLY_TARGET, SEAPORT_ABI, VOID_ETH, POOL_VOID, VOID_VAULTS, buildSupplyPulse, supplyWindow, decodeSeaportSales, saleStats, readSalesPulse, burnTypeName, summarizeVoidMix, readVoidMix, readVoidVaults, readVoidOutputs, readTypeCensus } from "../server/sim-pulse.js";
 import { supplyCard, marketCard, voidCard, voidOutputCard, nonPrimitiveTypes, leftText } from "../public/sim-collapse.js";
 import handler from "../api/sim-collapse.js";
 
@@ -429,6 +429,71 @@ test("the collapse card ranks TYPEs by void percentage, with art thumbnails and 
   assert.match(html, /matches token IDs shared/);
   assert.match(voidOutputCard(made, { ok: false, error: "Explorer offline" }), /Void vault read failed: Explorer offline/);
   assert.match(voidOutputCard({ ok: false, error: "SIM offline" }), /Collapse-output sample unavailable: SIM offline/);
+});
+test("the type census counts only live token IDs by on-chain TYPE", async () => {
+  const MC = new Interface([
+    "function aggregate((address target,bytes callData)[] calls) view returns (uint256 blockNumber,bytes[] returnData)",
+    "function tryAggregate(bool requireSuccess,(address target,bytes callData)[] calls) view returns ((bool success,bytes returnData)[] returnData)",
+  ]);
+  const word = (n) => BigInt(n).toString(16).padStart(64, "0");
+  let categoryCalls = 0, ownerCalls = 0;
+  const s = { rpc: async (method, params) => {
+    assert.equal(method, "eth_call");
+    const data = params[0].data;
+    let aggregate;
+    try { aggregate = MC.decodeFunctionData("aggregate", data); } catch { /* tryAggregate below */ }
+    if (aggregate) {
+      categoryCalls++;
+      assert.deepEqual(aggregate[0].map((c) => c[1].slice(-64)), [word(1), word(2), word(3)]);
+      return MC.encodeFunctionResult("aggregate", [9000, ["0x" + word(1), "0x" + word(1), "0x" + word(2)]]);
+    }
+    const owners = MC.decodeFunctionData("tryAggregate", data);
+    ownerCalls++;
+    assert.equal(owners[0], false);
+    return MC.encodeFunctionResult("tryAggregate", [[
+      { success: true, returnData: "0x" },
+      { success: false, returnData: "0x" },
+      { success: true, returnData: "0x" },
+    ]]);
+  } };
+  const p = await readTypeCensus(s, { contract: SIM_CONTRACT, nextTokenId: 4, types: { 1: "UNREAL", 2: "UNSEEN" } });
+  assert.equal(categoryCalls, 1);
+  assert.equal(ownerCalls, 1);
+  assert.equal(p.minted, 3);
+  assert.equal(p.counted, 2, "burned token IDs are excluded from live supply");
+  assert.deepEqual(p.counts, [{ id: 1, name: "UNREAL", count: 1 }, { id: 2, name: "UNSEEN", count: 1 }]);
+  assert.match(p.note, /ownerOf/);
+  assert.match(p.note, /tokenCategory/);
+  assert.equal(p.capped, false);
+});
+test("the void card ranks every live TYPE by share held in vaults when a census is present", () => {
+  const census = { ok: true, counted: 100, minted: 300, capped: false,
+    counts: [{ id: 15, name: "FRACTURE", count: 20 }, { id: 9, name: "BURNED", count: 50 }, { id: 1, name: "UNREAL", count: 30 }],
+    note: "Full on-chain census of token IDs 1–300. Live supply excludes burned IDs.", source: "https://etherscan.io/address/x#readContract" };
+  const vaults = { ok: true, counted: 16, capped: false,
+    vaults: [{ label: "void.eth", counted: 12 }, { label: "poolvoid.eth", counted: 4 }],
+    tokens: [
+      { tokenId: "1", name: "FRACTURE", vault: "void.eth", image: "https://sim.tech/api/nft-thumbnail/1/x/1", tx: HASH_A },
+      { tokenId: "2", name: "FRACTURE", vault: "void.eth", image: "https://sim.tech/api/nft-thumbnail/1/x/2", tx: HASH_B },
+      { tokenId: "3", name: "BURNED", vault: "poolvoid.eth", image: "https://sim.tech/api/nft-thumbnail/1/x/3", tx: HASH_A },
+      { tokenId: "4", name: "UNREAL", vault: "poolvoid.eth", image: "https://sim.tech/api/nft-thumbnail/1/x/4", tx: HASH_B },
+    ],
+    sources: [{ label: "void.eth feed", url: "https://eth.blockscout.com/addresses/x/token-transfers" }], note: "All vault transfers." };
+  const made = { ok: true, counted: 200, counts: [{ name: "MATRIX", count: 79 }], tokenIds: ["1", "2", "3", "4"], source: "https://sim.tech/api/mainnet/social", note: "Sample." };
+  const types = { 1: "UNREAL", 9: "BURNED", 15: "FRACTURE" };
+  const html = voidOutputCard(made, vaults, types, census);
+  assert.match(html, /Live TYPE supply → void vaults/);
+  assert.match(html, /<b>100<\/b> live SIM tokens · <b>16<\/b> held in void vaults · <b>16\.0%<\/b> of live supply/);
+  assert.match(html, /share of live supply in void/);
+  assert.match(html, /<em>1<\/em>FRACTURE/);
+  assert.match(html, /10\.0%<small>2 \/ 20 in void<\/small>/);
+  assert.match(html, /3\.3%<small>1 \/ 30 in void<\/small>/);
+  assert.match(html, /2\.0%<small>1 \/ 50 in void<\/small>/);
+  assert.ok(html.indexOf("<em>2</em>UNREAL") < html.indexOf("<em>3</em>BURNED"), "rows are ordered by share of live supply");
+  assert.match(html, /Full on-chain census/);
+  assert.match(html, /on-chain census/);
+  assert.doesNotMatch(html, /Non-primitive inventory in both vaults/, "the 200-row sample view is replaced when a census is present");
+  assert.doesNotMatch(html, /sender/i);
 });
 test("pulse view reads supply, verified sales, and recipe changes, and caches a success", async () => {
   const { reader, calls } = fixture();

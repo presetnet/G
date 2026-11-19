@@ -1,7 +1,7 @@
 // Read-only collapse receipts and block-pinned recipe reads. No wallet discovery,
 // signatures, persistent personal history, or inference from marketplace prices.
 import { AbiCoder, Interface, formatEther, keccak256 } from "ethers";
-import { readSupplyPulse, readSalesPulse, readVoidMix, readVoidVaults, readVoidOutputs, readRuleChanges } from "./sim-pulse.js";
+import { readSupplyPulse, readSalesPulse, readVoidMix, readVoidVaults, readVoidOutputs, readRuleChanges, readTypeCensus } from "./sim-pulse.js";
 
 export const SIM_CONTRACT = "0xc3706195ff60658585b58716717ee7acc5ebca60";
 export const MAX_LOOKUPS = 4;
@@ -198,18 +198,21 @@ export function createCollapseReader({ fetchImpl = fetch, rpcUrls = RPCS, timeou
     const s = session();
     await s.checkChain();
     const block = await s.rpc("eth_blockNumber", []);
-    const [supplyRead, marketRead, voidRead, vaultRead, outputRead] = await Promise.allSettled([
+    const recipe = await recipes().catch(() => null);
+    const [supplyRead, marketRead, voidRead, vaultRead, outputRead, censusRead] = await Promise.allSettled([
       readSupplyPulse(s, block), readSalesPulse(s, { contract: SIM_CONTRACT, block }), readVoidMix(s, { contract: SIM_CONTRACT }), readVoidVaults(s, { contract: SIM_CONTRACT }), readVoidOutputs(s),
+      readTypeCensus(s, { contract: SIM_CONTRACT, types: recipe?.types || {} }),
     ]);
     const supply = supplyRead.status === "fulfilled" ? { ok: true, ...supplyRead.value } : { ok: false, error: supplyRead.reason.message };
     const market = marketRead.status === "fulfilled" ? { ok: true, ...marketRead.value } : { ok: false, error: marketRead.reason.message };
     const voids = voidRead.status === "fulfilled" ? { ok: true, ...voidRead.value } : { ok: false, error: voidRead.reason.message };
     const voidVaults = vaultRead.status === "fulfilled" ? { ok: true, ...vaultRead.value } : { ok: false, error: vaultRead.reason.message };
     const voidOutputs = outputRead.status === "fulfilled" ? { ok: true, ...outputRead.value } : { ok: false, error: outputRead.reason.message };
+    const typeCensus = censusRead.status === "fulfilled" ? { ok: true, ...censusRead.value } : { ok: false, error: censusRead.reason.message };
     const oldBlock = supply.history?.find((h) => h.label === "24h" && h.ok)?.sample.block;
     const changes = await readRuleChanges(s, { block, oldBlock });
     delete supply.history;
-    return { contract: SIM_CONTRACT, block: Number(BigInt(block)), checkedAt: new Date().toISOString(), supply, market, voids, voidVaults, voidOutputs, changes,
+    return { contract: SIM_CONTRACT, block: Number(BigInt(block)), checkedAt: new Date().toISOString(), supply, market, voids, voidVaults, voidOutputs, typeCensus, changes,
       source: `https://etherscan.io/address/${SIM_CONTRACT}#readContract` };
   }
 

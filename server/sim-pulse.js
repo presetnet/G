@@ -1,6 +1,6 @@
 // A supply milestone is not a scheduled contract event. Historical state reads
 // measure net contraction; Seaport receipts measure paid prices, not listings.
-import { Interface, formatEther } from "ethers";
+import { Interface, formatEther, id } from "ethers";
 
 export const SUPPLY_TARGET = 4500;
 export const SEAPORT = "0x0000000000000068f116a894984e2db1123eb395";
@@ -26,6 +26,15 @@ const VOID_BURNS = 400;
 const SOCIAL_PAGES = 12;
 const POOL_PAGES = 12;
 const POOL_MAX = 1000;
+const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11";
+const CENSUS_CHUNK = 2000;
+const MULTICALL_ABI = new Interface([
+  "function aggregate((address target,bytes callData)[] calls) view returns (uint256 blockNumber,bytes[] returnData)",
+  "function tryAggregate(bool requireSuccess,(address target,bytes callData)[] calls) view returns ((bool success,bytes returnData)[] returnData)",
+]);
+const CATEGORY_DATA = id("tokenCategory(uint256)").slice(0, 10);
+const OWNER_DATA = id("ownerOf(uint256)").slice(0, 10);
+const NEXT_ID_DATA = id("nextTokenId()").slice(0, 10);
 const TRANSFER = new Interface(["event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)"]);
 const COLLAPSE_LOG = new Interface(["event Collapsed(uint256 indexed formulaId,uint256 indexed output,uint256[] inputs)"]);
 export const SEAPORT_ABI = new Interface([
@@ -320,6 +329,47 @@ export async function readVoidVaults(s, { contract, vaults = VOID_VAULTS, maxPag
     sources,
     source: sources[0]?.url || "",
     note,
+  };
+}
+
+export async function readTypeCensus(s, { contract, nextTokenId, types = {} } = {}) {
+  const last = BigInt(nextTokenId != null ? nextTokenId : await s.rpc("eth_call", [{ to: contract, data: NEXT_ID_DATA }, "latest"])) - 1n;
+  ensure(last > 0n && last < 100000n, "Invalid on-chain token ID range");
+  const total = Number(last);
+  const callData = (selector, tokenId) => `${selector}${tokenId.toString(16).padStart(64, "0")}`;
+  const categories = [], live = [];
+  for (let from = 1; from <= total; from += CENSUS_CHUNK) {
+    const ids = Array.from({ length: Math.min(CENSUS_CHUNK, total - from + 1) }, (_, i) => from + i);
+    const calls = (selector) => ids.map((tokenId) => [contract, callData(selector, tokenId)]);
+    const [catHex, ownerHex] = await Promise.all([
+      s.rpc("eth_call", [{ to: MULTICALL3, data: MULTICALL_ABI.encodeFunctionData("aggregate", [calls(CATEGORY_DATA)]) }, "latest"]),
+      s.rpc("eth_call", [{ to: MULTICALL3, data: MULTICALL_ABI.encodeFunctionData("tryAggregate", [false, calls(OWNER_DATA)]) }, "latest"]),
+    ]);
+    const cats = MULTICALL_ABI.decodeFunctionResult("aggregate", catHex).returnData;
+    const owners = MULTICALL_ABI.decodeFunctionResult("tryAggregate", ownerHex).returnData;
+    ensure(cats.length === ids.length && owners.length === ids.length, "Incomplete on-chain type census");
+    for (let i = 0; i < ids.length; i++) {
+      categories.push(Number(BigInt(cats[i])));
+      live.push(!!owners[i]?.success);
+    }
+  }
+  const byType = new Map();
+  for (let i = 0; i < categories.length; i++) {
+    if (!live[i]) continue;
+    const id = categories[i];
+    const row = byType.get(id) || { id, name: String(types[id] || types[String(id)] || `TYPE ${id}`).toUpperCase(), count: 0 };
+    row.count++;
+    byType.set(id, row);
+  }
+  const counts = [...byType.values()].sort((a, b) => b.count - a.count || a.id - b.id);
+  return {
+    ok: true,
+    counted: counts.reduce((sum, row) => sum + row.count, 0),
+    minted: total,
+    counts,
+    capped: false,
+    note: `Full on-chain census of token IDs 1–${total.toLocaleString("en-US")}. Live supply counts only tokens whose ownerOf call succeeds; burned IDs are excluded. TYPE comes from tokenCategory on chain.`,
+    source: `https://etherscan.io/address/${contract}#readContract`,
   };
 }
 
