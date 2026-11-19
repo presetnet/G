@@ -3,8 +3,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Interface, parseEther } from "ethers";
 import { SIM_ABI, SIM_CONTRACT, createCollapseReader } from "../server/sim-collapse.js";
-import { SEAPORT, WETH, SUPPLY_TARGET, SEAPORT_ABI, buildSupplyPulse, supplyWindow, decodeSeaportSales, saleStats, readSalesPulse } from "../server/sim-pulse.js";
-import { supplyCard, marketCard, leftText } from "../public/sim-collapse.js";
+import { SEAPORT, WETH, SUPPLY_TARGET, SEAPORT_ABI, buildSupplyPulse, supplyWindow, decodeSeaportSales, saleStats, readSalesPulse, burnTypeName, summarizeVoidMix, readVoidMix } from "../server/sim-pulse.js";
+import { supplyCard, marketCard, voidCard, leftText } from "../public/sim-collapse.js";
 import handler from "../api/sim-collapse.js";
 
 const RENDERER = "0x2222222222222222222222222222222222222222";
@@ -185,6 +185,44 @@ test("paid-price stats use a real median and never invent a floor", () => {
   assert.equal(saleStats(three).count, 3);
   assert.equal(Object.keys(saleStats(three)).includes("floor"), false, "a paid sample is not a floor");
 });
+test("void mix reads TYPE from burned token metadata and keeps the sample bounded", async () => {
+  const burn = (id, name, at) => ({
+    block_number: "8800", timestamp: at, transaction_hash: `0xburn${id}`, log_index: 1,
+    from: { hash: SELLER }, to: { hash: ZERO }, token: { address_hash: SIM_CONTRACT },
+    total: { token_id: id, token_instance: { metadata: { name, attributes: [{ trait_type: "TYPE", value: name }] } } },
+  });
+  const rows = [burn("1", "STATIC", "2026-11-19T01:00:00Z"), burn("2", "MATRIX", "2026-11-19T02:00:00Z"), burn("3", "STATIC", "2026-11-19T03:00:00Z")];
+  const urls = [];
+  const first = { items: [rows[0], rows[1], { ...rows[0] }, { ...rows[0], from: { hash: ZERO }, to: { hash: SELLER } }, { ...rows[0], token: { address_hash: OTHER } }], next_page_params: { block_number: 8700, index: 1 } };
+  const mix = await readVoidMix({ json: async (url) => { urls.push(url); return urls.length === 1 ? first : { items: [rows[2]], next_page_params: null }; } },
+    { contract: SIM_CONTRACT, maxPages: 3, maxBurns: 10 });
+  assert.equal(mix.counted, 3, "mints, other collections, and duplicate receipts are excluded");
+  assert.deepEqual(mix.counts, [{ name: "STATIC", count: 2 }, { name: "MATRIX", count: 1 }]);
+  assert.equal(mix.pages, 2);
+  assert.equal(mix.capped, false);
+  assert.equal(mix.newestAt, "2026-11-19T03:00:00Z");
+  assert.match(urls[1], /block_number=8700/);
+  assert.match(mix.note, /not a lifetime burn count/);
+  assert.equal(burnTypeName({ total: { token_instance: { metadata: { attributes: [{ trait_type: "other", value: "x" }], name: "void" } } } }), "VOID");
+  assert.equal(burnTypeName({}), "TYPE UNREAD");
+  const capped = await readVoidMix({ json: async () => ({ items: [rows[0]], next_page_params: { more: 1 } }) }, { contract: SIM_CONTRACT, maxPages: 1, maxBurns: 1 });
+  assert.equal(capped.capped, true);
+  await assert.rejects(readVoidMix({ json: async () => ({ items: null }) }, { contract: SIM_CONTRACT }), /unavailable/);
+});
+test("the void card states its source and sample limits, and an outage is never zero burns", () => {
+  const mix = summarizeVoidMix([{ name: "STATIC", at: "2026-11-19T01:00:00Z" }, { name: "MATRIX", at: "2026-11-19T02:00:00Z" }, { name: "STATIC", at: "2026-11-19T03:00:00Z" }],
+    { pages: 1, source: "https://eth.blockscout.com/api/v2/tokens/x/transfers", note: "Recent sample, not a lifetime total or proof of permanent loss." });
+  const html = voidCard({ ok: true, ...mix });
+  assert.match(html, /Voided TYPE mix/);
+  assert.match(html, /<b>3<\/b> burn receipts/);
+  assert.match(html, /STATIC/);
+  assert.match(html, /MATRIX/);
+  assert.match(html, /not a lifetime total/);
+  assert.match(html, /burn feed/);
+  const unavailable = voidCard({ ok: false, error: "Explorer offline" });
+  assert.match(unavailable, /Void sample unavailable: Explorer offline/);
+  assert.doesNotMatch(unavailable, /burn receipts/);
+});
 test("pulse view reads supply, verified sales, and recipe changes, and caches a success", async () => {
   const { reader, calls } = fixture();
   const p = await reader.pulse();
@@ -208,6 +246,8 @@ test("pulse view reads supply, verified sales, and recipe changes, and caches a 
   assert.equal(p.market.failures.length, 0);
   assert.equal(p.market.capped, false);
   assert.equal(p.market.inspectedTransactions, 5, "mints and other collections are filtered before receipt reads");
+  assert.equal(p.voids.ok, true);
+  assert.equal(p.voids.counted, 0, "the fixture has no zero-address burn transfers");
   assert.equal(p.market.recentStats.count, 2);
   assert.equal(p.market.latestSaleAt, new Date(8800 * 12 * 1000).toISOString());
   assert.equal(p.market.observedAt, new Date(NOW * 12 * 1000).toISOString());

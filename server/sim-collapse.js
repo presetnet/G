@@ -1,7 +1,7 @@
 // Read-only collapse receipts and block-pinned recipe reads. No wallet discovery,
 // signatures, persistent personal history, or inference from marketplace prices.
 import { AbiCoder, Interface, formatEther, keccak256 } from "ethers";
-import { readSupplyPulse, readSalesPulse, readRuleChanges } from "./sim-pulse.js";
+import { readSupplyPulse, readSalesPulse, readVoidMix, readRuleChanges } from "./sim-pulse.js";
 
 export const SIM_CONTRACT = "0xc3706195ff60658585b58716717ee7acc5ebca60";
 export const MAX_LOOKUPS = 4;
@@ -198,15 +198,16 @@ export function createCollapseReader({ fetchImpl = fetch, rpcUrls = RPCS, timeou
     const s = session();
     await s.checkChain();
     const block = await s.rpc("eth_blockNumber", []);
-    const [supplyRead, marketRead] = await Promise.allSettled([
-      readSupplyPulse(s, block), readSalesPulse(s, { contract: SIM_CONTRACT, block }),
+    const [supplyRead, marketRead, voidRead] = await Promise.allSettled([
+      readSupplyPulse(s, block), readSalesPulse(s, { contract: SIM_CONTRACT, block }), readVoidMix(s, { contract: SIM_CONTRACT }),
     ]);
     const supply = supplyRead.status === "fulfilled" ? { ok: true, ...supplyRead.value } : { ok: false, error: supplyRead.reason.message };
     const market = marketRead.status === "fulfilled" ? { ok: true, ...marketRead.value } : { ok: false, error: marketRead.reason.message };
+    const voids = voidRead.status === "fulfilled" ? { ok: true, ...voidRead.value } : { ok: false, error: voidRead.reason.message };
     const oldBlock = supply.history?.find((h) => h.label === "24h" && h.ok)?.sample.block;
     const changes = await readRuleChanges(s, { block, oldBlock });
     delete supply.history;
-    return { contract: SIM_CONTRACT, block: Number(BigInt(block)), checkedAt: new Date().toISOString(), supply, market, changes,
+    return { contract: SIM_CONTRACT, block: Number(BigInt(block)), checkedAt: new Date().toISOString(), supply, market, voids, changes,
       source: `https://etherscan.io/address/${SIM_CONTRACT}#readContract` };
   }
 

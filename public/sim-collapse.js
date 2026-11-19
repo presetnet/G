@@ -145,14 +145,38 @@ function changesCard(c) {
     <p class="sc-note">Collapse fee ${c.feeChanged ? `<b>${esc(c.previousFeeEth)} → ${esc(c.feeEth)} ETH</b>` : `<b>${esc(c.feeEth)} ETH</b>, unchanged`} in that window · owner-settable.</p>
   </article>`;
 }
+export function voidCard(v) {
+  if (!v?.ok) return `<article class="sc-card sc-void-card"><h5>Voided TYPE mix</h5><p class="sc-note">Void sample unavailable: ${esc(v?.error || "no data")}.</p></article>`;
+  const counts = Array.isArray(v.counts) ? v.counts : [];
+  const shown = counts.slice(0, 6);
+  const max = shown.reduce((m, r) => Math.max(m, Number(r.count) || 0), 0) || 1;
+  const rows = shown.map((r) => {
+    const count = Math.max(0, Number(r.count) || 0);
+    const width = Math.max(3, count / max * 100);
+    return `<div class="sc-void-row"><span title="${esc(r.name)}">${esc(r.name)}</span><i aria-hidden="true"><b style="width:${width.toFixed(1)}%"></b></i><strong>${num(count)}</strong></div>`;
+  }).join("");
+  const rest = counts.length > shown.length
+    ? `<details class="sc-void-more"><summary>All observed TYPEs (${counts.length})</summary><p>${counts.map((r) => `${esc(r.name)} ${esc(r.count)}`).join(" · ")}</p></details>`
+    : "";
+  const source = /^https:\/\//.test(v.source || "")
+    ? `<a href="${esc(v.source)}" target="_blank" rel="noopener noreferrer">burn feed ↗</a>` : "public explorer feed";
+  return `<article class="sc-card sc-void-card">
+    <h5>Voided TYPE mix</h5>
+    <p class="sc-note"><b>${num(v.counted)}</b> burn receipt${v.counted === 1 ? "" : "s"} in the newest ${num(v.pages)} explorer page${v.pages === 1 ? "" : "s"}${v.capped ? " · capped sample" : ""}${v.newestAt ? ` · latest ${when(v.newestAt)}` : ""}.</p>
+    ${rows ? `<div class="sc-void-list">${rows}</div>` : '<p class="sc-note">No burn receipts in this bounded sample.</p>'}
+    ${rest}
+    <p class="sc-note">${esc(v.note || "Recent burn transfers from the SIM collection.")} Source: ${source}.</p>
+  </article>`;
+}
+
 function renderPulse(error = null) {
   const target = root.querySelector("#scPulse");
   if (!pulseData) {
-    target.innerHTML = `<p class="sc-note${error ? " sc-error" : ""}">${esc(error || "Reading live supply, recent paid prices, and recipe changes from Ethereum…")}</p>`;
+    target.innerHTML = `<p class="sc-note${error ? " sc-error" : ""}">${esc(error || "Reading live supply, paid prices, voided TYPE mix, and recipe changes from Ethereum…")}</p>`;
     return;
   }
   const p = pulseData;
-  target.innerHTML = `${error ? `<p class="sc-error">Refresh failed: ${esc(error)}. The figures below are the previous snapshot.</p>` : ""}<div class="sc-cards">${supplyCard(p.supply)}${marketCard(p.market)}${changesCard(p.changes)}</div><p class="sc-note">Last completed read ${esc(stamp(p.checkedAt))} · block ${num(p.block)} · ${p.cached ? "cached response ≤ 60s" : "fresh RPC read"} · automatic refresh attempted every minute · ${link(p.source, "read the contract")}</p>`;
+  target.innerHTML = `${error ? `<p class="sc-error">Refresh failed: ${esc(error)}. The figures below are the previous snapshot.</p>` : ""}<div class="sc-cards">${supplyCard(p.supply)}${marketCard(p.market)}${voidCard(p.voids)}${changesCard(p.changes)}</div><p class="sc-note">Last completed read ${esc(stamp(p.checkedAt))} · block ${num(p.block)} · ${p.cached ? "cached response ≤ 60s" : "fresh RPC read"} · automatic refresh attempted every minute · ${link(p.source, "read the contract")}</p>`;
   tickClocks();
 }
 async function refreshPulse() {
@@ -251,11 +275,11 @@ export function initSimCollapse() {
   fold.open = true;
   fold.innerHTML = `<summary>SIM burn → upgrade · recipes & collapse decoder</summary><section id="simCollapse" class="sim-collapse" aria-labelledby="scTitle">
     <div class="desk-toolbar"><h3 id="scTitle">Burn → upgrade</h3><p>Live recipes and exact burn batches. Read-only; no wallet connection, saved addresses, or saved lookup history.</p></div>
-    <div class="sc-subhead sc-pulse-head"><h4>Supply, paid prices, and rule changes</h4><button type="button" id="scPulseRefresh">Refresh now</button></div>
-    <div id="scPulse" aria-live="polite"><p class="sc-note">Reading live supply, recent paid prices, and recipe changes from Ethereum…</p></div>
+    <div class="sc-subhead sc-pulse-head"><h4>Supply, paid prices, voided TYPEs, and rule changes</h4><button type="button" id="scPulseRefresh">Refresh now</button></div>
+    <div id="scPulse" aria-live="polite"><p class="sc-note">Reading live supply, paid prices, voided TYPE mix, and recipe changes from Ethereum…</p></div>
     <div class="sc-layout"><section><div class="sc-subhead"><h4>Current recipes</h4><button type="button" id="scRefresh">Reload recipes</button></div><div id="scRecipes" aria-live="polite"><p class="sc-note">Reading recipes…</p></div></section>
     <section><h4>What went into a collapse?</h4><form id="scForm" class="sc-form"><label for="scInput">Transaction hashes or output token IDs · up to four</label><textarea id="scInput" rows="2" autocomplete="off" spellcheck="false" placeholder="Paste 0x… transaction hashes or output token IDs"></textarea><div><button id="scDecode" type="submit">Decode batches</button><button id="scClear" type="button">Clear lookups</button></div></form><div id="scResults" aria-live="polite"><p class="sc-note">Each result lists the burned names and IDs together under the output they created.</p></div></section></div>
-    <details class="sc-mechanics"><summary>What determines the upgrade and its traits?</summary><p>The chosen formula defines the output TYPE pool. Your input token IDs, rarity and other traits do not enter the output seed; they only have to meet the recipe.</p><p>Seed = keccak256(abi.encode(chain ID, collection, mint recipient, new token ID)). Secondary traits are deterministic. Another mint or collapse can advance the shared token counter before your transaction lands. Direct minting is owner-only.</p><p>Existing TYPE names are intentional, including UNDEFINED. New recipes and fee changes can be introduced by the owner. This panel reads the current state rather than assuming yesterday’s rules.</p></details>
+    <details class="sc-mechanics"><summary>What determines the upgrade and its traits?</summary><p>The chosen formula defines the output TYPE pool. Your input token IDs, rarity and other traits do not enter the output seed; they only have to meet the recipe.</p><p>Seed = keccak256(abi.encode(chain ID, collection, mint recipient, new token ID)). Secondary traits are deterministic. Another mint or collapse can advance the shared token counter before your transaction lands. Direct minting is owner-only.</p><p>Existing TYPE names are intentional, including UNDEFINED. New recipes and fee changes can be introduced by the owner. The void-mix card reads the newest burn transfers from the collection's public explorer feed and groups them by each burned token's own TYPE metadata; it is a bounded recent sample, not a lifetime burn ledger. This panel reads the current state rather than assuming yesterday’s rules.</p></details>
   </section>`;
   const anchor = document.getElementById("assetViewer")?.closest("details") || document.getElementById("simDesk")?.closest("details");
   if (anchor) anchor.before(fold);

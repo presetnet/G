@@ -17,6 +17,8 @@ const integer = (n) => {
 const stamp = (seconds) => new Date(seconds * 1000).toISOString();
 const settled = async (fn) => { try { return { ok: true, ...await fn() }; } catch (e) { return { ok: false, error: e.message }; } };
 const EXPLORER = "https://eth.blockscout.com/api/v2";
+const VOID_PAGES = 8;
+const VOID_BURNS = 400;
 const TRANSFER = new Interface(["event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)"]);
 export const SEAPORT_ABI = new Interface([
   "event OrderFulfilled(bytes32 orderHash,address indexed offerer,address indexed zone,address recipient,tuple(uint8 itemType,address token,uint256 identifier,uint256 amount)[] offer,tuple(uint8 itemType,address token,uint256 identifier,uint256 amount,address recipient)[] consideration)",
@@ -186,6 +188,58 @@ export async function readSalesPulse(s, { contract, block }) {
     observedAt, latestSaleAt: sales[0]?.at ?? null, oldestSaleAt: sales.at(-1)?.at ?? null,
     recentStats: saleStats(recent), recentWindowHours: 24,
     note: "Sample of recent Seaport 1.6 single-NFT ETH/WETH fills. Gross order amounts include fee/royalty shares, exclude gas. Bundles and other venues/currencies are omitted. Paid prices are not current asks or executable bids; trades are not screened for wash trading." };
+}
+
+export function burnTypeName(row) {
+  const metadata = row?.total?.token_instance?.metadata;
+  const trait = metadata?.attributes?.find((a) => String(a?.trait_type).toUpperCase() === "TYPE");
+  const name = trait?.value || metadata?.name;
+  return typeof name === "string" && name.trim() && name.length <= 40 ? name.trim().toUpperCase() : "TYPE UNREAD";
+}
+
+export function summarizeVoidMix(rows, { pages = 0, capped = false, source = "", note = "" } = {}) {
+  const counts = new Map();
+  for (const row of rows) counts.set(row.name, (counts.get(row.name) || 0) + 1);
+  return {
+    ok: true,
+    counted: rows.length,
+    pages,
+    capped,
+    counts: [...counts].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+    newestAt: rows.map((r) => r.at).filter(Boolean).sort().at(-1) || null,
+    oldestAt: rows.map((r) => r.at).filter(Boolean).sort()[0] || null,
+    source,
+    note,
+  };
+}
+
+export async function readVoidMix(s, { contract, maxPages = VOID_PAGES, maxBurns = VOID_BURNS } = {}) {
+  const burns = new Map();
+  let url = `${EXPLORER}/tokens/${contract}/transfers`;
+  let pages = 0;
+  let more = false;
+  const source = url;
+  while (url && pages < maxPages && burns.size < maxBurns) {
+    const j = await s.json(url);
+    ensure(Array.isArray(j.items), "Explorer burn feed unavailable");
+    pages++;
+    for (const t of j.items) {
+      if (!same(t.to?.hash, ZERO) || same(t.from?.hash, ZERO) || !same(t.token?.address_hash, contract)) continue;
+      const key = `${t.transaction_hash}:${t.log_index ?? t.total?.token_id ?? burns.size}`;
+      if (burns.has(key)) continue;
+      burns.set(key, {
+        name: burnTypeName(t),
+        at: Number.isFinite(Date.parse(t.timestamp)) ? t.timestamp : null,
+        block: Number(t.block_number),
+        tx: t.transaction_hash,
+      });
+      if (burns.size >= maxBurns) break;
+    }
+    more = !!j.next_page_params;
+    url = more ? `${EXPLORER}/tokens/${contract}/transfers?${new URLSearchParams(j.next_page_params)}` : null;
+  }
+  const note = "Newest burn transfers to the zero address in a bounded explorer sample. TYPE comes from each burned token's own metadata; this is not a lifetime burn count or proof of permanent loss.";
+  return summarizeVoidMix([...burns.values()], { pages, capped: burns.size >= maxBurns || more, source, note });
 }
 
 export async function readRuleChanges(s, { block, oldBlock }) {
