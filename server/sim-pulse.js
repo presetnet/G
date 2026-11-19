@@ -353,6 +353,7 @@ export async function readVoidOutputs(s, { maxPages = SOCIAL_PAGES } = {}) {
     pages,
     capped: events.length >= 200 || more || ids.some((id) => !names.has(id)),
     counts: sortRows(counts),
+    tokenIds: ids,
     newestAt: times.at(-1) || null,
     oldestAt: times[0] || null,
     source,

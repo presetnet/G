@@ -311,7 +311,8 @@ test("collapse output breakdown follows SIM activity names and stays a recent sa
   assert.equal(o.unread, 0);
   assert.equal(o.pages, 2);
   assert.deepEqual(o.counts, [{ name: "STATIC", count: 2 }, { name: "MATRIX", count: 1 }]);
-  assert.equal("voided" in o, false, "voided counts come from the pool feed, not gallery absence");
+  assert.deepEqual(o.tokenIds, ["1", "2"], "exact output IDs are shipped for void-pool matching");
+  assert.equal("voided" in o, false, "voided counts come from matched token IDs, not gallery absence");
   assert.match(urls[2], /cursor=2/);
   assert.match(o.note, /outputs created by collapses, not items burned/);
   const partial = await readVoidOutputs({ json: async (url) => url.includes("/social")
@@ -331,12 +332,14 @@ test("unnamed collapse output is still named from its receipt formula", async ()
   }, { maxPages: 1 });
   assert.equal(o.counted, 1);
   assert.deepEqual(o.counts, [{ name: "MATRIX", count: 1 }]);
+  assert.deepEqual(o.tokenIds, ["700"]);
   assert.equal(o.unread, 0);
   assert.equal("voided" in o, false);
 });
 test("the collapse card pairs made counts with real void-pool counts and token evidence", () => {
   const made = { ok: true, counted: 200, matched: 200, unread: 0, pages: 9, capped: true,
     counts: [{ name: "MATRIX", count: 79 }, { name: "STATIC", count: 7 }],
+    tokenIds: ["11378", "11375", "11486", "11488", "11358"],
     newestAt: "2026-11-19T06:03:59.000Z", source: "https://sim.tech/api/mainnet/social",
     note: "Outputs created by collapses, not items burned; recent sample." };
   const pool = { ok: true, counted: 57, capped: false, pool: POOL_VOID,
@@ -347,20 +350,23 @@ test("the collapse card pairs made counts with real void-pool counts and token e
       { tokenId: "11486", name: "QUANTUM", from: "cdcommie.eth", at: "2026-10-28T22:31:47.000Z", tx: HASH_B },
       { tokenId: "11488", name: "STATIC", from: "cdcommie.eth", at: "2026-10-28T05:53:23.000Z", tx: TX_PLAIN },
       { tokenId: "11358", name: "MATRIX", from: "cdcommie.eth", at: "2026-10-22T19:39:35.000Z", tx: TX_ASK },
+      { tokenId: "11527", name: "INTERFERENCE", from: "dizyd.eth", at: "2026-11-16T23:45:47.000Z", tx: TX_BUNDLE },
     ],
     newestAt: "2026-11-16T23:45:47.000000Z", source: "https://eth.blockscout.com/api/v2/addresses/x/token-transfers",
     note: "Incoming SIM transfers to poolvoid.eth in a bounded explorer sample." };
   const html = voidOutputCard(made, pool);
   assert.match(html, /Created by collapse/);
   assert.match(html, /<b>200<\/b> collapse rows/);
-  assert.match(html, /<b>57<\/b> tokens in poolvoid.eth/);
+  assert.match(html, /<b>5<\/b> of them now in poolvoid.eth/);
+  assert.match(html, /<b>57<\/b> total void-pool tokens/);
   assert.match(html, /capped made sample/);
-  assert.match(html, /<strong>79<small>in void 4<\/small><\/strong>/);
-  assert.match(html, /<strong>7<small>in void 2<\/small><\/strong>/);
+  assert.match(html, /<strong>79<small>in void 3<\/small><\/strong>/);
+  assert.match(html, /<strong>7<small>in void 1<\/small><\/strong>/);
   assert.match(html, /#11378/);
   assert.match(html, /cdcommie.eth/);
   assert.match(html, /poolvoid.eth feed/);
-  assert.match(html, /Separate samples/);
+  assert.doesNotMatch(html, /#11527/, "a void token outside the made sample is excluded");
+  assert.match(html, /matches token IDs shared/);
   assert.match(voidOutputCard(made, { ok: false, error: "Explorer offline" }), /Void pool read failed: Explorer offline/);
   assert.match(voidOutputCard({ ok: false, error: "SIM offline" }), /Collapse-output sample unavailable: SIM offline/);
 });
@@ -396,6 +402,7 @@ test("pulse view reads supply, verified sales, and recipe changes, and caches a 
   assert.equal(p.voidOutputs.ok, true);
   assert.equal(p.voidOutputs.counted, 3);
   assert.deepEqual(p.voidOutputs.counts, [{ name: "MATRIX", count: 1 }, { name: "STATIC", count: 1 }, { name: "UNREAL", count: 1 }]);
+  assert.deepEqual(p.voidOutputs.tokenIds, ["5001", "5002", "5003"]);
   assert.equal(calls.some((c) => c.social), true);
   assert.equal(calls.some((c) => c.gallery), true);
   assert.equal(calls.some((c) => c.pool), true);

@@ -191,11 +191,15 @@ export function voidOutputCard(v, pool) {
   if (!v?.ok) return `<article class="sc-card sc-void-card"><h5>Created by collapse → in the void</h5><p class="sc-note">Collapse-output sample unavailable: ${esc(v?.error || "no data")}.</p></article>`;
   const made = Array.isArray(v?.counts) ? v.counts : [];
   const poolOk = !!pool?.ok;
-  const voided = new Map(poolOk && Array.isArray(pool.counts)
-    ? pool.counts.map((r) => [r.name, Math.max(0, Number(r.count) || 0)]) : []);
+  const madeIds = new Set((Array.isArray(v?.tokenIds) ? v.tokenIds : []).map(String));
+  const poolTokens = poolOk && Array.isArray(pool.tokens) ? pool.tokens : [];
+  const matched = madeIds.size ? poolTokens.filter((t) => madeIds.has(String(t.tokenId))) : [];
+  const voided = new Map();
+  for (const token of matched) voided.set(token.name, (voided.get(token.name) || 0) + 1);
   const madeTotal = Math.max(0, Number(v?.counted) || 0);
   const poolTotal = poolOk ? Math.max(0, Number(pool.counted) || 0) : 0;
-  const shown = made.slice(0, 8);
+  const matchedTotal = matched.length;
+  const shown = made.slice(0, 9);
   const max = shown.reduce((m, r) => Math.max(m, Number(r.count) || 0), 0) || 1;
   const rows = shown.map((r) => {
     const count = Math.max(0, Number(r.count) || 0);
@@ -204,25 +208,24 @@ export function voidOutputCard(v, pool) {
   }).join("");
   const rest = made.length > shown.length
     ? `<details class="sc-void-more"><summary>All observed outputs (${made.length})</summary><p>${made.map((r) => `${esc(r.name)} ${esc(r.count)}`).join(" · ")}</p></details>` : "";
-  const tokens = poolOk && Array.isArray(pool.tokens) ? pool.tokens : [];
-  const chips = tokens.slice(0, 6).map((t) => {
+  const chips = matched.slice(0, 6).map((t) => {
     const body = `<b>#${esc(t.tokenId)}</b><span>${esc(t.name)}</span><small>${esc(t.from || "unknown sender")}</small>`;
     return /^0x[0-9a-f]{64}$/i.test(t.tx || "")
       ? `<a href="https://eth.blockscout.com/tx/${esc(t.tx)}" target="_blank" rel="noopener noreferrer" title="${esc(t.at || "void transfer")}">${body}</a>`
       : `<span class="sc-void-chip">${body}</span>`;
   }).join("");
   const ledger = chips ? `<div class="sc-void-ledger">${chips}</div>` : "";
-  const allTokens = tokens.length > 6
-    ? `<details class="sc-void-more"><summary>All observed void tokens (${num(poolTotal)})</summary><p>${tokens.map((t) => `#${esc(t.tokenId)} ${esc(t.name)} ← ${esc(t.from || "?")}`).join(" · ")}</p></details>` : "";
+  const allTokens = matched.length > 6
+    ? `<details class="sc-void-more"><summary>All matched void tokens (${num(matchedTotal)})</summary><p>${matched.map((t) => `#${esc(t.tokenId)} ${esc(t.name)} ← ${esc(t.from || "?")}`).join(" · ")}</p></details>` : "";
   const sources = [link(v?.source, "activity feed"), poolOk && pool.pool
     ? link(`https://eth.blockscout.com/address/${pool.pool}`, "poolvoid.eth feed") : "void feed unavailable"].join(" · ");
   return `<article class="sc-card sc-void-card">
     <h5>Created by collapse → in the void</h5>
-    <p class="sc-note"><b>${num(madeTotal)}</b> collapse rows · <b>${num(poolTotal)}</b> tokens in poolvoid.eth${poolOk && pool.capped ? " · capped sample" : ""}${poolOk && pool.newestAt ? ` · latest void ${when(pool.newestAt)}` : ""}${poolOk ? "" : ` · ${esc(pool?.error || "void feed unavailable")}`}${v?.unread ? ` · ${num(v.unread)} unnamed output${v.unread === 1 ? "" : "s"}` : ""}${v?.capped ? " · capped made sample" : ""}.</p>
+    <p class="sc-note"><b>${num(madeTotal)}</b> collapse rows · <b>${num(matchedTotal)}</b> of them now in poolvoid.eth · <b>${num(poolTotal)}</b> total void-pool tokens${poolOk && pool.capped ? " · capped sample" : ""}${poolOk && pool.newestAt ? ` · latest void ${when(pool.newestAt)}` : ""}${poolOk ? "" : ` · ${esc(pool?.error || "void feed unavailable")}`}${v?.unread ? ` · ${num(v.unread)} unnamed output${v.unread === 1 ? "" : "s"}` : ""}${v?.capped ? " · capped made sample" : ""}.</p>
     ${made.length ? `<div class="sc-void-legend"><span>TYPE</span><span>newest made</span><span>made / void</span></div><div class="sc-void-list">${rows}</div>` : '<p class="sc-note">No collapse outputs in this sample.</p>'}
     ${rest}
     ${ledger}${allTokens}
-    <p class="sc-note">${esc(v?.note || "Recent collapse outputs from SIM's activity feed.")} ${poolOk ? esc(pool.note || "") : `Void pool read failed: ${esc(pool?.error || "no data")}.`} Separate samples: a token made here is not necessarily the same token later sent to the void pool. Sources: ${sources}.</p>
+    <p class="sc-note">${esc(v?.note || "Recent collapse outputs from SIM's activity feed.")} ${poolOk ? esc(pool.note || "") : `Void pool read failed: ${esc(pool?.error || "no data")}.`} “In void” matches token IDs shared by the made rows and the void-pool feed; other void-pool tokens are excluded. Sources: ${sources}.</p>
   </article>`;
 }
 
@@ -336,7 +339,7 @@ export function initSimCollapse() {
     <div id="scPulse" aria-live="polite"><p class="sc-note">Reading live supply, paid prices, zero-address burns, the void pool, collapse outputs, and recipe changes from Ethereum…</p></div>
     <div class="sc-layout"><section><div class="sc-subhead"><h4>Current recipes</h4><button type="button" id="scRefresh">Reload recipes</button></div><div id="scRecipes" aria-live="polite"><p class="sc-note">Reading recipes…</p></div></section>
     <section><h4>What went into a collapse?</h4><form id="scForm" class="sc-form"><label for="scInput">Transaction hashes or output token IDs · up to four</label><textarea id="scInput" rows="2" autocomplete="off" spellcheck="false" placeholder="Paste 0x… transaction hashes or output token IDs"></textarea><div><button id="scDecode" type="submit">Decode batches</button><button id="scClear" type="button">Clear lookups</button></div></form><div id="scResults" aria-live="polite"><p class="sc-note">Each result lists the burned names and IDs together under the output they created.</p></div></section></div>
-    <details class="sc-mechanics"><summary>What determines the upgrade and its traits?</summary><p>The chosen formula defines the output TYPE pool. Your input token IDs, rarity and other traits do not enter the output seed; they only have to meet the recipe.</p><p>Seed = keccak256(abi.encode(chain ID, collection, mint recipient, new token ID)). Secondary traits are deterministic. Another mint or collapse can advance the shared token counter before your transaction lands. Direct minting is owner-only.</p><p>Existing TYPE names are intentional, including UNDEFINED. New recipes and fee changes can be introduced by the owner. The zero-address burn card reads the newest burn transfers from the collection's public explorer feed and groups them by each burned token's own TYPE metadata; it is a bounded recent sample, not a lifetime burn ledger. The non-primitive list below it is the live TYPE registry outside the original eight, with no counts implied. The created-by-collapse card counts output TYPEs from SIM's newest activity rows; those are items produced, not items burned. Its “in void” column reads a separate feed of SIM tokens transferred to poolvoid.eth and groups them by each token's own TYPE metadata. Current recipes accept only the original eight TYPEs as inputs, so the burn mix, the void pool, and the collapse-output mix answer different questions. This panel reads the current state rather than assuming yesterday’s rules.</p></details>
+    <details class="sc-mechanics"><summary>What determines the upgrade and its traits?</summary><p>The chosen formula defines the output TYPE pool. Your input token IDs, rarity and other traits do not enter the output seed; they only have to meet the recipe.</p><p>Seed = keccak256(abi.encode(chain ID, collection, mint recipient, new token ID)). Secondary traits are deterministic. Another mint or collapse can advance the shared token counter before your transaction lands. Direct minting is owner-only.</p><p>Existing TYPE names are intentional, including UNDEFINED. New recipes and fee changes can be introduced by the owner. The zero-address burn card reads the newest burn transfers from the collection's public explorer feed and groups them by each burned token's own TYPE metadata; it is a bounded recent sample, not a lifetime burn ledger. The non-primitive list below it is the live TYPE registry outside the original eight, with no counts implied. The created-by-collapse card counts output TYPEs from SIM's newest activity rows; those are items produced, not items burned. Its “in void” column matches those exact output token IDs against a separate feed of SIM tokens transferred to poolvoid.eth and groups the matches by each token's own TYPE metadata. Current recipes accept only the original eight TYPEs as inputs, so the burn mix, the void pool, and the collapse-output mix answer different questions. This panel reads the current state rather than assuming yesterday’s rules.</p></details>
   </section>`;
   const anchor = document.getElementById("assetViewer")?.closest("details") || document.getElementById("simDesk")?.closest("details");
   if (anchor) anchor.before(fold);
