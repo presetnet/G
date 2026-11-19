@@ -394,12 +394,13 @@ test("the collapse card ranks TYPEs by void percentage, with art thumbnails and 
     9: "FRACTURE", 10: "BURNED", 11: "VOID", 12: "DESCENT", 13: "MIND", 14: "MATRIX", 15: "QUANTUM", 16: "STATIC", 17: "WAVE", 18: "OVERDO", 19: "EN1GMA", 20: "INTERFERENCE", 21: "SINK" };
   const html = voidOutputCard(made, vaults, types);
   assert.match(html, /Created by collapse/);
-  assert.match(html, /<b>200<\/b> newest collapse outputs sampled/);
+  assert.match(html, /<b>200<\/b> newest collapse outputs sampled across <b>9<\/b> TYPEs/);
   assert.match(html, /<b>8<\/b> of those exact tokens now in void vaults/);
   assert.match(html, /<b>451<\/b> void tokens in both vault feeds/);
   assert.match(html, /void.eth <b>394<\/b>/);
   assert.match(html, /poolvoid.eth <b>57<\/b>/);
-  assert.match(html, /Non-primitive inventory in both vaults/);
+  assert.match(html, /Non-primitive inventory in both vaults · 6 TYPEs/);
+  assert.match(html, /full vault history/);
   assert.match(html, /<b>9<\/b> non-primitive tokens · <b>1<\/b> original primitive tokens/);
   assert.match(html, /<b>MATRIX<\/b><i>3<\/i>/);
   assert.match(html, /no outgoing SIM transfers/i);

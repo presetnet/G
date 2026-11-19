@@ -213,7 +213,7 @@ export function voidOutputCard(v, vaults, types = {}) {
   const inventoryRows = [...inventory].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([name, count]) => `<span title="${esc(name)}"><b>${esc(name)}</b><i>${num(count)}</i></span>`).join("");
   const inventoryBlock = types && Object.keys(types).length && vaultOk && nonPrimitiveTotal
-    ? `<div class="sc-void-inventory"><h6>Non-primitive inventory in both vaults</h6><div class="sc-void-inventory-grid">${inventoryRows}</div><p class="sc-note"><b>${num(nonPrimitiveTotal)}</b> non-primitive tokens · <b>${num(primitiveTotal)}</b> original primitive tokens${unclassifiedTotal ? ` · <b>${num(unclassifiedTotal)}</b> unclassified` : ""}. All incoming SIM transfers to both vaults, deduped by token ID; no outgoing SIM transfers appeared in either feed.</p></div>`
+    ? `<div class="sc-void-inventory"><h6>Non-primitive inventory in both vaults · ${num(inventory.size)} TYPEs</h6><div class="sc-void-inventory-grid">${inventoryRows}</div><p class="sc-note"><b>${num(nonPrimitiveTotal)}</b> non-primitive tokens · <b>${num(primitiveTotal)}</b> original primitive tokens${unclassifiedTotal ? ` · <b>${num(unclassifiedTotal)}</b> unclassified` : ""}. This is the full vault history, so it includes TYPEs absent from the newest made sample. All incoming SIM transfers to both vaults, deduped by token ID; no outgoing SIM transfers appeared in either feed.</p></div>`
     : "";
   const pctLabel = (pct) => pct > 0 && pct < 0.1 ? "<0.1%" : `${pct.toFixed(1)}%`;
   const ranked = made.map((r, index) => {
@@ -246,7 +246,7 @@ export function voidOutputCard(v, vaults, types = {}) {
     : (vaultOk && vaults.source ? link(vaults.source, "void feeds") : "void feeds unavailable");
   return `<article class="sc-card sc-void-card">
     <h5>Created by collapse → in the void</h5>
-    <p class="sc-note"><b>${num(madeTotal)}</b> newest collapse outputs sampled · <b>${num(matched.length)}</b> of those exact tokens now in void vaults · <b>${num(vaultTotal)}</b> void tokens in both vault feeds${vaultOk && vaults.capped ? " · capped sample" : ""}${vaultOk && vaults.newestAt ? ` · latest void ${when(vaults.newestAt)}` : ""}${vaultOk ? "" : ` · ${esc(vaults?.error || "void feed unavailable")}`}${v?.unread ? ` · ${num(v.unread)} unnamed output${v.unread === 1 ? "" : "s"}` : ""}${v?.capped ? " · capped made sample" : ""}.</p>
+    <p class="sc-note"><b>${num(madeTotal)}</b> newest collapse outputs sampled across <b>${num(made.length)}</b> TYPEs · <b>${num(matched.length)}</b> of those exact tokens now in void vaults · <b>${num(vaultTotal)}</b> void tokens in both vault feeds${vaultOk && vaults.capped ? " · capped sample" : ""}${vaultOk && vaults.newestAt ? ` · latest void ${when(vaults.newestAt)}` : ""}${vaultOk ? "" : ` · ${esc(vaults?.error || "void feed unavailable")}`}${v?.unread ? ` · ${num(v.unread)} unnamed output${v.unread === 1 ? "" : "s"}` : ""}${v?.capped ? " · capped made sample" : ""}.</p>
     <p class="sc-note sc-void-subset">The <b>${num(matched.length)}</b> voided tokens are a subset of the <b>${num(madeTotal)}</b> sampled outputs, not extra supply. These are sample counts, not current TYPE supply.</p>
     ${split}
     ${inventoryBlock}
