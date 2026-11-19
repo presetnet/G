@@ -305,7 +305,7 @@ export async function readVoidVaults(s, { contract, vaults = VOID_VAULTS, maxPag
   const sortRows = (map) => [...map].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   const senders = [...senderMap.values()].map((sender) => ({ name: sender.name, count: sender.count, types: sortRows(sender.types).slice(0, 3) }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  const note = "Incoming SIM transfers into void.eth and poolvoid.eth in a bounded explorer sample, counted once per unique token ID. TYPE and thumbnail come from each token's own metadata. These are observed transfers into void vaults, not zero-address burns, a lifetime total, or proof of permanent loss.";
+  const note = "All incoming SIM transfers currently indexed by the explorer for void.eth and poolvoid.eth, counted once per unique token ID. TYPE and thumbnail come from each token's own metadata. These are observed transfers into void vaults, not zero-address burns or proof of permanent loss.";
   return {
     ok: true,
     counted: rows.length,

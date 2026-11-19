@@ -384,18 +384,25 @@ test("the collapse card ranks TYPEs by void percentage, with art thumbnails and 
       { tokenId: "11488", name: "STATIC", vault: "poolvoid.eth", image: thumb("11488"), at: "2026-10-28T05:53:23.000000Z", tx: TX_PLAIN },
       { tokenId: "11358", name: "MATRIX", vault: "poolvoid.eth", image: thumb("11358"), at: "2026-10-22T19:39:35.000000Z", tx: TX_ASK },
       { tokenId: "11527", name: "INTERFERENCE", vault: "poolvoid.eth", image: thumb("11527"), at: "2026-11-16T23:45:47.000000Z", tx: TX_BUNDLE },
+      { tokenId: "9001", name: "UNREAL", vault: "void.eth", image: thumb("9001"), at: "2026-10-01T00:00:00.000000Z", tx: TX_ASK },
     ],
     newestAt: "2026-11-16T23:45:47.000000Z",
     sources: [{ label: "void.eth feed", url: `https://eth.blockscout.com/addresses/${VOID_ETH}/token-transfers` },
       { label: "poolvoid.eth feed", url: `https://eth.blockscout.com/addresses/${POOL_VOID}/token-transfers` }],
     note: "Incoming SIM transfers into void.eth and poolvoid.eth in a bounded explorer sample." };
-  const html = voidOutputCard(made, vaults);
+  const types = { 1: "UNREAL", 2: "UNSEEN", 3: "UNDO", 4: "UNHOLY", 5: "UNKNOWN", 6: "UNNATURAL", 7: "UNREALITY", 8: "UNDEFINED",
+    9: "FRACTURE", 10: "BURNED", 11: "VOID", 12: "DESCENT", 13: "MIND", 14: "MATRIX", 15: "QUANTUM", 16: "STATIC", 17: "WAVE", 18: "OVERDO", 19: "EN1GMA", 20: "INTERFERENCE", 21: "SINK" };
+  const html = voidOutputCard(made, vaults, types);
   assert.match(html, /Created by collapse/);
   assert.match(html, /<b>200<\/b> newest collapse outputs sampled/);
   assert.match(html, /<b>8<\/b> of those exact tokens now in void vaults/);
   assert.match(html, /<b>451<\/b> void tokens in both vault feeds/);
   assert.match(html, /void.eth <b>394<\/b>/);
   assert.match(html, /poolvoid.eth <b>57<\/b>/);
+  assert.match(html, /Non-primitive inventory in both vaults/);
+  assert.match(html, /<b>9<\/b> non-primitive tokens · <b>1<\/b> original primitive tokens/);
+  assert.match(html, /<b>MATRIX<\/b><i>3<\/i>/);
+  assert.match(html, /no outgoing SIM transfers/i);
   assert.match(html, /subset of the <b>200<\/b> sampled outputs/);
   assert.match(html, /not current TYPE supply/);
   assert.match(html, /capped made sample/);
