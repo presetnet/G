@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { Interface, parseEther } from "ethers";
 import { SIM_ABI, SIM_CONTRACT, createCollapseReader } from "../server/sim-collapse.js";
 import { SEAPORT, WETH, SUPPLY_TARGET, SEAPORT_ABI, buildSupplyPulse, supplyWindow, decodeSeaportSales, saleStats, readSalesPulse, burnTypeName, summarizeVoidMix, readVoidMix } from "../server/sim-pulse.js";
-import { supplyCard, marketCard, voidCard, leftText } from "../public/sim-collapse.js";
+import { supplyCard, marketCard, voidCard, nonPrimitiveTypes, leftText } from "../public/sim-collapse.js";
 import handler from "../api/sim-collapse.js";
 
 const RENDERER = "0x2222222222222222222222222222222222222222";
@@ -212,15 +212,25 @@ test("void mix reads TYPE from burned token metadata and keeps the sample bounde
 test("the void card states its source and sample limits, and an outage is never zero burns", () => {
   const mix = summarizeVoidMix([{ name: "STATIC", at: "2026-11-19T01:00:00Z" }, { name: "MATRIX", at: "2026-11-19T02:00:00Z" }, { name: "STATIC", at: "2026-11-19T03:00:00Z" }],
     { pages: 1, source: "https://eth.blockscout.com/api/v2/tokens/x/transfers", note: "Recent sample, not a lifetime total or proof of permanent loss." });
-  const html = voidCard({ ok: true, ...mix });
+  const types = { 1: "UNREAL", 8: "UNDEFINED", 9: "BURNED", 10: "VOID", 14: "DESCENT", 17: "STATIC", 20: "MATRIX", 22: "INTERFERENCE", bad: "x", 23: "" };
+  assert.deepEqual(nonPrimitiveTypes(types), [
+    { id: "9", name: "BURNED" }, { id: "10", name: "VOID" }, { id: "14", name: "DESCENT" },
+    { id: "17", name: "STATIC" }, { id: "20", name: "MATRIX" }, { id: "22", name: "INTERFERENCE" },
+  ]);
+  const html = voidCard({ ok: true, ...mix }, types, "https://etherscan.io/address/x#readContract");
   assert.match(html, /Voided TYPE mix/);
   assert.match(html, /<b>3<\/b> burn receipts/);
-  assert.match(html, /STATIC/);
-  assert.match(html, /MATRIX/);
+  assert.match(html, /Non-primitive TYPEs \(6\)/);
+  assert.match(html, /title="TYPE 20">MATRIX/);
+  assert.match(html, /title="TYPE 22">INTERFERENCE/);
+  assert.match(html, /no counts are implied/);
+  assert.match(html, /contract read/);
+  assert.doesNotMatch(html, /title="TYPE 1">UNREAL/);
   assert.match(html, /not a lifetime total/);
   assert.match(html, /burn feed/);
-  const unavailable = voidCard({ ok: false, error: "Explorer offline" });
+  const unavailable = voidCard({ ok: false, error: "Explorer offline" }, types);
   assert.match(unavailable, /Void sample unavailable: Explorer offline/);
+  assert.match(unavailable, /Non-primitive TYPEs \(6\)/);
   assert.doesNotMatch(unavailable, /burn receipts/);
 });
 test("pulse view reads supply, verified sales, and recipe changes, and caches a success", async () => {
