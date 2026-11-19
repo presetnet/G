@@ -18,12 +18,14 @@ const stamp = (seconds) => new Date(seconds * 1000).toISOString();
 const settled = async (fn) => { try { return { ok: true, ...await fn() }; } catch (e) { return { ok: false, error: e.message }; } };
 const EXPLORER = "https://eth.blockscout.com/api/v2";
 const SIM_SITE = "https://sim.tech";
+export const VOID_ETH = "0xE18D3f89665EbF4EF885389b62a91Ed910572Af4";
 export const POOL_VOID = "0x40FA5b555b83676E203Dac4CfB70fD13A53bf6a7";
+export const VOID_VAULTS = [{ label: "void.eth", address: VOID_ETH }, { label: "poolvoid.eth", address: POOL_VOID }];
 const VOID_PAGES = 8;
 const VOID_BURNS = 400;
 const SOCIAL_PAGES = 12;
-const POOL_PAGES = 8;
-const POOL_MAX = 400;
+const POOL_PAGES = 12;
+const POOL_MAX = 1000;
 const TRANSFER = new Interface(["event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)"]);
 const COLLAPSE_LOG = new Interface(["event Collapsed(uint256 indexed formulaId,uint256 indexed output,uint256[] inputs)"]);
 export const SEAPORT_ABI = new Interface([
@@ -248,7 +250,7 @@ export async function readVoidMix(s, { contract, maxPages = VOID_PAGES, maxBurns
   return summarizeVoidMix([...burns.values()], { pages, capped: burns.size >= maxBurns || more, source, note });
 }
 
-export async function readVoidPool(s, { contract, pool = POOL_VOID, maxPages = POOL_PAGES, maxRows = POOL_MAX } = {}) {
+export async function readVoidVaults(s, { contract, vaults = VOID_VAULTS, maxPages = POOL_PAGES, maxRows = POOL_MAX } = {}) {
   const addressNames = new Map();
   try {
     const social = await s.json(`${SIM_SITE}/api/mainnet/social`);
@@ -256,47 +258,64 @@ export async function readVoidPool(s, { contract, pool = POOL_VOID, maxPages = P
       if (row?.address && row?.name) addressNames.set(String(row.address).toLowerCase(), String(row.name));
     }
   } catch { /* Unlabeled senders stay as hashes rather than being guessed. */ }
-  const query = new URLSearchParams({ token: contract });
-  const source = `${EXPLORER}/addresses/${pool}/token-transfers?${query}`;
-  let url = source, pages = 0, more = false;
-  const seen = new Set(), rows = [];
-  while (url && pages < maxPages && rows.length < maxRows) {
-    const j = await s.json(url);
-    ensure(Array.isArray(j.items), "Void pool transfer feed unavailable");
-    pages++;
-    for (const t of j.items) {
-      if (!same(t.to?.hash, pool) || same(t.from?.hash, ZERO) || same(t.from?.hash, t.to?.hash) || !same(t.token?.address_hash, contract)) continue;
-      const key = `${t.transaction_hash}:${t.log_index ?? ""}:${t.total?.token_id ?? ""}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      rows.push({
-        name: burnTypeName(t),
-        tokenId: String(t.total?.token_id ?? ""),
-        from: addressNames.get(String(t.from?.hash).toLowerCase()) || t.from?.ens_domain_name || t.from?.hash || "",
-        at: Number.isFinite(Date.parse(t.timestamp)) ? t.timestamp : null,
-        block: Number(t.block_number),
-        tx: t.transaction_hash,
-      });
-      if (rows.length >= maxRows) break;
+  const byToken = new Map();
+  const vaultStats = [], sources = [];
+  for (const vault of vaults) {
+    const source = `${EXPLORER}/addresses/${vault.address}/token-transfers?${new URLSearchParams({ token: contract })}`;
+    sources.push({ label: vault.label, url: source });
+    let url = source, pages = 0, more = false, counted = 0;
+    while (url && pages < maxPages && byToken.size < maxRows) {
+      const j = await s.json(url);
+      ensure(Array.isArray(j.items), `${vault.label} void feed unavailable`);
+      pages++;
+      for (const t of j.items) {
+        if (!same(t.to?.hash, vault.address) || same(t.from?.hash, ZERO) || same(t.from?.hash, t.to?.hash) || !same(t.token?.address_hash, contract)) continue;
+        const tokenId = String(t.total?.token_id ?? "");
+        if (!tokenId || byToken.has(tokenId)) continue;
+        byToken.set(tokenId, {
+          name: burnTypeName(t),
+          tokenId,
+          from: addressNames.get(String(t.from?.hash).toLowerCase()) || t.from?.ens_domain_name || t.from?.hash || "",
+          vault: vault.label,
+          at: Number.isFinite(Date.parse(t.timestamp)) ? t.timestamp : null,
+          block: Number(t.block_number),
+          tx: t.transaction_hash,
+        });
+        counted++;
+        if (byToken.size >= maxRows) break;
+      }
+      more = !!j.next_page_params;
+      url = more ? `${EXPLORER}/addresses/${vault.address}/token-transfers?${new URLSearchParams(j.next_page_params)}` : null;
     }
-    more = !!j.next_page_params;
-    url = more ? `${EXPLORER}/addresses/${pool}/token-transfers?${new URLSearchParams(j.next_page_params)}` : null;
+    vaultStats.push({ label: vault.label, address: vault.address, counted, pages, capped: more || counted >= maxRows, source });
   }
-  const counts = new Map();
-  for (const row of rows) counts.set(row.name, (counts.get(row.name) || 0) + 1);
+  const rows = [...byToken.values()];
+  const counts = new Map(), senderMap = new Map();
+  for (const row of rows) {
+    counts.set(row.name, (counts.get(row.name) || 0) + 1);
+    const sender = senderMap.get(row.from) || { name: row.from, count: 0, types: new Map() };
+    sender.count++;
+    sender.types.set(row.name, (sender.types.get(row.name) || 0) + 1);
+    senderMap.set(row.from, sender);
+  }
   const times = rows.map((r) => r.at).filter(Boolean).sort();
-  const note = "Incoming SIM transfers to poolvoid.eth in a bounded explorer sample. TYPE comes from each token's own metadata; sender labels come from SIM's public activity feed when available. The void pool holds the tokens; this is not a zero-address burn, a lifetime total, or proof of permanent loss.";
+  const sortRows = (map) => [...map].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  const senders = [...senderMap.values()].map((sender) => ({ name: sender.name, count: sender.count, types: sortRows(sender.types).slice(0, 3) }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  const note = "Incoming SIM transfers into void.eth and poolvoid.eth in a bounded explorer sample, counted once per unique token ID. TYPE comes from each token's own metadata; sender labels come from SIM's public activity feed when available. These are observed transfers into void vaults, not zero-address burns, a lifetime total, or proof of permanent loss.";
   return {
     ok: true,
     counted: rows.length,
-    pages,
-    capped: rows.length >= maxRows || more,
-    pool,
-    counts: [...counts].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
-    tokens: rows.slice(0, 60),
+    capped: byToken.size >= maxRows || vaultStats.some((v) => v.capped),
+    vaults: vaultStats,
+    counts: sortRows(counts),
+    senderCount: senderMap.size,
+    senders: senders.slice(0, 12),
+    tokens: rows,
     newestAt: times.at(-1) || null,
     oldestAt: times[0] || null,
-    source,
+    sources,
+    source: sources[0]?.url || "",
     note,
   };
 }

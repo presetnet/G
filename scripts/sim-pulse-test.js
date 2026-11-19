@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Interface, parseEther } from "ethers";
 import { SIM_ABI, SIM_CONTRACT, createCollapseReader } from "../server/sim-collapse.js";
-import { SEAPORT, WETH, SUPPLY_TARGET, SEAPORT_ABI, POOL_VOID, buildSupplyPulse, supplyWindow, decodeSeaportSales, saleStats, readSalesPulse, burnTypeName, summarizeVoidMix, readVoidMix, readVoidPool, readVoidOutputs } from "../server/sim-pulse.js";
+import { SEAPORT, WETH, SUPPLY_TARGET, SEAPORT_ABI, VOID_ETH, POOL_VOID, VOID_VAULTS, buildSupplyPulse, supplyWindow, decodeSeaportSales, saleStats, readSalesPulse, burnTypeName, summarizeVoidMix, readVoidMix, readVoidVaults, readVoidOutputs } from "../server/sim-pulse.js";
 import { supplyCard, marketCard, voidCard, voidOutputCard, nonPrimitiveTypes, leftText } from "../public/sim-collapse.js";
 import handler from "../api/sim-collapse.js";
 
@@ -65,18 +65,22 @@ const feed = [
   { block_number: "8760", from: { hash: BUYER }, to: { hash: OTHER }, token: { address_hash: OTHER }, transaction_hash: TX_ASK },
   { block_number: "8750", from: { hash: ZERO }, to: { hash: BUYER }, token: { address_hash: SIM_CONTRACT }, transaction_hash: TX_BID },
 ];
-const poolTransfer = (id, name, from, at, tx, to = POOL_VOID) => ({
+const vaultTransfer = (id, name, from, at, tx, to = POOL_VOID) => ({
   block_number: "8800", timestamp: at, transaction_hash: tx, log_index: 2,
   from: { hash: from }, to: { hash: to }, token: { address_hash: SIM_CONTRACT },
   total: { token_id: id, token_instance: { metadata: { name, attributes: [{ trait_type: "TYPE", value: name }] } } },
 });
+const voidEthFeed = [
+  vaultTransfer("7001", "FRACTURE", SELLER, "2026-11-15T17:42:47.000000Z", HASH_B, VOID_ETH),
+  vaultTransfer("5003", "UNREAL", BUYER, "2026-11-14T12:41:59.000000Z", TX_PLAIN, VOID_ETH),
+];
 const voidFeed = [
-  poolTransfer("11378", "MATRIX", SELLER, "2026-11-12T06:09:35.000000Z", HASH_A),
-  poolTransfer("11488", "STATIC", SELLER2, "2026-10-28T05:53:23.000000Z", HASH_B),
-  poolTransfer("11527", "INTERFERENCE", BUYER, "2026-11-16T23:45:47.000000Z", TX_PLAIN),
-  { ...poolTransfer("11600", "MATRIX", BUYER2, "2026-11-18T00:00:00Z", TX_ASK), to: { hash: OTHER } },
-  { ...poolTransfer("11601", "MATRIX", BUYER2, "2026-11-18T00:00:00Z", TX_BID), token: { address_hash: OTHER } },
-  { ...poolTransfer("11602", "MATRIX", ZERO, "2026-11-18T00:00:00Z", TX_STABLE) },
+  vaultTransfer("5001", "STATIC", SELLER, "2026-11-12T06:09:35.000000Z", HASH_A),
+  vaultTransfer("5002", "MATRIX", SELLER2, "2026-10-28T05:53:23.000000Z", HASH_B),
+  vaultTransfer("11527", "INTERFERENCE", BUYER, "2026-11-16T23:45:47.000000Z", TX_PLAIN),
+  { ...vaultTransfer("11600", "MATRIX", BUYER2, "2026-11-18T00:00:00Z", TX_ASK), to: { hash: OTHER } },
+  { ...vaultTransfer("11601", "MATRIX", BUYER2, "2026-11-18T00:00:00Z", TX_BID), token: { address_hash: OTHER } },
+  { ...vaultTransfer("11602", "MATRIX", ZERO, "2026-11-18T00:00:00Z", TX_STABLE) },
 ];
 
 function fixture() {
@@ -96,8 +100,12 @@ function fixture() {
         { id: "5001", name: "STATIC" }, { id: "5002", name: "MATRIX" }, { id: "5003", name: "UNREAL" },
       ], next: null }) };
     }
+    if (url.includes(`/addresses/${VOID_ETH}/token-transfers`)) {
+      calls.push({ vault: url });
+      return { ok: true, json: async () => ({ items: voidEthFeed, next_page_params: null }) };
+    }
     if (url.includes(`/addresses/${POOL_VOID}/token-transfers`)) {
-      calls.push({ pool: url });
+      calls.push({ vault: url });
       return { ok: true, json: async () => ({ items: voidFeed, next_page_params: null }) };
     }
     if (url.includes("blockscout")) {
@@ -240,31 +248,45 @@ test("void mix reads TYPE from burned token metadata and keeps the sample bounde
   assert.equal(capped.capped, true);
   await assert.rejects(readVoidMix({ json: async () => ({ items: null }) }, { contract: SIM_CONTRACT }), /unavailable/);
 });
-test("void pool reads real voided tokens with their own TYPE and sender labels", async () => {
+test("void vaults read both ENS destinations with unique tokens, TYPEs, and sender labels", async () => {
   const urls = [];
-  const first = { items: [voidFeed[0], voidFeed[1], voidFeed[0], voidFeed[3], voidFeed[4], voidFeed[5]], next_page_params: { block_number: 8700, index: 1 } };
+  let voidEthPages = 0;
   const s = { json: async (url) => {
     urls.push(url);
     if (url.includes("/api/mainnet/social")) return { activity: [{ address: SELLER, name: "cdcommie.eth" }] };
-    return urls.length === 2 ? first : { items: [voidFeed[2]], next_page_params: null };
+    if (url.includes(`/addresses/${VOID_ETH}/`)) {
+      voidEthPages++;
+      return voidEthPages === 1
+        ? { items: [voidEthFeed[0], voidEthFeed[0], { ...voidEthFeed[0], to: { hash: OTHER } }, { ...voidEthFeed[0], token: { address_hash: OTHER } }], next_page_params: { block_number: 8700, index: 1 } }
+        : { items: [voidEthFeed[1]], next_page_params: null };
+    }
+    return { items: voidFeed, next_page_params: null };
   } };
-  const p = await readVoidPool(s, { contract: SIM_CONTRACT, maxPages: 3 });
-  assert.equal(p.counted, 3, "outgoing transfers, other tokens, mints, and duplicates are excluded");
-  assert.deepEqual(p.counts, [{ name: "INTERFERENCE", count: 1 }, { name: "MATRIX", count: 1 }, { name: "STATIC", count: 1 }]);
-  assert.equal(p.pages, 2);
+  const p = await readVoidVaults(s, { contract: SIM_CONTRACT, maxPages: 3 });
+  assert.equal(p.counted, 5, "outgoing transfers, other tokens, mints, duplicates and other vaults are excluded");
+  assert.deepEqual(p.vaults.map((v) => [v.label, v.counted]), [["void.eth", 2], ["poolvoid.eth", 3]]);
+  assert.deepEqual(p.counts, [
+    { name: "FRACTURE", count: 1 }, { name: "INTERFERENCE", count: 1 }, { name: "MATRIX", count: 1 },
+    { name: "STATIC", count: 1 }, { name: "UNREAL", count: 1 },
+  ]);
+  assert.equal(p.senderCount, 3);
   assert.equal(p.capped, false);
-  assert.equal(p.tokens[0].tokenId, "11378");
+  assert.equal(p.tokens[0].tokenId, "7001");
   assert.equal(p.tokens[0].from, "cdcommie.eth", "SIM activity labels the sender");
+  assert.equal(p.tokens[0].vault, "void.eth");
   assert.equal(p.newestAt, "2026-11-16T23:45:47.000000Z");
-  assert.match(urls[1], new RegExp(`/addresses/${POOL_VOID}/token-transfers`));
+  assert.match(urls[1], new RegExp(`/addresses/${VOID_ETH}/token-transfers`));
   assert.match(urls[2], /block_number=8700/);
-  assert.match(p.note, /poolvoid.eth/);
-  assert.match(p.note, /not a zero-address burn/);
-  const capped = await readVoidPool({ json: async (url) => url.includes("/social")
+  assert.match(urls[3], new RegExp(`/addresses/${POOL_VOID}/token-transfers`));
+  assert.deepEqual(VOID_VAULTS.map((v) => v.label), ["void.eth", "poolvoid.eth"]);
+  assert.match(p.note, /void.eth and poolvoid.eth/);
+  assert.match(p.note, /not zero-address burns/);
+  const capped = await readVoidVaults({ json: async (url) => url.includes("/social")
     ? { activity: [] } : { items: [voidFeed[0]], next_page_params: { more: 1 } } },
-    { contract: SIM_CONTRACT, maxPages: 1, maxRows: 1 });
+    { contract: SIM_CONTRACT, vaults: [VOID_VAULTS[1]], maxPages: 1, maxRows: 1 });
   assert.equal(capped.capped, true);
-  await assert.rejects(readVoidPool({ json: async (url) => url.includes("/social") ? { activity: [] } : { items: null } }, { contract: SIM_CONTRACT }), /unavailable/);
+  await assert.rejects(readVoidVaults({ json: async (url) => url.includes("/social") ? { activity: [] } : { items: null } },
+    { contract: SIM_CONTRACT, vaults: [VOID_VAULTS[1]] }), /unavailable/);
 });
 test("the void card states its source and sample limits, and an outage is never zero burns", () => {
   const mix = summarizeVoidMix([{ name: "STATIC", at: "2026-11-19T01:00:00Z" }, { name: "MATRIX", at: "2026-11-19T02:00:00Z" }, { name: "STATIC", at: "2026-11-19T03:00:00Z" }],
@@ -336,38 +358,59 @@ test("unnamed collapse output is still named from its receipt formula", async ()
   assert.equal(o.unread, 0);
   assert.equal("voided" in o, false);
 });
-test("the collapse card pairs made counts with real void-pool counts and token evidence", () => {
+test("the collapse card shows made/void by TYPE and who else voided those exact tokens", () => {
   const made = { ok: true, counted: 200, matched: 200, unread: 0, pages: 9, capped: true,
-    counts: [{ name: "MATRIX", count: 79 }, { name: "STATIC", count: 7 }],
-    tokenIds: ["11378", "11375", "11486", "11488", "11358"],
+    counts: [
+      { name: "MATRIX", count: 79 }, { name: "QUANTUM", count: 29 }, { name: "WAVE", count: 23 },
+      { name: "FRACTURE", count: 22 }, { name: "INTERFERENCE", count: 15 }, { name: "SINK", count: 13 },
+      { name: "DESCENT", count: 8 }, { name: "STATIC", count: 7 }, { name: "OVERDO", count: 4 },
+    ],
+    tokenIds: ["11378", "11375", "11486", "11488", "11358", "11526", "11522", "11492"],
     newestAt: "2026-11-19T06:03:59.000Z", source: "https://sim.tech/api/mainnet/social",
     note: "Outputs created by collapses, not items burned; recent sample." };
-  const pool = { ok: true, counted: 57, capped: false, pool: POOL_VOID,
-    counts: [{ name: "MATRIX", count: 4 }, { name: "STATIC", count: 2 }],
+  const vaults = { ok: true, counted: 451, capped: false, senderCount: 69,
+    vaults: [{ label: "void.eth", counted: 394 }, { label: "poolvoid.eth", counted: 57 }],
+    senders: [{ name: "zphunk.eth", count: 69 }],
     tokens: [
-      { tokenId: "11378", name: "MATRIX", from: "cdcommie.eth", at: "2026-11-12T06:09:35.000Z", tx: HASH_A },
-      { tokenId: "11375", name: "MATRIX", from: "cdcommie.eth", at: "2026-11-12T06:09:35.000Z", tx: HASH_A },
-      { tokenId: "11486", name: "QUANTUM", from: "cdcommie.eth", at: "2026-10-28T22:31:47.000Z", tx: HASH_B },
-      { tokenId: "11488", name: "STATIC", from: "cdcommie.eth", at: "2026-10-28T05:53:23.000Z", tx: TX_PLAIN },
-      { tokenId: "11358", name: "MATRIX", from: "cdcommie.eth", at: "2026-10-22T19:39:35.000Z", tx: TX_ASK },
-      { tokenId: "11527", name: "INTERFERENCE", from: "dizyd.eth", at: "2026-11-16T23:45:47.000Z", tx: TX_BUNDLE },
+      { tokenId: "11526", name: "INTERFERENCE", from: "eitrgames.eth", vault: "void.eth", at: "2026-11-15T17:42:47.000000Z", tx: HASH_B },
+      { tokenId: "11522", name: "SINK", from: "eitrgames.eth", vault: "void.eth", at: "2026-11-14T12:41:59.000000Z", tx: TX_PLAIN },
+      { tokenId: "11492", name: "WAVE", from: "eitrgames.eth", vault: "void.eth", at: "2026-11-14T12:41:59.000000Z", tx: TX_ASK },
+      { tokenId: "11378", name: "MATRIX", from: "cdcommie.eth", vault: "poolvoid.eth", at: "2026-11-12T06:09:35.000000Z", tx: HASH_A },
+      { tokenId: "11375", name: "MATRIX", from: "cdcommie.eth", vault: "poolvoid.eth", at: "2026-11-12T06:09:35.000000Z", tx: HASH_A },
+      { tokenId: "11486", name: "QUANTUM", from: "cdcommie.eth", vault: "poolvoid.eth", at: "2026-10-28T22:31:47.000000Z", tx: HASH_B },
+      { tokenId: "11488", name: "STATIC", from: "cdcommie.eth", vault: "poolvoid.eth", at: "2026-10-28T05:53:23.000000Z", tx: TX_PLAIN },
+      { tokenId: "11358", name: "MATRIX", from: "cdcommie.eth", vault: "poolvoid.eth", at: "2026-10-22T19:39:35.000000Z", tx: TX_ASK },
+      { tokenId: "11527", name: "INTERFERENCE", from: "dizyd.eth", vault: "poolvoid.eth", at: "2026-11-16T23:45:47.000000Z", tx: TX_BUNDLE },
     ],
-    newestAt: "2026-11-16T23:45:47.000000Z", source: "https://eth.blockscout.com/api/v2/addresses/x/token-transfers",
-    note: "Incoming SIM transfers to poolvoid.eth in a bounded explorer sample." };
-  const html = voidOutputCard(made, pool);
+    newestAt: "2026-11-16T23:45:47.000000Z",
+    sources: [{ label: "void.eth feed", url: `https://eth.blockscout.com/addresses/${VOID_ETH}/token-transfers` },
+      { label: "poolvoid.eth feed", url: `https://eth.blockscout.com/addresses/${POOL_VOID}/token-transfers` }],
+    note: "Incoming SIM transfers into void.eth and poolvoid.eth in a bounded explorer sample." };
+  const html = voidOutputCard(made, vaults);
   assert.match(html, /Created by collapse/);
   assert.match(html, /<b>200<\/b> collapse rows/);
-  assert.match(html, /<b>5<\/b> of them now in poolvoid.eth/);
-  assert.match(html, /<b>57<\/b> total void-pool tokens/);
+  assert.match(html, /<b>8<\/b> of them now in void vaults/);
+  assert.match(html, /<b>2<\/b> senders in this made sample/);
+  assert.match(html, /<b>69<\/b> in the full void sample/);
+  assert.match(html, /<b>451<\/b> total void tokens/);
+  assert.match(html, /void.eth <b>394<\/b>/);
+  assert.match(html, /poolvoid.eth <b>57<\/b>/);
   assert.match(html, /capped made sample/);
   assert.match(html, /<strong>79<small>in void 3<\/small><\/strong>/);
+  assert.match(html, /<strong>29<small>in void 1<\/small><\/strong>/);
+  assert.match(html, /<strong>23<small>in void 1<\/small><\/strong>/);
+  assert.match(html, /<strong>22<small>in void 0<\/small><\/strong>/);
   assert.match(html, /<strong>7<small>in void 1<\/small><\/strong>/);
   assert.match(html, /#11378/);
+  assert.match(html, /#11526/);
   assert.match(html, /cdcommie.eth/);
+  assert.match(html, /eitrgames.eth/);
+  assert.match(html, /void.eth feed/);
   assert.match(html, /poolvoid.eth feed/);
   assert.doesNotMatch(html, /#11527/, "a void token outside the made sample is excluded");
+  assert.match(html, /void.eth and poolvoid.eth/);
   assert.match(html, /matches token IDs shared/);
-  assert.match(voidOutputCard(made, { ok: false, error: "Explorer offline" }), /Void pool read failed: Explorer offline/);
+  assert.match(voidOutputCard(made, { ok: false, error: "Explorer offline" }), /Void vault read failed: Explorer offline/);
   assert.match(voidOutputCard({ ok: false, error: "SIM offline" }), /Collapse-output sample unavailable: SIM offline/);
 });
 test("pulse view reads supply, verified sales, and recipe changes, and caches a success", async () => {
@@ -395,17 +438,21 @@ test("pulse view reads supply, verified sales, and recipe changes, and caches a 
   assert.equal(p.market.inspectedTransactions, 5, "mints and other collections are filtered before receipt reads");
   assert.equal(p.voids.ok, true);
   assert.equal(p.voids.counted, 0, "the fixture has no zero-address burn transfers");
-  assert.equal(p.voidPool.ok, true);
-  assert.equal(p.voidPool.counted, 3, "only real transfers into the void pool count");
-  assert.deepEqual(p.voidPool.counts, [{ name: "INTERFERENCE", count: 1 }, { name: "MATRIX", count: 1 }, { name: "STATIC", count: 1 }]);
-  assert.equal(p.voidPool.tokens[0].from, "cdcommie.eth");
+  assert.equal(p.voidVaults.ok, true);
+  assert.equal(p.voidVaults.counted, 5, "only real transfers into the two void vaults count");
+  assert.deepEqual(p.voidVaults.vaults.map((v) => v.label), ["void.eth", "poolvoid.eth"]);
+  assert.deepEqual(p.voidVaults.counts, [
+    { name: "FRACTURE", count: 1 }, { name: "INTERFERENCE", count: 1 }, { name: "MATRIX", count: 1 },
+    { name: "STATIC", count: 1 }, { name: "UNREAL", count: 1 },
+  ]);
+  assert.equal(p.voidVaults.tokens.some((t) => t.from === "cdcommie.eth"), true);
   assert.equal(p.voidOutputs.ok, true);
   assert.equal(p.voidOutputs.counted, 3);
   assert.deepEqual(p.voidOutputs.counts, [{ name: "MATRIX", count: 1 }, { name: "STATIC", count: 1 }, { name: "UNREAL", count: 1 }]);
   assert.deepEqual(p.voidOutputs.tokenIds, ["5001", "5002", "5003"]);
   assert.equal(calls.some((c) => c.social), true);
   assert.equal(calls.some((c) => c.gallery), true);
-  assert.equal(calls.some((c) => c.pool), true);
+  assert.equal(calls.some((c) => c.vault), true);
   assert.equal(p.market.recentStats.count, 2);
   assert.equal(p.market.latestSaleAt, new Date(8800 * 12 * 1000).toISOString());
   assert.equal(p.market.observedAt, new Date(NOW * 12 * 1000).toISOString());

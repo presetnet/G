@@ -187,18 +187,25 @@ export function voidCard(v, types = {}, typeSource = "") {
     <p class="sc-note">${esc(v.note || "Recent burn transfers from the SIM collection.")} Source: ${source}.</p>
   </article>`;
 }
-export function voidOutputCard(v, pool) {
+export function voidOutputCard(v, vaults) {
   if (!v?.ok) return `<article class="sc-card sc-void-card"><h5>Created by collapse → in the void</h5><p class="sc-note">Collapse-output sample unavailable: ${esc(v?.error || "no data")}.</p></article>`;
   const made = Array.isArray(v?.counts) ? v.counts : [];
-  const poolOk = !!pool?.ok;
+  const vaultOk = !!vaults?.ok;
   const madeIds = new Set((Array.isArray(v?.tokenIds) ? v.tokenIds : []).map(String));
-  const poolTokens = poolOk && Array.isArray(pool.tokens) ? pool.tokens : [];
-  const matched = madeIds.size ? poolTokens.filter((t) => madeIds.has(String(t.tokenId))) : [];
+  const vaultTokens = vaultOk && Array.isArray(vaults.tokens) ? vaults.tokens : [];
+  const matched = madeIds.size ? vaultTokens.filter((t) => madeIds.has(String(t.tokenId))) : [];
   const voided = new Map();
-  for (const token of matched) voided.set(token.name, (voided.get(token.name) || 0) + 1);
+  const senderMap = new Map();
+  for (const token of matched) {
+    voided.set(token.name, (voided.get(token.name) || 0) + 1);
+    const sender = String(token.from || "unknown sender");
+    const row = senderMap.get(sender) || { name: sender, count: 0 };
+    row.count++;
+    senderMap.set(sender, row);
+  }
   const madeTotal = Math.max(0, Number(v?.counted) || 0);
-  const poolTotal = poolOk ? Math.max(0, Number(pool.counted) || 0) : 0;
-  const matchedTotal = matched.length;
+  const vaultTotal = vaultOk ? Math.max(0, Number(vaults.counted) || 0) : 0;
+  const senderTotal = vaultOk ? Math.max(0, Number(vaults.senderCount) || 0) : 0;
   const shown = made.slice(0, 9);
   const max = shown.reduce((m, r) => Math.max(m, Number(r.count) || 0), 0) || 1;
   const rows = shown.map((r) => {
@@ -208,35 +215,46 @@ export function voidOutputCard(v, pool) {
   }).join("");
   const rest = made.length > shown.length
     ? `<details class="sc-void-more"><summary>All observed outputs (${made.length})</summary><p>${made.map((r) => `${esc(r.name)} ${esc(r.count)}`).join(" · ")}</p></details>` : "";
-  const chips = matched.slice(0, 6).map((t) => {
-    const body = `<b>#${esc(t.tokenId)}</b><span>${esc(t.name)}</span><small>${esc(t.from || "unknown sender")}</small>`;
+  const senderRows = [...senderMap.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  const maxSender = senderRows[0]?.count || 1;
+  const senderBlock = senderRows.length ? `<div class="sc-void-senders"><div class="sc-void-legend"><span>sender</span><span>voided from made sample</span><span>count</span></div>${senderRows.map((s) => `<div class="sc-void-sender"><span title="${esc(s.name)}">${esc(s.name)}</span><i aria-hidden="true"><b style="width:${(s.count / maxSender * 100).toFixed(1)}%"></b></i><strong>${num(s.count)}</strong></div>`).join("")}</div>` : "";
+  const displayed = [...matched].sort((a, b) => {
+    const av = a.vault === "poolvoid.eth" ? 0 : 1, bv = b.vault === "poolvoid.eth" ? 0 : 1;
+    return av - bv || (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0) || String(a.tokenId).localeCompare(String(b.tokenId));
+  });
+  const chips = displayed.slice(0, 8).map((t) => {
+    const body = `<b>#${esc(t.tokenId)}</b><span>${esc(t.name)}</span><small>${esc(t.from || "unknown sender")} · ${esc(t.vault || "void vault")}</small>`;
     return /^0x[0-9a-f]{64}$/i.test(t.tx || "")
       ? `<a href="https://eth.blockscout.com/tx/${esc(t.tx)}" target="_blank" rel="noopener noreferrer" title="${esc(t.at || "void transfer")}">${body}</a>`
       : `<span class="sc-void-chip">${body}</span>`;
   }).join("");
   const ledger = chips ? `<div class="sc-void-ledger">${chips}</div>` : "";
-  const allTokens = matched.length > 6
-    ? `<details class="sc-void-more"><summary>All matched void tokens (${num(matchedTotal)})</summary><p>${matched.map((t) => `#${esc(t.tokenId)} ${esc(t.name)} ← ${esc(t.from || "?")}`).join(" · ")}</p></details>` : "";
-  const sources = [link(v?.source, "activity feed"), poolOk && pool.pool
-    ? link(`https://eth.blockscout.com/address/${pool.pool}`, "poolvoid.eth feed") : "void feed unavailable"].join(" · ");
+  const allTokens = matched.length > 8
+    ? `<details class="sc-void-more"><summary>All matched void tokens (${num(matched.length)})</summary><p>${matched.map((t) => `#${esc(t.tokenId)} ${esc(t.name)} ← ${esc(t.from || "?")} (${esc(t.vault || "void")})`).join(" · ")}</p></details>` : "";
+  const split = vaultOk && Array.isArray(vaults.vaults) && vaults.vaults.length
+    ? `<div class="sc-void-split">${vaults.vaults.map((x) => `<span>${esc(x.label)} <b>${num(x.counted)}</b></span>`).join("")}</div>` : "";
+  const sourceLinks = vaultOk && Array.isArray(vaults.sources) && vaults.sources.length
+    ? vaults.sources.map((s) => link(s.url, s.label)).join(" · ")
+    : (vaultOk && vaults.source ? link(vaults.source, "void feeds") : "void feeds unavailable");
   return `<article class="sc-card sc-void-card">
     <h5>Created by collapse → in the void</h5>
-    <p class="sc-note"><b>${num(madeTotal)}</b> collapse rows · <b>${num(matchedTotal)}</b> of them now in poolvoid.eth · <b>${num(poolTotal)}</b> total void-pool tokens${poolOk && pool.capped ? " · capped sample" : ""}${poolOk && pool.newestAt ? ` · latest void ${when(pool.newestAt)}` : ""}${poolOk ? "" : ` · ${esc(pool?.error || "void feed unavailable")}`}${v?.unread ? ` · ${num(v.unread)} unnamed output${v.unread === 1 ? "" : "s"}` : ""}${v?.capped ? " · capped made sample" : ""}.</p>
+    <p class="sc-note"><b>${num(madeTotal)}</b> collapse rows · <b>${num(matched.length)}</b> of them now in void vaults · <b>${num(senderMap.size)}</b> senders in this made sample / <b>${num(senderTotal)}</b> in the full void sample · <b>${num(vaultTotal)}</b> total void tokens${vaultOk && vaults.capped ? " · capped sample" : ""}${vaultOk && vaults.newestAt ? ` · latest void ${when(vaults.newestAt)}` : ""}${vaultOk ? "" : ` · ${esc(vaults?.error || "void feed unavailable")}`}${v?.unread ? ` · ${num(v.unread)} unnamed output${v.unread === 1 ? "" : "s"}` : ""}${v?.capped ? " · capped made sample" : ""}.</p>
+    ${split}
     ${made.length ? `<div class="sc-void-legend"><span>TYPE</span><span>newest made</span><span>made / void</span></div><div class="sc-void-list">${rows}</div>` : '<p class="sc-note">No collapse outputs in this sample.</p>'}
     ${rest}
-    ${ledger}${allTokens}
-    <p class="sc-note">${esc(v?.note || "Recent collapse outputs from SIM's activity feed.")} ${poolOk ? esc(pool.note || "") : `Void pool read failed: ${esc(pool?.error || "no data")}.`} “In void” matches token IDs shared by the made rows and the void-pool feed; other void-pool tokens are excluded. Sources: ${sources}.</p>
+    ${senderBlock}${ledger}${allTokens}
+    <p class="sc-note">${esc(v?.note || "Recent collapse outputs from SIM's activity feed.")} ${vaultOk ? esc(vaults.note || "") : `Void vault read failed: ${esc(vaults?.error || "no data")}.`} “In void” matches token IDs shared by the made rows and transfers into void.eth or poolvoid.eth; other void tokens are excluded. Sources: ${link(v?.source, "activity feed")} · ${sourceLinks}.</p>
   </article>`;
 }
 
 function renderPulse(error = null) {
   const target = root.querySelector("#scPulse");
   if (!pulseData) {
-    target.innerHTML = `<p class="sc-note${error ? " sc-error" : ""}">${esc(error || "Reading live supply, paid prices, zero-address burns, the void pool, collapse outputs, and recipe changes from Ethereum…")}</p>`;
+    target.innerHTML = `<p class="sc-note${error ? " sc-error" : ""}">${esc(error || "Reading live supply, paid prices, zero-address burns, both void vaults, collapse outputs, and recipe changes from Ethereum…")}</p>`;
     return;
   }
   const p = pulseData;
-  target.innerHTML = `${error ? `<p class="sc-error">Refresh failed: ${esc(error)}. The figures below are the previous snapshot.</p>` : ""}<div class="sc-cards">${supplyCard(p.supply)}${marketCard(p.market)}${voidCard(p.voids, recipeData?.types, recipeData?.source)}${voidOutputCard(p.voidOutputs, p.voidPool)}${changesCard(p.changes)}</div><p class="sc-note">Last completed read ${esc(stamp(p.checkedAt))} · block ${num(p.block)} · ${p.cached ? "cached response ≤ 60s" : "fresh RPC read"} · automatic refresh attempted every minute · ${link(p.source, "read the contract")}</p>`;
+  target.innerHTML = `${error ? `<p class="sc-error">Refresh failed: ${esc(error)}. The figures below are the previous snapshot.</p>` : ""}<div class="sc-cards">${supplyCard(p.supply)}${marketCard(p.market)}${voidCard(p.voids, recipeData?.types, recipeData?.source)}${voidOutputCard(p.voidOutputs, p.voidVaults)}${changesCard(p.changes)}</div><p class="sc-note">Last completed read ${esc(stamp(p.checkedAt))} · block ${num(p.block)} · ${p.cached ? "cached response ≤ 60s" : "fresh RPC read"} · automatic refresh attempted every minute · ${link(p.source, "read the contract")}</p>`;
   tickClocks();
 }
 async function refreshPulse() {
@@ -335,11 +353,11 @@ export function initSimCollapse() {
   fold.open = true;
   fold.innerHTML = `<summary>SIM burn → upgrade · recipes & collapse decoder</summary><section id="simCollapse" class="sim-collapse" aria-labelledby="scTitle">
     <div class="desk-toolbar"><h3 id="scTitle">Burn → upgrade</h3><p>Live recipes and exact burn batches. Read-only; no wallet connection, saved addresses, or saved lookup history.</p></div>
-    <div class="sc-subhead sc-pulse-head"><h4>Supply, paid prices, zero-address burns, void pool, collapse outputs, and rule changes</h4><button type="button" id="scPulseRefresh">Refresh now</button></div>
-    <div id="scPulse" aria-live="polite"><p class="sc-note">Reading live supply, paid prices, zero-address burns, the void pool, collapse outputs, and recipe changes from Ethereum…</p></div>
+    <div class="sc-subhead sc-pulse-head"><h4>Supply, paid prices, zero-address burns, both void vaults, collapse outputs, and rule changes</h4><button type="button" id="scPulseRefresh">Refresh now</button></div>
+    <div id="scPulse" aria-live="polite"><p class="sc-note">Reading live supply, paid prices, zero-address burns, both void vaults, collapse outputs, and recipe changes from Ethereum…</p></div>
     <div class="sc-layout"><section><div class="sc-subhead"><h4>Current recipes</h4><button type="button" id="scRefresh">Reload recipes</button></div><div id="scRecipes" aria-live="polite"><p class="sc-note">Reading recipes…</p></div></section>
     <section><h4>What went into a collapse?</h4><form id="scForm" class="sc-form"><label for="scInput">Transaction hashes or output token IDs · up to four</label><textarea id="scInput" rows="2" autocomplete="off" spellcheck="false" placeholder="Paste 0x… transaction hashes or output token IDs"></textarea><div><button id="scDecode" type="submit">Decode batches</button><button id="scClear" type="button">Clear lookups</button></div></form><div id="scResults" aria-live="polite"><p class="sc-note">Each result lists the burned names and IDs together under the output they created.</p></div></section></div>
-    <details class="sc-mechanics"><summary>What determines the upgrade and its traits?</summary><p>The chosen formula defines the output TYPE pool. Your input token IDs, rarity and other traits do not enter the output seed; they only have to meet the recipe.</p><p>Seed = keccak256(abi.encode(chain ID, collection, mint recipient, new token ID)). Secondary traits are deterministic. Another mint or collapse can advance the shared token counter before your transaction lands. Direct minting is owner-only.</p><p>Existing TYPE names are intentional, including UNDEFINED. New recipes and fee changes can be introduced by the owner. The zero-address burn card reads the newest burn transfers from the collection's public explorer feed and groups them by each burned token's own TYPE metadata; it is a bounded recent sample, not a lifetime burn ledger. The non-primitive list below it is the live TYPE registry outside the original eight, with no counts implied. The created-by-collapse card counts output TYPEs from SIM's newest activity rows; those are items produced, not items burned. Its “in void” column matches those exact output token IDs against a separate feed of SIM tokens transferred to poolvoid.eth and groups the matches by each token's own TYPE metadata. Current recipes accept only the original eight TYPEs as inputs, so the burn mix, the void pool, and the collapse-output mix answer different questions. This panel reads the current state rather than assuming yesterday’s rules.</p></details>
+    <details class="sc-mechanics"><summary>What determines the upgrade and its traits?</summary><p>The chosen formula defines the output TYPE pool. Your input token IDs, rarity and other traits do not enter the output seed; they only have to meet the recipe.</p><p>Seed = keccak256(abi.encode(chain ID, collection, mint recipient, new token ID)). Secondary traits are deterministic. Another mint or collapse can advance the shared token counter before your transaction lands. Direct minting is owner-only.</p><p>Existing TYPE names are intentional, including UNDEFINED. New recipes and fee changes can be introduced by the owner. The zero-address burn card reads the newest burn transfers from the collection's public explorer feed and groups them by each burned token's own TYPE metadata; it is a bounded recent sample, not a lifetime burn ledger. The non-primitive list below it is the live TYPE registry outside the original eight, with no counts implied. The created-by-collapse card counts output TYPEs from SIM's newest activity rows; those are items produced, not items burned. Its “in void” column matches those exact output token IDs against separate feeds of SIM tokens transferred into void.eth and poolvoid.eth, then groups the matches by each token's own TYPE metadata and sender. Other people's void transfers are counted from both vaults, not assumed from the newest made sample. Current recipes accept only the original eight TYPEs as inputs, so the burn mix, the void vaults, and the collapse-output mix answer different questions. This panel reads the current state rather than assuming yesterday’s rules.</p></details>
   </section>`;
   const anchor = document.getElementById("assetViewer")?.closest("details") || document.getElementById("simDesk")?.closest("details");
   if (anchor) anchor.before(fold);
