@@ -68,7 +68,9 @@ const feed = [
 const vaultTransfer = (id, name, from, at, tx, to = POOL_VOID) => ({
   block_number: "8800", timestamp: at, transaction_hash: tx, log_index: 2,
   from: { hash: from }, to: { hash: to }, token: { address_hash: SIM_CONTRACT },
-  total: { token_id: id, token_instance: { metadata: { name, attributes: [{ trait_type: "TYPE", value: name }] } } },
+  total: { token_id: id, token_instance: { metadata: { name,
+    image: `https://sim.tech/api/nft-thumbnail/1/${SIM_CONTRACT}/${id}`,
+    attributes: [{ trait_type: "TYPE", value: name }] } } },
 });
 const voidEthFeed = [
   vaultTransfer("7001", "FRACTURE", SELLER, "2026-11-15T17:42:47.000000Z", HASH_B, VOID_ETH),
@@ -274,6 +276,7 @@ test("void vaults read both ENS destinations with unique tokens, TYPEs, and send
   assert.equal(p.tokens[0].tokenId, "7001");
   assert.equal(p.tokens[0].from, "cdcommie.eth", "SIM activity labels the sender");
   assert.equal(p.tokens[0].vault, "void.eth");
+  assert.equal(p.tokens[0].image, `https://sim.tech/api/nft-thumbnail/1/${SIM_CONTRACT}/7001`);
   assert.equal(p.newestAt, "2026-11-16T23:45:47.000000Z");
   assert.match(urls[1], new RegExp(`/addresses/${VOID_ETH}/token-transfers`));
   assert.match(urls[2], /block_number=8700/);
@@ -358,7 +361,7 @@ test("unnamed collapse output is still named from its receipt formula", async ()
   assert.equal(o.unread, 0);
   assert.equal("voided" in o, false);
 });
-test("the collapse card shows made/void by TYPE and who else voided those exact tokens", () => {
+test("the collapse card shows made/void by TYPE, art thumbnails, and subset clarity", () => {
   const made = { ok: true, counted: 200, matched: 200, unread: 0, pages: 9, capped: true,
     counts: [
       { name: "MATRIX", count: 79 }, { name: "QUANTUM", count: 29 }, { name: "WAVE", count: 23 },
@@ -368,19 +371,19 @@ test("the collapse card shows made/void by TYPE and who else voided those exact 
     tokenIds: ["11378", "11375", "11486", "11488", "11358", "11526", "11522", "11492"],
     newestAt: "2026-11-19T06:03:59.000Z", source: "https://sim.tech/api/mainnet/social",
     note: "Outputs created by collapses, not items burned; recent sample." };
-  const vaults = { ok: true, counted: 451, capped: false, senderCount: 69,
+  const thumb = (id) => `https://sim.tech/api/nft-thumbnail/1/${SIM_CONTRACT}/${id}`;
+  const vaults = { ok: true, counted: 451, capped: false,
     vaults: [{ label: "void.eth", counted: 394 }, { label: "poolvoid.eth", counted: 57 }],
-    senders: [{ name: "zphunk.eth", count: 69 }],
     tokens: [
-      { tokenId: "11526", name: "INTERFERENCE", from: "eitrgames.eth", vault: "void.eth", at: "2026-11-15T17:42:47.000000Z", tx: HASH_B },
-      { tokenId: "11522", name: "SINK", from: "eitrgames.eth", vault: "void.eth", at: "2026-11-14T12:41:59.000000Z", tx: TX_PLAIN },
-      { tokenId: "11492", name: "WAVE", from: "eitrgames.eth", vault: "void.eth", at: "2026-11-14T12:41:59.000000Z", tx: TX_ASK },
-      { tokenId: "11378", name: "MATRIX", from: "cdcommie.eth", vault: "poolvoid.eth", at: "2026-11-12T06:09:35.000000Z", tx: HASH_A },
-      { tokenId: "11375", name: "MATRIX", from: "cdcommie.eth", vault: "poolvoid.eth", at: "2026-11-12T06:09:35.000000Z", tx: HASH_A },
-      { tokenId: "11486", name: "QUANTUM", from: "cdcommie.eth", vault: "poolvoid.eth", at: "2026-10-28T22:31:47.000000Z", tx: HASH_B },
-      { tokenId: "11488", name: "STATIC", from: "cdcommie.eth", vault: "poolvoid.eth", at: "2026-10-28T05:53:23.000000Z", tx: TX_PLAIN },
-      { tokenId: "11358", name: "MATRIX", from: "cdcommie.eth", vault: "poolvoid.eth", at: "2026-10-22T19:39:35.000000Z", tx: TX_ASK },
-      { tokenId: "11527", name: "INTERFERENCE", from: "dizyd.eth", vault: "poolvoid.eth", at: "2026-11-16T23:45:47.000000Z", tx: TX_BUNDLE },
+      { tokenId: "11526", name: "INTERFERENCE", vault: "void.eth", image: thumb("11526"), at: "2026-11-15T17:42:47.000000Z", tx: HASH_B },
+      { tokenId: "11522", name: "SINK", vault: "void.eth", image: thumb("11522"), at: "2026-11-14T12:41:59.000000Z", tx: TX_PLAIN },
+      { tokenId: "11492", name: "WAVE", vault: "void.eth", image: thumb("11492"), at: "2026-11-14T12:41:59.000000Z", tx: TX_ASK },
+      { tokenId: "11378", name: "MATRIX", vault: "poolvoid.eth", image: thumb("11378"), at: "2026-11-12T06:09:35.000000Z", tx: HASH_A },
+      { tokenId: "11375", name: "MATRIX", vault: "poolvoid.eth", image: thumb("11375"), at: "2026-11-12T06:09:35.000000Z", tx: HASH_A },
+      { tokenId: "11486", name: "QUANTUM", vault: "poolvoid.eth", image: thumb("11486"), at: "2026-10-28T22:31:47.000000Z", tx: HASH_B },
+      { tokenId: "11488", name: "STATIC", vault: "poolvoid.eth", image: thumb("11488"), at: "2026-10-28T05:53:23.000000Z", tx: TX_PLAIN },
+      { tokenId: "11358", name: "MATRIX", vault: "poolvoid.eth", image: thumb("11358"), at: "2026-10-22T19:39:35.000000Z", tx: TX_ASK },
+      { tokenId: "11527", name: "INTERFERENCE", vault: "poolvoid.eth", image: thumb("11527"), at: "2026-11-16T23:45:47.000000Z", tx: TX_BUNDLE },
     ],
     newestAt: "2026-11-16T23:45:47.000000Z",
     sources: [{ label: "void.eth feed", url: `https://eth.blockscout.com/addresses/${VOID_ETH}/token-transfers` },
@@ -388,13 +391,13 @@ test("the collapse card shows made/void by TYPE and who else voided those exact 
     note: "Incoming SIM transfers into void.eth and poolvoid.eth in a bounded explorer sample." };
   const html = voidOutputCard(made, vaults);
   assert.match(html, /Created by collapse/);
-  assert.match(html, /<b>200<\/b> collapse rows/);
-  assert.match(html, /<b>8<\/b> of them now in void vaults/);
-  assert.match(html, /<b>2<\/b> senders in this made sample/);
-  assert.match(html, /<b>69<\/b> in the full void sample/);
-  assert.match(html, /<b>451<\/b> total void tokens/);
+  assert.match(html, /<b>200<\/b> newest collapse outputs sampled/);
+  assert.match(html, /<b>8<\/b> of those exact tokens now in void vaults/);
+  assert.match(html, /<b>451<\/b> void tokens in both vault feeds/);
   assert.match(html, /void.eth <b>394<\/b>/);
   assert.match(html, /poolvoid.eth <b>57<\/b>/);
+  assert.match(html, /subset of the <b>200<\/b> sampled outputs/);
+  assert.match(html, /not current TYPE supply/);
   assert.match(html, /capped made sample/);
   assert.match(html, /<strong>79<small>in void 3<\/small><\/strong>/);
   assert.match(html, /<strong>29<small>in void 1<\/small><\/strong>/);
@@ -403,11 +406,11 @@ test("the collapse card shows made/void by TYPE and who else voided those exact 
   assert.match(html, /<strong>7<small>in void 1<\/small><\/strong>/);
   assert.match(html, /#11378/);
   assert.match(html, /#11526/);
-  assert.match(html, /cdcommie.eth/);
-  assert.match(html, /eitrgames.eth/);
+  assert.match(html, /<img src="https:\/\/sim\.tech\/api\/nft-thumbnail\/1\/[^"]+\/11378"/);
   assert.match(html, /void.eth feed/);
   assert.match(html, /poolvoid.eth feed/);
   assert.doesNotMatch(html, /#11527/, "a void token outside the made sample is excluded");
+  assert.doesNotMatch(html, /sender/i, "wallet labels are not part of this card");
   assert.match(html, /void.eth and poolvoid.eth/);
   assert.match(html, /matches token IDs shared/);
   assert.match(voidOutputCard(made, { ok: false, error: "Explorer offline" }), /Void vault read failed: Explorer offline/);

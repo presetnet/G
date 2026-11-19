@@ -204,6 +204,8 @@ export function burnTypeName(row) {
   const name = trait?.value || metadata?.name;
   return typeof name === "string" && name.trim() && name.length <= 40 ? name.trim().toUpperCase() : "TYPE UNREAD";
 }
+const tokenImage = (value) => /^https:\/\/(?:sim\.tech|simulation\.mypinata\.cloud|ipfs\.io)\//i.test(String(value || ""))
+  ? String(value) : null;
 
 export function summarizeVoidMix(rows, { pages = 0, capped = false, source = "", note = "" } = {}) {
   const counts = new Map();
@@ -275,6 +277,7 @@ export async function readVoidVaults(s, { contract, vaults = VOID_VAULTS, maxPag
         byToken.set(tokenId, {
           name: burnTypeName(t),
           tokenId,
+          image: tokenImage(t.total?.token_instance?.metadata?.image),
           from: addressNames.get(String(t.from?.hash).toLowerCase()) || t.from?.ens_domain_name || t.from?.hash || "",
           vault: vault.label,
           at: Number.isFinite(Date.parse(t.timestamp)) ? t.timestamp : null,
@@ -302,7 +305,7 @@ export async function readVoidVaults(s, { contract, vaults = VOID_VAULTS, maxPag
   const sortRows = (map) => [...map].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   const senders = [...senderMap.values()].map((sender) => ({ name: sender.name, count: sender.count, types: sortRows(sender.types).slice(0, 3) }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  const note = "Incoming SIM transfers into void.eth and poolvoid.eth in a bounded explorer sample, counted once per unique token ID. TYPE comes from each token's own metadata; sender labels come from SIM's public activity feed when available. These are observed transfers into void vaults, not zero-address burns, a lifetime total, or proof of permanent loss.";
+  const note = "Incoming SIM transfers into void.eth and poolvoid.eth in a bounded explorer sample, counted once per unique token ID. TYPE and thumbnail come from each token's own metadata. These are observed transfers into void vaults, not zero-address burns, a lifetime total, or proof of permanent loss.";
   return {
     ok: true,
     counted: rows.length,
