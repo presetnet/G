@@ -593,7 +593,8 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .sc-void-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sc-void-row > i { display: block; height: 3px; border-radius: 2px; background: #20262a; overflow: hidden; }
 .sc-void-row > i > b { display: block; height: 100%; border-radius: 2px; background: linear-gradient(90deg, #7f5bbd, #c9a7ff); }
-.sc-void-row > strong { color: #f3d88a; font-weight: 500; }
+.sc-void-row > strong { color: #f3d88a; font-weight: 500; text-align: right; }
+.sc-void-row > strong > small { display: block; color: #8f96a0; font-weight: 400; }
 .sc-void-more { font: .58rem/1.5 var(--font-mono); color: var(--muted); }
 .sc-void-more summary { cursor: pointer; color: #c9a7ff; }
 .sc-nonprimitive { margin-top: .2rem; padding-top: .5rem; border-top: 1px dashed #302a38; }

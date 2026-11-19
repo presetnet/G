@@ -22,6 +22,7 @@ const VOID_PAGES = 8;
 const VOID_BURNS = 400;
 const SOCIAL_PAGES = 12;
 const TRANSFER = new Interface(["event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)"]);
+const COLLAPSE_LOG = new Interface(["event Collapsed(uint256 indexed formulaId,uint256 indexed output,uint256[] inputs)"]);
 export const SEAPORT_ABI = new Interface([
   "event OrderFulfilled(bytes32 orderHash,address indexed offerer,address indexed zone,address recipient,tuple(uint8 itemType,address token,uint256 identifier,uint256 amount)[] offer,tuple(uint8 itemType,address token,uint256 identifier,uint256 amount,address recipient)[] consideration)",
 ]);
@@ -264,14 +265,31 @@ export async function readVoidOutputs(s, { maxPages = SOCIAL_PAGES } = {}) {
     cursor = more ? String(j.next) : "";
     if (!more) break;
   }
-  const counts = new Map();
+  let formulaNames;
+  async function outputName(event) {
+    const token = String(event.token);
+    if (names.has(token)) return names.get(token);
+    try {
+      formulaNames ??= new Map((await s.json(`${SIM_SITE}/api/mainnet/formulas`)).formulas.map((f) => [String(f.id), String(f.outputName || "").toUpperCase()]));
+      const receipt = await s.rpc("eth_getTransactionReceipt", [event.hash]);
+      for (const log of receipt?.logs || []) {
+        let parsed;
+        try { parsed = COLLAPSE_LOG.parseLog(log); } catch { continue; }
+        if (parsed && String(parsed.args.output) === token) return formulaNames.get(String(parsed.args.formulaId)) || "";
+      }
+    } catch { /* an unnamed output stays unread rather than being guessed */ }
+    return "";
+  }
+  const counts = new Map(), voidedByType = new Map();
   let unread = 0;
   for (const event of events) {
-    const name = names.get(String(event.token));
+    const name = await outputName(event);
     if (!name) { unread++; continue; }
     counts.set(name, (counts.get(name) || 0) + 1);
+    if (!names.has(String(event.token))) voidedByType.set(name, (voidedByType.get(name) || 0) + 1);
   }
   const times = events.map((e) => Number.isFinite(Number(e.timestamp)) ? new Date(Number(e.timestamp)).toISOString() : null).filter(Boolean).sort();
+  const sortRows = (map) => [...map].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   return {
     ok: true,
     counted: events.length,
@@ -279,11 +297,13 @@ export async function readVoidOutputs(s, { maxPages = SOCIAL_PAGES } = {}) {
     unread,
     pages,
     capped: events.length >= 200 || more || ids.some((id) => !names.has(id)),
-    counts: [...counts].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+    counts: sortRows(counts),
+    voided: [...voidedByType.values()].reduce((sum, n) => sum + n, 0),
+    voidedByType: sortRows(voidedByType),
     newestAt: times.at(-1) || null,
     oldestAt: times[0] || null,
     source,
-    note: "Newest collapse rows in SIM's public activity feed, matched to TYPE names in SIM's public gallery. These are outputs created by collapses, not items burned; this is a recent sample, not a lifetime total.",
+    note: "Newest collapse rows in SIM's public activity feed, matched to TYPE names in SIM's public gallery. Voided means the created output token is no longer present in that gallery; zero is observed in this sample, not a claim that a TYPE can never be destroyed. This is a recent sample, not a lifetime total.",
   };
 }
 

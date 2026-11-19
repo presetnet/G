@@ -190,17 +190,19 @@ export function voidCard(v, types = {}, typeSource = "") {
 export function voidOutputCard(v) {
   if (!v?.ok) return `<article class="sc-card sc-void-card"><h5>Created by collapse</h5><p class="sc-note">Collapse-output sample unavailable: ${esc(v?.error || "no data")}.</p></article>`;
   const counts = Array.isArray(v.counts) ? v.counts : [];
+  const voided = new Map((Array.isArray(v.voidedByType) ? v.voidedByType : []).map((r) => [r.name, Number(r.count) || 0]));
   const shown = counts.slice(0, 8);
   const max = shown.reduce((m, r) => Math.max(m, Number(r.count) || 0), 0) || 1;
   const rows = shown.map((r) => {
     const count = Math.max(0, Number(r.count) || 0);
-    return `<div class="sc-void-row"><span title="${esc(r.name)}">${esc(r.name)}</span><i aria-hidden="true"><b style="width:${(count / max * 100).toFixed(1)}%"></b></i><strong>${num(count)}</strong></div>`;
+    const gone = Math.max(0, voided.get(r.name) || 0);
+    return `<div class="sc-void-row"><span title="${esc(r.name)}">${esc(r.name)}</span><i aria-hidden="true"><b style="width:${(count / max * 100).toFixed(1)}%"></b></i><strong>${num(count)}<small>voided ${num(gone)}</small></strong></div>`;
   }).join("");
   const rest = counts.length > shown.length
     ? `<details class="sc-void-more"><summary>All observed outputs (${counts.length})</summary><p>${counts.map((r) => `${esc(r.name)} ${esc(r.count)}`).join(" · ")}</p></details>` : "";
   return `<article class="sc-card sc-void-card">
     <h5>Created by collapse</h5>
-    <p class="sc-note"><b>${num(v.counted)}</b> collapse row${v.counted === 1 ? "" : "s"}${v.unread ? ` · ${num(v.unread)} unnamed token${v.unread === 1 ? "" : "s"}` : ""} in SIM's newest activity sample${v.capped ? " · capped sample" : ""}${v.newestAt ? ` · latest ${when(v.newestAt)}` : ""}.</p>
+    <p class="sc-note"><b>${num(v.counted)}</b> collapse row${v.counted === 1 ? "" : "s"} · <b>${num(v.voided || 0)}</b> voided from this sample${v.unread ? ` · ${num(v.unread)} unnamed token${v.unread === 1 ? "" : "s"}` : ""}${v.capped ? " · capped sample" : ""}${v.newestAt ? ` · latest ${when(v.newestAt)}` : ""}.</p>
     ${rows ? `<div class="sc-void-list">${rows}</div>` : '<p class="sc-note">No collapse outputs in this sample.</p>'}
     ${rest}
     <p class="sc-note">${esc(v.note || "Recent collapse outputs from SIM's activity feed.")} Source: ${link(v.source, "activity feed")}.</p>

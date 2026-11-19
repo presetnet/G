@@ -268,26 +268,45 @@ test("collapse output breakdown follows SIM activity names and stays a recent sa
   assert.equal(o.unread, 0);
   assert.equal(o.pages, 2);
   assert.deepEqual(o.counts, [{ name: "STATIC", count: 2 }, { name: "MATRIX", count: 1 }]);
+  assert.equal(o.voided, 0, "every sampled output is still in the gallery");
+  assert.deepEqual(o.voidedByType, []);
   assert.match(urls[2], /cursor=2/);
-  assert.match(o.note, /outputs created by collapses, not items burned/);
+  assert.match(o.note, /voided means the created output token is no longer present/);
   const partial = await readVoidOutputs({ json: async (url) => url.includes("/social")
     ? { activity: [{ kind: "collapse", token: "9" }] } : { items: [], next: null } }, { maxPages: 1 });
   assert.equal(partial.unread, 1, "unnamed outputs are reported, not guessed");
   assert.equal(partial.capped, true);
   await assert.rejects(readVoidOutputs({ json: async () => ({ activity: null }) }), /activity feed unavailable/);
 });
+test("a created output absent from the gallery is counted as voided with its formula TYPE", async () => {
+  const collapse = new Interface(["event Collapsed(uint256 indexed formulaId,uint256 indexed output,uint256[] inputs)"]);
+  const encoded = collapse.encodeEventLog(collapse.getEvent("Collapsed"), [14n, 700n, []]);
+  const o = await readVoidOutputs({
+    json: async (url) => url.includes("/social") ? { activity: [{ kind: "collapse", token: "700", hash: "0xdead", timestamp: 1795068239000 }] }
+      : url.includes("/gallery") ? { items: [], next: null }
+        : { formulas: [{ id: "14", outputName: "MATRIX" }] },
+    rpc: async () => ({ logs: [{ address: SIM_CONTRACT, ...encoded }] }),
+  }, { maxPages: 1 });
+  assert.equal(o.counted, 1);
+  assert.equal(o.voided, 1);
+  assert.deepEqual(o.voidedByType, [{ name: "MATRIX", count: 1 }]);
+  assert.deepEqual(o.counts, [{ name: "MATRIX", count: 1 }]);
+  assert.equal(o.unread, 0);
+});
 test("the collapse-output card shows STATIC/MATRIX counts and never calls them burns", () => {
   const html = voidOutputCard({ ok: true, counted: 200, matched: 200, unread: 0, pages: 9, capped: true,
-    counts: [{ name: "MATRIX", count: 79 }, { name: "STATIC", count: 7 }], newestAt: "2026-11-19T06:03:59.000Z",
-    source: "https://sim.tech/api/mainnet/social", note: "Outputs created by collapses, not items burned; recent sample." });
+    counts: [{ name: "MATRIX", count: 79 }, { name: "STATIC", count: 7 }], voided: 2,
+    voidedByType: [{ name: "MATRIX", count: 2 }], newestAt: "2026-11-19T06:03:59.000Z",
+    source: "https://sim.tech/api/mainnet/social", note: "Outputs created by collapses; voided means absent from the public gallery." });
   assert.match(html, /Created by collapse/);
   assert.match(html, /<b>200<\/b> collapse rows/);
+  assert.match(html, /<b>2<\/b> voided from this sample/);
   assert.match(html, /capped sample/);
   assert.match(html, /MATRIX/);
-  assert.match(html, /<strong>79<\/strong>/);
+  assert.match(html, /<strong>79<small>voided 2<\/small><\/strong>/);
   assert.match(html, /STATIC/);
-  assert.match(html, /<strong>7<\/strong>/);
-  assert.match(html, /not items burned/);
+  assert.match(html, /<strong>7<small>voided 0<\/small><\/strong>/);
+  assert.match(html, /absent from the public gallery/);
   assert.match(html, /activity feed/);
   assert.match(voidOutputCard({ ok: false, error: "SIM offline" }), /Collapse-output sample unavailable: SIM offline/);
 });
