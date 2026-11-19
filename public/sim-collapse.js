@@ -198,15 +198,16 @@ export function voidOutputCard(v, vaults) {
   for (const token of matched) voided.set(token.name, (voided.get(token.name) || 0) + 1);
   const madeTotal = Math.max(0, Number(v?.counted) || 0);
   const vaultTotal = vaultOk ? Math.max(0, Number(vaults.counted) || 0) : 0;
-  const shown = made.slice(0, 9);
-  const max = shown.reduce((m, r) => Math.max(m, Number(r.count) || 0), 0) || 1;
-  const rows = shown.map((r) => {
+  const pctLabel = (pct) => pct > 0 && pct < 0.1 ? "<0.1%" : `${pct.toFixed(1)}%`;
+  const ranked = made.map((r, index) => {
     const count = Math.max(0, Number(r.count) || 0);
-    const gone = voided.get(r.name) || 0;
-    return `<div class="sc-void-row"><span title="${esc(r.name)}">${esc(r.name)}</span><i aria-hidden="true"><b style="width:${(count / max * 100).toFixed(1)}%"></b></i><strong>${num(count)}<small>in void ${num(gone)}</small></strong></div>`;
-  }).join("");
-  const rest = made.length > shown.length
-    ? `<details class="sc-void-more"><summary>All observed outputs (${made.length})</summary><p>${made.map((r) => `${esc(r.name)} ${esc(r.count)}`).join(" · ")}</p></details>` : "";
+    const gone = Math.min(count, Math.max(0, voided.get(r.name) || 0));
+    return { name: r.name, count, gone, pct: count ? gone / count * 100 : 0, index };
+  }).sort((a, b) => b.pct - a.pct || b.gone - a.gone || b.count - a.count || a.name.localeCompare(b.name) || a.index - b.index);
+  const shown = ranked.slice(0, 9);
+  const rows = shown.map((r, i) => `<div class="sc-void-row"><span title="${esc(r.name)}"><em>${i + 1}</em>${esc(r.name)}</span><i aria-hidden="true"><b style="width:${Math.min(100, r.pct).toFixed(1)}%"></b></i><strong>${pctLabel(r.pct)}<small>${num(r.gone)} / ${num(r.count)} in void</small></strong></div>`).join("");
+  const rest = ranked.length > shown.length
+    ? `<details class="sc-void-more"><summary>All observed outputs (${ranked.length})</summary><p>${ranked.map((r) => `${esc(r.name)} ${r.count} · ${pctLabel(r.pct)} void`).join(" · ")}</p></details>` : "";
   const displayed = [...matched].sort((a, b) => {
     const av = a.vault === "poolvoid.eth" ? 0 : 1, bv = b.vault === "poolvoid.eth" ? 0 : 1;
     return av - bv || (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0) || String(a.tokenId).localeCompare(String(b.tokenId));
@@ -231,7 +232,7 @@ export function voidOutputCard(v, vaults) {
     <p class="sc-note"><b>${num(madeTotal)}</b> newest collapse outputs sampled · <b>${num(matched.length)}</b> of those exact tokens now in void vaults · <b>${num(vaultTotal)}</b> void tokens in both vault feeds${vaultOk && vaults.capped ? " · capped sample" : ""}${vaultOk && vaults.newestAt ? ` · latest void ${when(vaults.newestAt)}` : ""}${vaultOk ? "" : ` · ${esc(vaults?.error || "void feed unavailable")}`}${v?.unread ? ` · ${num(v.unread)} unnamed output${v.unread === 1 ? "" : "s"}` : ""}${v?.capped ? " · capped made sample" : ""}.</p>
     <p class="sc-note sc-void-subset">The <b>${num(matched.length)}</b> voided tokens are a subset of the <b>${num(madeTotal)}</b> sampled outputs, not extra supply. These are sample counts, not current TYPE supply.</p>
     ${split}
-    ${made.length ? `<div class="sc-void-legend"><span>TYPE</span><span>made in sample</span><span>made / void</span></div><div class="sc-void-list">${rows}</div>` : '<p class="sc-note">No collapse outputs in this sample.</p>'}
+    ${made.length ? `<div class="sc-void-legend"><span>rank / TYPE</span><span>void share of made</span><span>% · void / made</span></div><div class="sc-void-list">${rows}</div>` : '<p class="sc-note">No collapse outputs in this sample.</p>'}
     ${rest}
     ${ledger}${allTokens}
     <p class="sc-note">${esc(v?.note || "Recent collapse outputs from SIM's activity feed.")} ${vaultOk ? esc(vaults.note || "") : `Void vault read failed: ${esc(vaults?.error || "no data")}.`} “In void” matches token IDs shared by the made rows and transfers into void.eth or poolvoid.eth; other void tokens are excluded. Sources: ${link(v?.source, "activity feed")} · ${sourceLinks}.</p>

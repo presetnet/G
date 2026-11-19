@@ -591,6 +591,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .sc-void-list { display: grid; gap: .35rem; }
 .sc-void-row { display: grid; grid-template-columns: minmax(0, 5.5rem) minmax(0, 1fr) auto; align-items: center; gap: .45rem; font: .6rem var(--font-mono); color: var(--ink); }
 .sc-void-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-void-row > span > em { display: inline-block; min-width: 1.1rem; color: #7f8790; font-style: normal; font-size: .55rem; }
 .sc-void-row > i { display: block; height: 3px; border-radius: 2px; background: #20262a; overflow: hidden; }
 .sc-void-row > i > b { display: block; height: 100%; border-radius: 2px; background: linear-gradient(90deg, #7f5bbd, #c9a7ff); }
 .sc-void-row > strong { color: #f3d88a; font-weight: 500; text-align: right; }

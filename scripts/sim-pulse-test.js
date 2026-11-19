@@ -361,7 +361,7 @@ test("unnamed collapse output is still named from its receipt formula", async ()
   assert.equal(o.unread, 0);
   assert.equal("voided" in o, false);
 });
-test("the collapse card shows made/void by TYPE, art thumbnails, and subset clarity", () => {
+test("the collapse card ranks TYPEs by void percentage, with art thumbnails and subset clarity", () => {
   const made = { ok: true, counted: 200, matched: 200, unread: 0, pages: 9, capped: true,
     counts: [
       { name: "MATRIX", count: 79 }, { name: "QUANTUM", count: 29 }, { name: "WAVE", count: 23 },
@@ -399,11 +399,17 @@ test("the collapse card shows made/void by TYPE, art thumbnails, and subset clar
   assert.match(html, /subset of the <b>200<\/b> sampled outputs/);
   assert.match(html, /not current TYPE supply/);
   assert.match(html, /capped made sample/);
-  assert.match(html, /<strong>79<small>in void 3<\/small><\/strong>/);
-  assert.match(html, /<strong>29<small>in void 1<\/small><\/strong>/);
-  assert.match(html, /<strong>23<small>in void 1<\/small><\/strong>/);
-  assert.match(html, /<strong>22<small>in void 0<\/small><\/strong>/);
-  assert.match(html, /<strong>7<small>in void 1<\/small><\/strong>/);
+  assert.match(html, /void share of made/);
+  assert.match(html, /<em>1<\/em>STATIC/);
+  assert.match(html, /<strong>14\.3%<small>1 \/ 7 in void<\/small><\/strong>/);
+  assert.match(html, /<em>2<\/em>SINK/);
+  assert.match(html, /<em>3<\/em>INTERFERENCE/);
+  assert.match(html, /<em>4<\/em>WAVE/);
+  assert.match(html, /<em>5<\/em>MATRIX/);
+  assert.match(html, /<strong>3\.8%<small>3 \/ 79 in void<\/small><\/strong>/);
+  assert.match(html, /<em>7<\/em>FRACTURE/);
+  assert.match(html, /<strong>0\.0%<small>0 \/ 22 in void<\/small><\/strong>/);
+  assert.ok(html.indexOf("<em>1</em>STATIC") < html.indexOf("<em>2</em>SINK"), "rows are ordered by void percentage");
   assert.match(html, /#11378/);
   assert.match(html, /#11526/);
   assert.match(html, /<img src="https:\/\/sim\.tech\/api\/nft-thumbnail\/1\/[^"]+\/11378"/);
