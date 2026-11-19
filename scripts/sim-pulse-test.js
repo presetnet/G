@@ -271,7 +271,7 @@ test("collapse output breakdown follows SIM activity names and stays a recent sa
   assert.equal(o.voided, 0, "every sampled output is still in the gallery");
   assert.deepEqual(o.voidedByType, []);
   assert.match(urls[2], /cursor=2/);
-  assert.match(o.note, /voided means the created output token is no longer present/);
+  assert.match(o.note, /Voided means the created output token is no longer present/);
   const partial = await readVoidOutputs({ json: async (url) => url.includes("/social")
     ? { activity: [{ kind: "collapse", token: "9" }] } : { items: [], next: null } }, { maxPages: 1 });
   assert.equal(partial.unread, 1, "unnamed outputs are reported, not guessed");
