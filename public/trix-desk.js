@@ -248,6 +248,16 @@ function renderBoxes(official, board, chain, preorder) {
   setHTML("boxRows", `${renderPreorder(preorder)}<div class="box-board-grid">${boards.map(([name, heads, raw, row]) => `<section><h3>${esc(name)}</h3>${rows(raw).length ? table(name, heads, rows(raw).slice(0, 20).map((r) => `<tr>${row(r)}</tr>`).join("")) : emptyRows(official, raw, "No entries reported.")}</section>`).join("")}</div>`);
 }
 
+export function renderTreasuryHoldings(src) {
+  const title = '<h4 class="board-subhead">Void treasury · top 20 by estimated USDC</h4>';
+  if (!src?.ok || src.stale) return title + empty("Treasury holdings unavailable.");
+  const body = rows(src.top).map((r, i) => `<tr><td>${i + 1}</td><td><b>${esc(r.symbol || "Token")}</b> ${link("https://solscan.io/token/", r.mint, short(r.mint))}</td>
+    <td class="desk-number">${fmt(r.balance, 3)}</td><td class="desk-number">${fmt(r.value, 3)}</td><td>${esc(r.via)} · ${clock(r.priceAt, "Price observation")}</td></tr>`).join("");
+  return title + `<p class="desk-context">${fmt(src.priced, 0)} of ${fmt(src.total, 0)} held mints priced · ${fmt(src.total - src.priced, 0)} unpriced · ${clock(src.checkedAt, "Balance scan")}${src.dexFailed ? " · DEX lookup incomplete" : ""}.</p>` +
+    (body ? table("Highest valued token balances held by the void treasury", [["#"], ["Token / mint"], ["Units held"], ["Est. USDC"], ["Price source"]], body) : empty("No priced balances.")) +
+    '<p class="desk-context">Current Solana token balances, excluding native SOL. TRIX market cap × share of mint supply, or DEX Screener price × units held. Assumes $1 per USDC; these are not liquidation quotes.</p>';
+}
+
 function renderActivity(money, geoff) {
   const trades = rows(money?.recentTrades).slice(0, 12);
   const check = endpoint(money, "trades");
@@ -384,6 +394,7 @@ export function renderTrixDesk(value) {
   const sources = latest?.sources || {};
   renderCoins(sources["trix.meme.market"], sources["trix.frontpage"]);
     renderBoxes(sources["trix.boxes"], sources["trix.boxboard"], sources["trix.boxchain"], sources["trix.preorder"]);
+    setHTML("packVoidHoldings", renderTreasuryHoldings(sources["trix.holdings"]));
   const generations = renderActivity(sources["trix.money"], sources["trix.geoff"]);
   renderPoints(sources["trix.market"], sources["trix.tiers"]);
   renderArt(sources["trix.market"]);

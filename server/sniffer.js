@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { packPace } from "../public/pack-pace.js";
 import { collectPackFlow, collectPackCensus } from "./pack-flow.js";
+import { collectVoidHoldings } from "./trix-holdings.js";
 import { config } from "./config.js";
 import { collectVoids } from "./trix-voids.js";
 import { loadMiningSurfaceCache, saveMiningSurfaceCache } from "./store.js";
@@ -5991,6 +5992,7 @@ function simMinuteAttempts(previous) {
 }
 
 function trixAttempts(previous) {
+  const memeMarket = sniffTrixMemeMarket();
   return [
     ["trix.geoff", sniffTrixGeoff({ previous: previous?.sources?.["trix.geoff"] || null })],
     ["trix.market", sniffTrixMarket()],
@@ -6003,7 +6005,8 @@ function trixAttempts(previous) {
     ["trix.packcensus", collectPackCensus(solanaRpc, previous?.sources?.["trix.packcensus"] || null)],
     ["trix.packmints", sniffPackMints()],
     ["trix.preorder", sniffTrixPreorder({ previous: previous?.sources?.["trix.preorder"] || null })],
-    ["trix.meme.market", sniffTrixMemeMarket()],
+    ["trix.meme.market", memeMarket],
+    ["trix.holdings", memeMarket.then(market => collectVoidHoldings(solanaRpc, market, previous?.sources?.["trix.holdings"]))],
     ["trix.frontpage", sniffTrixFrontpage()],
     ["trix.tiers", sniffTrixTiers()],
     ["trix.fee.config", sniffTrixFeeConfig()],
