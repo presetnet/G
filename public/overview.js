@@ -77,7 +77,7 @@ export function renderOverview(latest, events = []) {
     card("AZY activity", current(azy) ? `${fmt(azy.azySolDepositsSol, 4)} SOL observed` : "Intake unavailable", "Campaign-only intake · not a separate Geoff node-key revenue stream", azy, "simDesk", "Inspect campaign records"),
   ].join("");
   const activity = document.getElementById("packActivity");
-  if (activity) activity.innerHTML = renderPackActivity(current(flow) ? flow : null);
+  if (activity) activity.innerHTML = renderPackGaps(sources["trix.packmints"], census) + renderPackActivity(current(flow) ? flow : null);
   const seen = new Set();
   const changes = events.filter(e => { const delta=Date.now()-Date.parse(e.at); return delta>=0 && delta<=EVIDENCE_WINDOW && !["agent","baseline"].includes(e.kind); }).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)).filter(e => {
     const key = `${e.kind}:${e.title}`;
@@ -89,6 +89,33 @@ export function renderOverview(latest, events = []) {
   document.getElementById("quickChanges").innerHTML = changes.map(e => {
     return `<article><strong title="${esc(e.title)}">${esc(compactChange(e.title))}</strong><small>${age(e.at)} · recorded public change</small><p title="${esc(e.summary)}">${esc(compactChange(e.summary))}</p><a href="#sourceStrip">Inspect source visibility ↑</a></article>`;
   }).join("") || '<p>No recent public changes recorded. This does not imply zero activity.</p>';
+}
+
+export function renderPackGaps(mints, census, now = Date.now()) {
+  const heading = '<h3>Estimated pack rips</h3>';
+  const missing = `${heading}<p class="activity-footnote">Awaiting comparable TRIX mint counts and a fresh on-chain receipt census.</p>`;
+  const times = [mints?.dataUpdatedAt, census?.checkedAt];
+  const fresh = times.every((at) => {
+    const ageMs = now - Date.parse(at);
+    return ageMs >= 0 && ageMs <= 15 * 60000;
+  });
+  if (!fresh || !mints?.ok || !census?.ok || census.stale || mints.stale || census.counts?.unknown !== 0) return missing;
+  const tiers = ["base", "hype", "viral"];
+  const fmt = (value) => value.toLocaleString("en-US");
+  let total = 0, receipts = 0;
+  const rows = [];
+  for (const tier of tiers) {
+    const minted = mints.counts?.[tier], held = census.counts[tier];
+    if (!Number.isSafeInteger(minted) || !Number.isSafeInteger(held) || held < 0 || held > minted) return missing;
+    total += minted - held;
+    receipts += held;
+    rows.push(`<tr><th scope="row">${tier[0].toUpperCase() + tier.slice(1)}</th><td>${fmt(minted)}</td><td>${fmt(held)}</td><td><b>${fmt(minted - held)}</b></td></tr>`);
+  }
+  if (receipts !== census.total) return missing;
+  return `${heading}<div class="activity-total"><strong>≈ ${fmt(total)}</strong><span>minted minus current receipts</span></div>
+    <table class="sc-table"><thead><tr><th>Tier</th><th>Minted</th><th>Receipts</th><th>Gap</th></tr></thead><tbody>${rows.join("")}</tbody></table>
+    <p class="activity-footnote">The gap estimates opens if each mint creates one receipt and each rip consumes it. No verified 10 AM PST baseline; this is not a confirmed count since opening.</p>
+    <p class="activity-footnote">${link(mints.sourceUrl, "TRIX minted")} · ${esc(times[0])} · ${link(census.sourceUrl, "On-chain receipt census")} · ${esc(times[1])}. Receipt tiers are empirically mapped.</p>`;
 }
 
 export function renderPackActivity(flow, now = Date.now()) {

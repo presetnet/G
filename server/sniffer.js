@@ -4136,6 +4136,28 @@ export async function sniffTrixMoney({ previous = null } = {}) {
   };
 }
 
+async function sniffPackMints() {
+  const sourceUrl = `${TRIX_BASE_URL}/api/mkt/state`;
+  const source = { source: "trix.packmints", sourceUrl, checkedAt: new Date().toISOString() };
+  try {
+    const res = await fetchJson(sourceUrl, { timeoutMs: TRIX_TIMEOUT_MS });
+    const state = res.json;
+    if (!res.ok || state?.snapshot?.stale !== false || !Number.isFinite(Date.parse(state.snapshot.generatedAt))) {
+      throw Error("Fresh TRIX market snapshot unavailable");
+    }
+    const levels = state.levels;
+    const counts = {};
+    for (const tier of ["base", "hype", "viral"]) {
+      const rows = levels.filter((level) => level.id === tier);
+      if (rows.length !== 1 || !Number.isSafeInteger(rows[0].minted) || rows[0].minted < 0) throw Error(`Invalid ${tier} mint count`);
+      counts[tier] = rows[0].minted;
+    }
+    return { ...source, ok: true, dataUpdatedAt: state.snapshot.generatedAt, counts };
+  } catch (error) {
+    return { ...source, ok: false, reason: error.message };
+  }
+}
+
 /** Optional official box leaderboard. A missing endpoint is not an empty ranking. */
 export async function sniffTrixBoxes({ previous = null } = {}) {
   const started = Date.now();
@@ -5979,6 +6001,7 @@ function trixAttempts(previous) {
     ["trix.boxchain", sniffTrixBoxChain()],
     ["trix.packflow", collectPackFlow(solanaRpc, previous?.sources?.["trix.packflow"] || null)],
     ["trix.packcensus", collectPackCensus(solanaRpc, previous?.sources?.["trix.packcensus"] || null)],
+    ["trix.packmints", sniffPackMints()],
     ["trix.preorder", sniffTrixPreorder({ previous: previous?.sources?.["trix.preorder"] || null })],
     ["trix.meme.market", sniffTrixMemeMarket()],
     ["trix.frontpage", sniffTrixFrontpage()],
