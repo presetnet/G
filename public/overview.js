@@ -16,10 +16,21 @@ const localPackArt = {
   hype: "/pack-art/hype-5d856152021f89a3cded.webp",
   viral: "/pack-art/viral-835f33d9aa6157cfb7dc.webp",
 };
-export function packSalesFeed(flow, packArt = {}, now = Date.now(), coinBuys = []) {
+export function packSalesFeed(flow, packArt = {}, now = Date.now(), coinBuys = [], marketSales = []) {
   const packAvailable = ["CURRENT", "DELAYED"].includes(evidenceState(flow, now));
-  if (!coinBuys.length && !packAvailable && !flow?.payouts?.length && !flow?.sellbackScan?.ok) return "Sales feed unavailable.";
+  if (!marketSales.length && !coinBuys.length && !packAvailable && !flow?.payouts?.length && !flow?.sellbackScan?.ok) return "Sales feed unavailable.";
   const tiles = [];
+  for (const sale of marketSales) {
+    const at = Date.parse(sale.at);
+    if (!(at >= now - EVIDENCE_WINDOW && at <= now && Number.isFinite(sale.sol) && sale.sol > 0)) continue;
+    const title = `${sale.symbol || "TRIX"} ${sale.item}`;
+    const image = /^https:\/\//.test(sale.image || "") ? `<i><img loading="lazy" src="${esc(sale.image)}" alt="${esc(title)}"></i>` : "";
+    const amount = `${sale.sol < .001 ? "<0.001" : sale.sol.toFixed(3)} SOL`;
+    const price = /^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(sale.signature || "") ? link(`https://solscan.io/tx/${sale.signature}`, amount) : esc(amount);
+    const buyer = sale.buyer ? link(`https://www.trix.market/profile/${encodeURIComponent(sale.buyer)}`, `@${sale.buyer}`) : "unreported";
+    tiles.push({ at: sale.at, sol: sale.sol, id: `market:${encodeURIComponent(sale.id)}`, style: "market-sale",
+      body: `${image}<span><small>MARKET SALE · TRIX reported</small><b>${esc(title)}</b><small>${price} · ${esc(new Date(at).toISOString().slice(11,19))} UTC</small><small>Buyer ${buyer}</small></span>` });
+  }
   function participant(wallet) {
     if (!wallet) return "unavailable";
     const name = flow?.profiles?.[wallet]?.username;
@@ -94,7 +105,8 @@ function updateSalesRail() {
   const coverage = document.getElementById("sellbackCoverage");
   if (coverage) coverage.textContent = !scan?.ok ? "Live scan unavailable · observed receipts only." :
     scan.end ? "Catching up on finalized receipts." : `Live scan through slot ${scan.through} · earlier history sampled.`;
-  const html = packSalesFeed(flow, feedSources["trix.packmints"]?.packArt, Date.now(), feedSources["trix.money"]?.coinBuys);
+  const money = feedSources["trix.money"];
+  const html = packSalesFeed(flow, feedSources["trix.packmints"]?.packArt, Date.now(), money?.coinBuys, money?.marketSales);
   if (html === lastPackSales) return;
   const left = rail.getBoundingClientRect().left;
   const anchor = rail.scrollLeft > 1 && [...rail.children].find(el => el.getBoundingClientRect().right > left);

@@ -4091,6 +4091,23 @@ export async function sniffTrixMoney({ previous = null } = {}) {
   }
 
   const trades = Array.isArray(results.trades?.items) ? results.trades.items.slice(0, 50) : [];
+  const marketSales = new Map((previous?.marketSales || []).filter(s => Date.parse(s.at) >= started - 86400000).map(s => [s.id, s]));
+  const marketEvents = [...trades];
+  // On first observation, look one page further back for sparse marketplace fills.
+  if (!previous?.marketSales && results.trades?.nextBefore) {
+    const page = await fetchJson(`${TRIX_BASE_URL}/api/feed/trades?limit=100&before=${encodeURIComponent(results.trades.nextBefore)}`, { timeoutMs: TRIX_TIMEOUT_MS }).catch(() => null);
+    if (page?.ok && Array.isArray(page.json?.items)) marketEvents.push(...page.json.items);
+  }
+  for (const row of marketEvents) {
+    const at = Date.parse(row?.createdAt);
+    if (row?.kind !== "market" || row.marketAction !== "bought" || row.side !== "buy" || !row.id ||
+        !["pack", "card"].includes(row.marketItem) || !Number.isFinite(row.solAmount) || row.solAmount <= 0 ||
+        !(at >= started - 86400000 && at <= Date.now())) continue;
+    const image = row.logoUrl?.startsWith("/atomic/") ? new URL(row.logoUrl, TRIX_BASE_URL).href : row.logoUrl;
+    marketSales.set(row.id, { id: row.id, at: row.createdAt, item: row.marketItem, symbol: row.symbol,
+      rarity: row.marketRarity, buyer: row.username, sol: row.solAmount,
+      image: typeof image === "string" && /^https:\/\//.test(image) ? image : null, signature: row.txSignature });
+  }
   const buys = new Map((previous?.coinBuys || []).filter(b => Date.parse(b.at) >= started - 86400000)
     .map(b => [b.signature + ":" + b.mint, b]));
   const candidates = trades.filter(t => t?.kind === "coin" && t.side === "buy" && t.txSignature && t.walletAddress &&
@@ -4145,6 +4162,7 @@ export async function sniffTrixMoney({ previous = null } = {}) {
 
   const tradesKnown = Boolean(results.trades) && trades.every((trade) => trixNumber(trade?.solAmount) !== null);
   const aggregations = {
+    marketSales: [...marketSales.values()].sort((a,b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 500),
     coinBuys: [...buys.values()].sort((a,b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 250),
     recentTrades,
     feeSplit,
