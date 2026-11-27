@@ -4008,6 +4008,24 @@ export async function sniffTrixVoids({ previous = null, siblings = null } = {}) 
     market: siblings?.["trix.meme.market"] || null, leaderboard: siblings?.["trix.market"] || null });
 }
 
+export function confirmTrixCoinBuy(trade, tx) {
+  const wallet = trade.walletAddress, mint = trade.mint;
+  if (trade.kind !== "coin" || trade.side !== "buy" || !wallet || !mint || !tx?.meta || tx.meta.err ||
+      tx.transaction?.signatures?.[0] !== trade.txSignature || !Number.isFinite(tx.blockTime) ||
+      !tx.transaction.message.accountKeys.some(k => k.signer && k.pubkey === wallet)) return null;
+  const balances = list => list?.filter(b => b.owner === wallet && b.mint === mint);
+  const before = balances(tx.meta.preTokenBalances), after = balances(tx.meta.postTokenBalances);
+  if (!before || !after?.length) return null;
+  const decimals = after[0].uiTokenAmount?.decimals;
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255 || ![...before,...after].every(b =>
+    b.uiTokenAmount?.decimals === decimals && /^\d+$/.test(b.uiTokenAmount.amount))) return null;
+  const sum = rows => rows.reduce((n,b) => n + BigInt(b.uiTokenAmount.amount), 0n);
+  const units = sum(after) - sum(before);
+  if (units <= 0n) return null;
+  return { signature: trade.txSignature, wallet, mint, symbol: trade.symbol, username: trade.username,
+    received: Number(units) / 10 ** decimals, at: new Date(tx.blockTime * 1000).toISOString() };
+}
+
 export async function sniffTrixMoney({ previous = null } = {}) {
   const started = Date.now();
   const endpoints = {
@@ -4073,6 +4091,15 @@ export async function sniffTrixMoney({ previous = null } = {}) {
   }
 
   const trades = Array.isArray(results.trades?.items) ? results.trades.items.slice(0, 50) : [];
+  const buys = new Map((previous?.coinBuys || []).filter(b => Date.parse(b.at) >= started - 86400000)
+    .map(b => [b.signature + ":" + b.mint, b]));
+  const candidates = trades.filter(t => t?.kind === "coin" && t.side === "buy" && t.txSignature && t.walletAddress &&
+    t.mint && !buys.has(t.txSignature + ":" + t.mint)).slice(0, 4);
+  await Promise.allSettled(candidates.map(async t => {
+    const tx = await solanaRpc("getTransaction", [t.txSignature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0, commitment: "confirmed" }], { timeoutMs: TRIX_TIMEOUT_MS });
+    const buy = confirmTrixCoinBuy(t, tx);
+    if (buy) buys.set(buy.signature + ":" + buy.mint, buy);
+  }));
   const recentTrades = results.trades ? trades
     .filter((trade) => trixString(trade?.id) || trixString(trade?.txSignature))
     .slice(0, 12)
@@ -4118,6 +4145,7 @@ export async function sniffTrixMoney({ previous = null } = {}) {
 
   const tradesKnown = Boolean(results.trades) && trades.every((trade) => trixNumber(trade?.solAmount) !== null);
   const aggregations = {
+    coinBuys: [...buys.values()].sort((a,b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 250),
     recentTrades,
     feeSplit,
     treasury: {
@@ -6052,7 +6080,7 @@ function trixAttempts(previous) {
   return [
     ["trix.geoff", sniffTrixGeoff({ previous: previous?.sources?.["trix.geoff"] || null })],
     ["trix.market", sniffTrixMarket()],
-    ["trix.money", sniffTrixMoney()],
+    ["trix.money", sniffTrixMoney({ previous: previous?.sources?.["trix.money"] })],
     ["trix.voids", sniffTrixVoids({ previous: previous?.sources?.["trix.voids"], siblings: previous?.sources || null })],
     ["trix.boxes", sniffTrixBoxes()],
     ["trix.boxboard", sniffTrixBoxBoard({ previous: previous?.sources?.["trix.boxboard"] || null })],

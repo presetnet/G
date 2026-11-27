@@ -15,17 +15,26 @@ const localPackArt = {
   hype: "/pack-art/hype-5d856152021f89a3cded.webp",
   viral: "/pack-art/viral-835f33d9aa6157cfb7dc.webp",
 };
-export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
+export function packSalesFeed(flow, packArt = {}, now = Date.now(), coinBuys = []) {
   const packAvailable = ["CURRENT", "DELAYED"].includes(evidenceState(flow, now));
-  if (!flow || (!packAvailable && !flow.payouts?.length && !flow.sellbackScan?.ok)) return "Sales feed unavailable.";
+  if (!coinBuys.length && !packAvailable && !flow?.payouts?.length && !flow?.sellbackScan?.ok) return "Sales feed unavailable.";
   const tiles = [];
   function participant(wallet) {
     if (!wallet) return "unavailable";
-    const name = flow.profiles?.[wallet]?.username;
+    const name = flow?.profiles?.[wallet]?.username;
     if (!name) return esc(`${wallet.slice(0, 5)}…${wallet.slice(-4)}`);
     return link(`https://www.trix.market/profile/${encodeURIComponent(name)}`, `@${name}`);
   }
-  const payoutRows = (flow.payouts || []).filter(p => Date.parse(p.at) >= now - EVIDENCE_WINDOW && Date.parse(p.at) <= now &&
+  for (const b of coinBuys) {
+    const at = Date.parse(b.at);
+    if (!(at >= now - EVIDENCE_WINDOW && at <= now && Number.isFinite(b.received) && b.received > 0) ||
+        !/^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(b.signature) || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(b.mint)) continue;
+    const quantity = b.received < .001 ? "<0.001" : b.received.toLocaleString("en-US", { maximumFractionDigits: 3 });
+    const buyer = b.username ? link(`https://www.trix.market/profile/${encodeURIComponent(b.username)}`, `@${b.username}`) : participant(b.wallet);
+    tiles.push({ at: b.at, sol: 0, id: `${b.signature}:${b.mint}`, style: "coin-buy", body:
+      `<span><small>COIN BUY · ${esc(new Date(at).toISOString().slice(11,19))} UTC</small><b>${link(`https://solscan.io/token/${b.mint}`, b.symbol ? `$${b.symbol}` : b.mint)}</b><small>Buyer ${buyer}</small><small>${link(`https://solscan.io/tx/${b.signature}`, `${quantity} received`)}</small></span>` });
+  }
+  const payoutRows = (flow?.payouts || []).filter(p => Date.parse(p.at) >= now - EVIDENCE_WINDOW && Date.parse(p.at) <= now &&
     Number.isSafeInteger(p.lamports) && p.lamports > 0 && /^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(p.signature));
   for (const p of payoutRows) {
     const amount = p.lamports < 1000000 ? "<0.001" : (p.lamports / 1e9).toFixed(3);
@@ -45,7 +54,8 @@ export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
       const url = /^https:\/\//.test(remote || "") && !remote.endsWith("/" + knownImage) ? remote : localPackArt[t];
       return `<img src="${esc(url)}" alt="${t} pack" decoding="async">`;
     }).join("");
-    tiles.push({ at: r.at, sol, id: `${r.signature}:pack`, style: "pack-purchase", body: `${art ? `<i>${art}</i>` : ""}<span><b>${link(`https://solscan.io/tx/${r.signature}`, `${sol < 0.001 ? "<0.001" : sol.toFixed(3)} SOL`)}</b><small>Buyer ${participant(buyer)}</small><small>${r.packs} pack${r.packs === 1 ? "" : "s"}</small></span>` });
+    const tierLabel = (r.tiers || []).map(t => tiers.includes(t) ? t[0].toUpperCase() + t.slice(1) : "unknown tier").join(" / ");
+    tiles.push({ at: r.at, sol, id: `${r.signature}:pack`, style: "pack-purchase", body: `${art ? `<i>${art}</i>` : ""}<span><small>PACK BUY</small><b>${r.packs} pack${r.packs === 1 ? "" : "s"} · ${esc(tierLabel || "tier unknown")}</b><small>Buyer ${participant(buyer)}</small><small>${link(`https://solscan.io/tx/${r.signature}`, `${sol < 0.001 ? "<0.001" : sol.toFixed(3)} SOL paid`)}</small></span>` });
   }
   tiles.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   // Spread replays around one circuit. Originals retain their chronological order.
@@ -83,7 +93,7 @@ function updateSalesRail() {
   const coverage = document.getElementById("sellbackCoverage");
   if (coverage) coverage.textContent = !scan?.ok ? "Live scan unavailable · observed receipts only." :
     scan.end ? "Catching up on finalized receipts." : `Live scan through slot ${scan.through} · earlier history sampled.`;
-  const html = packSalesFeed(flow, feedSources["trix.packmints"]?.packArt);
+  const html = packSalesFeed(flow, feedSources["trix.packmints"]?.packArt, Date.now(), feedSources["trix.money"]?.coinBuys);
   if (html === lastPackSales) return;
   const left = rail.getBoundingClientRect().left;
   const anchor = rail.scrollLeft > 1 && [...rail.children].find(el => el.getBoundingClientRect().right > left);
