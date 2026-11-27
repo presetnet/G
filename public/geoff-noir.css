@@ -22,6 +22,13 @@ body { background:#080808; color:#eeeee8; }
 .pack-sales-wire small, #packSalesRail time { color:var(--muted); font-size:.7rem; }
 .pull-board { min-width:0; margin:.65rem 0; padding:.7rem; border:1px solid var(--line); border-radius:8px; }
 .pull-board h3 { margin:0; font-size:1rem; }
+#geoffWatch { margin-top:.65rem; }
+#geoffWatch summary { cursor:pointer; }
+#geoffEvidence h4 { margin:.6rem 0 .2rem; }
+.generation-list { list-style:none; margin:0; padding:0; max-height:16rem; overflow:auto; }
+.generation-list li { display:flex; align-items:center; gap:.6rem; padding:.25rem 0; border-bottom:1px solid var(--line); font-size:.78rem; }
+.generation-list img { width:3.2rem; height:3.2rem; object-fit:contain; }
+.generation-list code { overflow-wrap:anywhere; color:var(--muted); }
 .pull-board h3 a,.pull-board small { font-size:.72rem; color:var(--muted); }
 #rankedPulls { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,215px),1fr)); gap:.45rem; margin-top:.45rem; }
 #rankedPulls article { display:flex; align-items:center; gap:.5rem; min-width:0; padding:.35rem; background:#171713; border-radius:5px; }

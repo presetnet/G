@@ -152,19 +152,39 @@ export function initOverview() {
   }
   renderOverview(null, []);
 }
+export function generationWatch(source, matches = [], now = Date.now()) {
+  if (!Array.isArray(source?.records)) return { summary: "Geoff generation watch · history unavailable", html: "" };
+  const recent = source.records.filter(g => g.id && Date.parse(g.createdAt) <= now && Date.parse(g.createdAt) > now - 86400000)
+    .sort((a,b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  const stamp = at => Number.isFinite(Date.parse(at)) ? new Date(at).toISOString().replace("T"," ").slice(0,19) + " UTC" : "time unknown";
+  const receipt = sig => /^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(sig || "") ? link(`https://solscan.io/tx/${sig}`, "Payment") : "";
+  const cardLink = c => link(`https://www.trix.market/shop/c/${encodeURIComponent(c.ripId)}`, [c.symbol,c.tier,c.round != null && `Round ${c.round}`].filter(Boolean).join(" · ") || "Card");
+  const labeled = recent.filter(g => !g.inferred);
+  const candidates = recent.filter(g => g.inferred);
+  function list(title, records) {
+    const items = records.map(g => {
+      const image = /^https:\/\//i.test(g.imageUrl || "") ? `<a href="${esc(g.imageUrl)}" target="_blank" rel="noopener noreferrer"><img loading="lazy" decoding="async" src="${esc(g.imageUrl)}" alt="View generation ${esc(g.id)}"></a>` : "";
+      const cards = matches.filter(c => c.generationId === g.id && c.imageUrl === g.imageUrl);
+      return `<li>${image}<div><time>${esc(stamp(g.createdAt))}</time> · ${receipt(g.txSignature)}<br><code>${esc(g.id)}</code>${cards.length ? `<br>${cards.map(cardLink).join(" · ")}` : ""}</div></li>`;
+    }).join("");
+    return `<h4>${title} (${records.length})</h4>${items ? `<ul class="generation-list">${items}</ul>` : "<small>None observed in this window.</small>"}`;
+  }
+  const oldCards = matches.slice(0,10).map(c => `<li>${cardLink(c)} · ${c.inferred ? "payment-route candidate" : "TRIX-labeled Geoff"} · generated ${esc(stamp(c.generatedAt))} · matched ${esc(stamp(c.observedAt))} · ${receipt(c.signature)}</li>`);
+  return {
+    summary: `Geoff watch · ${labeled.length} TRIX-labeled · ${candidates.length} payment-route candidates · 24h`,
+    html: `<small>Observed generations · last successful scan ${esc(stamp(source.checkedAt))}${source.stale || !source.ok ? " · retained history" : ""}. A matching payment route alone does not identify the generator.</small>` +
+      list("TRIX-labeled Geoff", labeled) + list("Provider unknown · matching payment route", candidates) +
+      `<details><summary>${matches.length} retained card matches</summary><small>Exact generation ID, image and card mint checks. Older art can be reused.</small><ul>${oldCards.join("")}</ul></details>`,
+  };
+}
+let lastWatchHtml;
 export function renderOverview(latest, events = []) {
   const sources = latest?.sources || {};
   const watch = document.getElementById("geoffEvidence");
   if (watch) {
-    const g = sources["trix.geoff"]?.latest;
-    const matches = sources["trix.cardlistings"]?.geoffCards || [];
-    const label = inferred => inferred ? "payment-route inference" : "TRIX provider label";
-    const stamp = at => Number.isFinite(Date.parse(at)) ? new Date(at).toISOString().replace("T"," ").slice(0,19) + " UTC" : "time unknown";
-    const payment = sig => /^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(sig || "") ? link(`https://solscan.io/tx/${sig}`, "Generation payment") : "";
-    const latestRow = g ? `<p>Latest observed generation: ${esc(stamp(g.createdAt))} · ${label(g.inferred)} · ${/^https:\/\//.test(g.imageUrl || "") ? link(g.imageUrl, "Image") : ""} ${payment(g.txSignature)}</p>` : "";
-    const rows = matches.slice(0, 10).map(c => `<li>${link(`https://www.trix.market/shop/c/${encodeURIComponent(c.ripId)}`, [c.symbol,c.tier,c.round != null && `Round ${c.round}`].filter(Boolean).join(" · ") || "Card")} · ${label(c.inferred)} · generated ${esc(stamp(c.generatedAt))} · matched ${esc(stamp(c.observedAt))} · ${payment(c.signature)}</li>`);
-    document.querySelector("#geoffWatch summary").textContent = `Geoff generation watch · ${matches.length} retained card matches`;
-    watch.innerHTML = `${latestRow}<small>Card links require the same generation ID and image in the rip detail, plus a matching card mint. A match can be reused art from an earlier generation.</small><ul>${rows.join("")}</ul>`;
+    const { summary, html } = generationWatch(sources["trix.geoff"], sources["trix.cardlistings"]?.geoffCards);
+    document.querySelector("#geoffWatch summary").textContent = summary;
+    if (html !== lastWatchHtml) { watch.innerHTML = html; lastWatchHtml = html; }
   }
   const stateLine = document.getElementById("trixRoundState");
   if (stateLine) {

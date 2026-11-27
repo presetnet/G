@@ -1,6 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderOverview, renderPackActivity, compactChange, packSalesFeed } from "../public/overview.js";
+import { renderOverview, renderPackActivity, compactChange, packSalesFeed, generationWatch } from "../public/overview.js";
+
+test("generation watch separates payment candidates and counts only generation times inside the window", () => {
+  const now = Date.now();
+  const record = { id: "art", imageUrl: "https://example.org/art.png", createdAt: new Date(now).toISOString() };
+  const result = generationWatch({ ok: true, checkedAt: record.createdAt, records: [
+    record, { ...record, id: "candidate", inferred: true },
+    { ...record, id: "old", createdAt: new Date(now - 86400001).toISOString() },
+  ] }, [], now);
+  assert.match(result.summary, /1 TRIX-labeled · 1 payment-route candidates/);
+  assert.doesNotMatch(result.html, /<code>old<\/code>/);
+  assert.match(generationWatch(null).summary, /unavailable/);
+});
 
 test("one receipt circuit keeps small sales and spaces labeled repeats for larger amounts", () => {
   const at = new Date().toISOString();
