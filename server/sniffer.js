@@ -3774,6 +3774,31 @@ export function mergeTrixGeoffHistory(previous = null, observed = null) {
   };
 }
 
+export function compareTrixPoints(previous, board, check) {
+  // Keep the first usable reading for each UTC day. A failed read cannot
+  // replace a baseline, and a wallet entering the top 100 is not a points gain.
+  let baseline = previous?.leaderboard?.baseline || null;
+  if (!check.ok) return { baseline, movement: null };
+  const day = check.checkedAt.slice(0, 10);
+  const snapshot = (rows, at) => ({ at, balances: Object.fromEntries(rows
+    .filter(r => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(r.wallet) && Number.isSafeInteger(r.points) && r.points >= 0)
+    .map(r => [r.wallet, r.points])) });
+  if (baseline?.at?.slice(0, 10) !== day) {
+    const prior = previous?.endpoints?.leaderboard;
+    baseline = prior?.ok && prior.checkedAt?.startsWith(day) && previous.leaderboard?.rows?.length
+      ? snapshot(previous.leaderboard.rows, prior.checkedAt) : snapshot(board.rows, check.checkedAt);
+  }
+  if (!Object.keys(baseline.balances).length) return { baseline: null, movement: null };
+  let compared = 0, rising = 0, gains = 0;
+  for (const row of board.rows) {
+    if (!Number.isSafeInteger(row.points) || !Object.hasOwn(baseline.balances, row.wallet)) continue;
+    row.change = row.points - baseline.balances[row.wallet];
+    compared++;
+    if (row.change > 0) { rising++; gains += row.change; }
+  }
+  return { baseline, movement: { since: baseline.at, compared, rising, gains } };
+}
+
 export async function sniffTrixMarket({ previous = null } = {}) {
   const started = Date.now();
   const catalogRequest = fetchTrixLaunchCatalog();
@@ -3973,6 +3998,7 @@ export async function sniffTrixMarket({ previous = null } = {}) {
     },
     recentMints: recentMintsSummary,
   };
+  Object.assign(aggregations.leaderboard, compareTrixPoints(previous, aggregations.leaderboard, endpointStatus.leaderboard));
   const ok = Object.keys(results).length > 0;
   return {
     source: "trix.market",
@@ -6115,7 +6141,7 @@ function trixAttempts(previous) {
   const memeMarket = sniffTrixMemeMarket();
   return [
     ["trix.geoff", sniffTrixGeoff({ previous: previous?.sources?.["trix.geoff"] || null })],
-    ["trix.market", sniffTrixMarket()],
+    ["trix.market", sniffTrixMarket({ previous: previous?.sources?.["trix.market"] })],
     ["trix.money", sniffTrixMoney({ previous: previous?.sources?.["trix.money"] })],
     ["trix.voids", sniffTrixVoids({ previous: previous?.sources?.["trix.voids"], siblings: previous?.sources || null })],
     ["trix.boxes", sniffTrixBoxes()],

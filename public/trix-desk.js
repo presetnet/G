@@ -310,9 +310,12 @@ function renderPoints(market, tierSource) {
   status("points", check, items.length > 0, `Top ${items.length} public users${market?.leaderboard?.capped ? " · capped page" : ""}${number(market?.leaderboard?.totalPoints) !== null ? ` · ${fmt(market.leaderboard.totalPoints, 0)} points in this page` : ""}`);
   const body = items.map((r) => {
     const tier = number(r.points) === null ? null : definitions.find((entry) => r.points >= entry.minPoints);
-    return `<tr><td class="desk-number">${fmt(r.rank)}</td><td><b>${esc(r.username || short(r.wallet) || "--")}</b>${r.verified === true ? '<span class="desk-badge" title="TRIX-reported verification">Verified</span>' : ""}</td><td class="desk-number">${fmt(r.points)}</td><td title="${esc(tier ? `From ${fmt(tier.minPoints, 0)} reported points` : "Tier unavailable")}">${esc(tier?.name)}</td><td class="desk-secondary">${link("https://solscan.io/account/", r.wallet, short(r.wallet))}</td></tr>`;
+    const change = Number.isSafeInteger(r.change) ? `${r.change > 0 ? "+" : ""}${fmt(r.change, 0)}` : "—";
+    return `<tr><td class="desk-number">${fmt(r.rank)}</td><td><b>${r.username ? link("https://www.trix.market/profile/", r.username, `@${r.username}`) : esc(short(r.wallet))}</b>${r.verified === true ? '<span class="desk-badge" title="TRIX-reported verification">Verified</span>' : ""}</td><td class="desk-number">${fmt(r.points)}</td><td class="desk-number">${change}</td><td title="${esc(tier ? `From ${fmt(tier.minPoints, 0)} reported points` : "Tier unavailable")}">${esc(tier?.name)}</td><td class="desk-secondary">${link("https://solscan.io/account/", r.wallet, short(r.wallet))}</td></tr>`;
   }).join("");
-  setHTML("pointsRows", items.length ? table("Top 100 user points", [["#", "desk-number"], ["User"], ["User points", "desk-number"], ["Loyalty tier"], ["Wallet", "desk-secondary"]], body) : emptyRows(check, market?.leaderboard?.rows, "No user points entries reported."));
+  const movement = market?.leaderboard?.movement;
+  const context = movement ? `<p class="desk-context">${fmt(movement.rising, 0)} of ${fmt(movement.compared, 0)} matched wallets gained points (+${fmt(movement.gains, 0)} combined). Baseline: ${esc(movement.since)}. Balances do not identify why points were credited; — means no comparable reading.</p>` : "";
+  setHTML("pointsRows", items.length ? context + table("Top 100 user points", [["#", "desk-number"], ["User"], ["User points", "desk-number"], ["Δ since baseline", "desk-number"], ["Loyalty tier"], ["Wallet", "desk-secondary"]], body) : emptyRows(check, market?.leaderboard?.rows, "No user points entries reported."));
 }
 
 function renderArt(market) {

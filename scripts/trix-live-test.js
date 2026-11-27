@@ -811,6 +811,17 @@ recent = [generation];
 // Retain generation history and its provenance without reviving retired Packs.
 const oldAt = "2026-09-08T10:00:00Z";
 const oldGeoff = { ...plain(geoff), checkedAt: oldAt, packs: { ok: true, minted: 99 } };
+{
+  const wallet = "A".repeat(44), newcomer = "B".repeat(44);
+  const baselineTime = "2026-11-27T09:00:00Z";
+  const prior = { endpoints: { leaderboard: { ok: true, checkedAt: baselineTime } }, leaderboard: { rows: [{ wallet, points: 20 }] } };
+  const page = { rows: [{ wallet: newcomer, points: 150 }, { wallet, points: 55 }] };
+  const compared = api.compareTrixPoints(prior, page, { ok: true, checkedAt: "2026-11-27T10:00:00Z" });
+  assert.deepEqual(plain(compared.movement), { since: baselineTime, compared: 1, rising: 1, gains: 35 });
+  assert.equal(page.rows[0].change, undefined);
+  assert.equal(page.rows[1].change, 35);
+  assert.equal(api.compareTrixPoints({ leaderboard: compared }, {}, { ok: false }).baseline, compared.baseline);
+}
 const history = api.mergeTrixGeoffHistory(null, oldGeoff);
 const failedHistory = api.mergeTrixGeoffHistory(history, {
   source: "trix.geoff", ok: false, checkedAt: iso(), error: "offline", records: [],
