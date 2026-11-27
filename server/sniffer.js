@@ -4227,7 +4227,7 @@ async function sniffPackMints() {
   }
 }
 
-async function sniffCardListings(previous) {
+async function sniffCardListings(previous, generations = []) {
   const sourceUrl = `${TRIX_BASE_URL}/api/market`;
   const source = { source: "trix.cardlistings", sourceUrl, checkedAt: new Date().toISOString() };
   try {
@@ -4242,9 +4242,22 @@ async function sniffCardListings(previous) {
       const res = await fetchJson(`${TRIX_BASE_URL}/api/mkt/rips/${encodeURIComponent(id)}`, { timeoutMs: TRIX_TIMEOUT_MS });
       return res.ok ? res.json : null;
     }, solanaRpc);
-    return { ...source, ok: true, inventory, count: cards.length, lowest: priced[0]?.ask ?? null, listings: priced.slice(0, 5) };
+    const matches = new Map((previous?.geoffCards || []).map(c => [c.ripId, c]));
+    const byImage = new Map(generations.filter(g => g.id && g.imageUrl?.includes(`/generated/${g.id}/`)).map(g => [g.imageUrl, g]));
+    const candidates = res.json.filter(r => r?.kind === "card" && r.cardMint && r.ripId && !matches.has(r.ripId) && byImage.has(r.imageUrl));
+    await Promise.allSettled(candidates.slice(0, 4).map(async row => {
+      const g = byImage.get(row.imageUrl);
+      const detail = await fetchJson(`${TRIX_BASE_URL}/api/mkt/rips/${encodeURIComponent(row.ripId)}`, { timeoutMs: TRIX_TIMEOUT_MS });
+      const rip = detail.json;
+      if (!detail.ok || rip?.id !== row.ripId || rip.cardMint !== row.cardMint || rip.meme?.id !== g.id || rip.meme.imageUrl !== g.imageUrl) return;
+      matches.set(row.ripId, { ripId: row.ripId, mint: row.cardMint, generationId: g.id, generatedAt: g.createdAt,
+        observedAt: source.checkedAt, imageUrl: g.imageUrl, signature: g.txSignature, inferred: g.inferred === true,
+        symbol: row.coin?.symbol, tier: rip.pack?.level, round: rip.ripRound });
+    }));
+    const geoffCards = [...matches.values()].sort((a,b) => Date.parse(b.observedAt) - Date.parse(a.observedAt)).slice(0, 500);
+    return { ...source, ok: true, inventory, geoffCards, count: cards.length, lowest: priced[0]?.ask ?? null, listings: priced.slice(0, 5) };
   } catch (error) {
-    return { ...source, ok: false, inventory: previous?.inventory, reason: error.message };
+    return { ...source, ok: false, inventory: previous?.inventory, geoffCards: previous?.geoffCards, reason: error.message };
   }
 }
 
@@ -6093,7 +6106,7 @@ function trixAttempts(previous) {
     ["trix.packflow", sniffTrixPackSales(previous?.sources?.["trix.packflow"])],
     ["trix.packcensus", collectPackCensus(solanaRpc, previous?.sources?.["trix.packcensus"] || null)],
     ["trix.packmints", sniffPackMints()],
-    ["trix.cardlistings", sniffCardListings(previous?.sources?.["trix.cardlistings"])],
+    ["trix.cardlistings", sniffCardListings(previous?.sources?.["trix.cardlistings"], previous?.sources?.["trix.geoff"]?.records)],
     ["trix.preorder", sniffTrixPreorder({ previous: previous?.sources?.["trix.preorder"] || null })],
     ["trix.meme.market", memeMarket],
     ["trix.holdings", memeMarket.then(market => collectVoidHoldings(solanaRpc, market, previous?.sources?.["trix.holdings"]))],
