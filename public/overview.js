@@ -18,6 +18,14 @@ const localPackArt = {
 const baho = "FaAtvEXHrvUbpD7FZCPm3n8vhsvRM2f4DDe2PJFaGMhJ";
 // Official generic image from TRIX collection metadata, not the revealed card.
 const mysteryArt = '<img src="/pack-art/trix-mystery.webp" alt="TRIX mystery artwork; exact art unknown" title="TRIX mystery artwork · exact art unknown">';
+// Bundled WebP previews, keyed by original TRIX image identity (not player).
+const rankedPreviews = new Set([
+  "2b2947aa-b6ec-4d4a-ab2d-4c6303b62bb6", "7abdeabb-34ea-46d3-b511-05c07a90f8c5",
+  "d82b00d7-ad14-4781-911d-e4bc7105947c", "8644163c-862e-49df-b825-b67d629913a5",
+  "a1731b8d-be83-4e8e-9b29-ac9d7e3e68bd", "e156d958-1de6-41b6-bc01-39140c192d74",
+  "d5addfb0-5aad-4161-8b9f-37cf14a2c30a", "d14a76ca-63f8-477a-b483-45892c209553",
+  "18849d9c-d3a7-4f1e-a6dd-e2f801091ca2", "f2816b75-beb3-42bd-a921-a4d42caa566a",
+]);
 export function packSalesFeed(flow, packArt = {}, now = Date.now(), view = "all") {
   const packAvailable = ["CURRENT", "DELAYED"].includes(evidenceState(flow, now));
   if (!flow || (!packAvailable && !flow.payouts?.length && !flow.sellbackScan?.ok)) return "Sales feed unavailable.";
@@ -25,10 +33,16 @@ export function packSalesFeed(flow, packArt = {}, now = Date.now(), view = "all"
   function sellerArtwork(wallet) {
     const name = flow.profiles?.[wallet]?.username;
     const art = name && flow.playerArt?.[name];
-    if (!art || !/^https:\/\//i.test(art.url)) return `<figure class="ranked-rip">${mysteryArt}<figcaption>Card unknown</figcaption></figure>`;
+    if (!art || !/^https:\/\//i.test(art.url)) {
+      const avatar = flow.profiles?.[wallet]?.avatar;
+      if (/^https:\/\//i.test(avatar || "")) return `<figure class="ranked-rip"><img src="${esc(avatar)}" alt="Seller avatar" loading="lazy" decoding="async"><figcaption>Seller avatar</figcaption></figure>`;
+      return `<figure class="ranked-rip">${mysteryArt}<figcaption>Card unknown</figcaption></figure>`;
+    }
+    const id = art.url.match(/^https:\/\/trix-are-for-kids\.atl1\.cdn\.digitaloceanspaces\.com\/trix\/generated\/([\da-f-]{36})\/original\.(?:jpg|png)$/)?.[1];
+    const preview = rankedPreviews.has(id) ? `/pack-art/ranked/${id}.webp` : art.url;
     const details = [art.tier, art.rarity].filter(Boolean).join(" · ");
     const description = `@${name}’s ranked rip: ${details} ${art.symbol || ""}. Sold card unverified.`;
-    return `<figure class="ranked-rip" title="${esc(description)}"><a href="${esc(art.url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(`View artwork: ${description}`)}"><img src="${esc(art.url)}" alt="${esc(description)}" loading="lazy" decoding="async"></a><figcaption><strong>${esc(art.symbol || "TRIX")}</strong>${esc(details)}</figcaption></figure>`;
+    return `<figure class="ranked-rip" title="${esc(description)}"><a href="${esc(art.url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(`View artwork: ${description}`)}"><img src="${esc(preview)}" alt="${esc(description)}" decoding="async"></a><figcaption><strong>${esc(art.symbol || "TRIX")}</strong>${esc(details)}</figcaption></figure>`;
   }
   function participant(wallet) {
     if (!wallet) return "unavailable";
@@ -78,11 +92,22 @@ function updateSalesRail() {
   const html = packSalesFeed(flow, feedSources["trix.packmints"]?.packArt, Date.now(), document.getElementById("salesView")?.value);
   if (html === lastPackSales) return;
   const left = rail.getBoundingClientRect().left;
-  const anchor = rail.scrollLeft > 1 && [...rail.children].find(el => el.getBoundingClientRect().right > left)?.dataset.receipt;
-  rail.innerHTML = html;
-  if (anchor) {
-    const el = [...rail.children].find(el => el.dataset.receipt === anchor);
-    if (el) rail.scrollLeft += el.getBoundingClientRect().left - left;
+  const anchor = rail.scrollLeft > 1 && [...rail.children].find(el => el.getBoundingClientRect().right > left);
+  const offset = anchor && anchor.getBoundingClientRect().left;
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const retained = new Map([...rail.children].filter(el => el.dataset.receipt).map(el => [el.dataset.receipt, el]));
+  let cursor = rail.firstChild;
+  for (const next of [...template.content.childNodes]) {
+    const existing = next.dataset?.receipt && retained.get(next.dataset.receipt);
+    const node = existing && existing.isEqualNode(next) ? existing : next;
+    if (node !== cursor) rail.insertBefore(node, cursor);
+    cursor = node.nextSibling;
+  }
+  while (cursor) { const obsolete = cursor; cursor = cursor.nextSibling; obsolete.remove(); }
+  if (anchor?.dataset?.receipt) {
+    const el = [...rail.children].find(el => el.dataset.receipt === anchor.dataset.receipt);
+    if (el) rail.scrollLeft += el.getBoundingClientRect().left - offset;
   }
   lastPackSales = html;
 }
@@ -94,6 +119,14 @@ export function initOverview() {
   const rail = document.getElementById("packSalesRail");
   const loop = document.getElementById("salesLoop");
   if (rail && loop) {
+    rail.addEventListener("error", e => {
+      const img = e.target;
+      if (img.tagName !== "IMG" || img.getAttribute("src") === "/pack-art/trix-mystery.webp") return;
+      img.src = "/pack-art/trix-mystery.webp";
+      img.alt = "TRIX mystery artwork; preview unavailable";
+      const caption = img.closest("figure")?.querySelector("figcaption");
+      if (caption) caption.textContent = "Preview unavailable";
+    }, true);
     let paused = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const label = () => { loop.textContent = paused ? "Play loop" : "Pause loop"; };
     label();

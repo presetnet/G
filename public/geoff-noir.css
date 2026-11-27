@@ -34,8 +34,10 @@ body { background:#080808; color:#eeeee8; }
 #packSalesRail .shop-payout i { color:#aee8bf; }
 .payout-spotlight { display:grid; flex:none; align-content:center; gap:.12rem; padding:.35rem .75rem; border-left:2px solid #91cba4; }
 .payout-spotlight img { grid-column:1; grid-row:1 / span 3; align-self:center; margin-right:.45rem; }
-.ranked-rip { margin:0; width:5rem; overflow:hidden; border:1px solid #807250; border-radius:.42rem; background:#201e18; text-align:center; }
-#packSalesRail .ranked-rip img { display:block; width:100%; height:4.2rem; object-fit:contain; margin:0; background:#131310; }
+.ranked-rip { margin:0; flex:none; width:5.5rem; overflow:hidden; border:1px solid #807250; border-radius:.42rem; background:#201e18; text-align:center; }
+#packSalesRail .ranked-rip img { display:block; width:100%; height:5.5rem; object-fit:contain; margin:0; background:#131310; }
+.ranked-rip figcaption { min-height:2.2em; display:grid; align-content:center; }
+#packSalesRail { overflow-anchor:none; }
 .ranked-rip figcaption { padding:.15rem; font-size:.62rem; color:var(--muted); text-transform:capitalize; }
 .ranked-rip figcaption strong { display:block; color:#fff2be; overflow-wrap:anywhere; }
 .payout-spotlight .ranked-rip { grid-column:1; grid-row:1 / span 3; margin-right:.45rem; }

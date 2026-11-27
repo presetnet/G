@@ -3449,7 +3449,8 @@ async function sniffTrixPackSales(previous) {
   for (const wallet of wallets) {
     const cached = previous?.profiles?.[wallet];
     if (cached) profiles[wallet] = cached;
-    if (!cached || Date.now() - cached.checked > (cached.username ? 3600000 : 300000)) pending.push(wallet);
+    if (!cached || (cached.username && !Object.hasOwn(cached, "avatar")) ||
+        Date.now() - cached.checked > (cached.username ? 3600000 : 300000)) pending.push(wallet);
   }
   const artRequest = flow.ok && flow.payouts?.length
     ? fetchJson(`${TRIX_BASE_URL}/api/mkt/rips/best`, { timeoutMs: TRIX_TIMEOUT_MS }).catch(() => null)
@@ -3458,7 +3459,9 @@ async function sniffTrixPackSales(previous) {
     const res = await fetchJson(`${TRIX_BASE_URL}/api/profile/${wallet}`, { timeoutMs: TRIX_TIMEOUT_MS });
     const username = res.ok && res.json?.walletAddress === wallet && typeof res.json.username === "string"
       ? res.json.username.replace(/^@+/, "").trim() : null;
-    profiles[wallet] = { checked: Date.now(), username: username || null };
+    if (!res.ok && res.status !== 404 && profiles[wallet]?.username) return;
+    const avatar = username && /^https:\/\//i.test(res.json.avatarUrl) ? res.json.avatarUrl : null;
+    profiles[wallet] = { checked: Date.now(), username: username || null, avatar };
   }));
   const best = await artRequest;
   const playerArt = Object.create(null);
@@ -3468,6 +3471,8 @@ async function sniffTrixPackSales(previous) {
       if (!sellers.has(rip?.player) || playerArt[rip.player] || !/^https:\/\//i.test(rip.imageUrl)) continue;
       playerArt[rip.player] = { url: rip.imageUrl, symbol: rip.coinSymbol, rarity: rip.rarity, tier: rip.packLevel };
     }
+  } else {
+    Object.assign(playerArt, previous?.playerArt);
   }
   return { ...flow, profiles, playerArt };
 }
