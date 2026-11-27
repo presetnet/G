@@ -11,8 +11,19 @@ test("one receipt circuit keeps small sales and spaces labeled repeats for large
     assert.equal(html.split(`data-receipt="${signature}:0:`).length - 1, i + 1);
   }
   assert.equal(html.split('class="receipt-replay"').length - 1, 3);
-  assert.match(html, /\/pack-art\/ranked\//);
+  assert.doesNotMatch(html, /<img/);
   assert.match(html, /Sold card unknown/);
+});
+
+test("Baho's ranked artwork is never substituted for another seller's missing image", () => {
+  const at = new Date().toISOString();
+  const artwork = "https://example.org/baho-art.png";
+  const html = packSalesFeed({ ok: true, checkedAt: at, playerArt: { Baho: { url: artwork } },
+    profiles: { first: { username: "Baho" }, second: { username: "Other" } },
+    payouts: ["first", "second"].map((seller, i) => ({ seller, at, signature: ["A", "B"][i].repeat(88), index: 0, lamports: 100000000 })),
+  });
+  assert.match(html, /baho-art\.png/);
+  assert.doesNotMatch(html.slice(html.indexOf(`data-receipt="${"B".repeat(88)}`)), /<img/);
 });
 
 test("overview rejects legacy peak-held supply and separates NFT supply from Solana tokens", () => {

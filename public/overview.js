@@ -25,25 +25,23 @@ const rankedPreviews = new Set([
   "d5addfb0-5aad-4161-8b9f-37cf14a2c30a", "d14a76ca-63f8-477a-b483-45892c209553",
   "18849d9c-d3a7-4f1e-a6dd-e2f801091ca2", "f2816b75-beb3-42bd-a921-a4d42caa566a",
 ]);
-const gallery = [...rankedPreviews];
 export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
   const packAvailable = ["CURRENT", "DELAYED"].includes(evidenceState(flow, now));
   if (!flow || (!packAvailable && !flow.payouts?.length && !flow.sellbackScan?.ok)) return "Sales feed unavailable.";
   const tiles = [];
-  function sellerArtwork(wallet, signature) {
+  function sellerArtwork(wallet) {
     const name = flow.profiles?.[wallet]?.username;
     const art = name && flow.playerArt?.[name];
     if (!art || !/^https:\/\//i.test(art.url)) {
-      // Stable per receipt: never reshuffle the gallery when the feed refreshes.
-      const hash = [...signature].reduce((n, ch) => (Math.imul(n, 31) + ch.charCodeAt(0)) >>> 0, 0);
-      const src = `/pack-art/ranked/${gallery[hash % gallery.length]}.webp`;
-      return `<figure class="ranked-rip"><img src="${src}" width="96" height="96" alt="TRIX collection artwork, not linked to this receipt"><figcaption>Collection art<br>Sold card unknown</figcaption></figure>`;
+      const avatar = flow.profiles?.[wallet]?.avatar;
+      if (/^https:\/\//i.test(avatar || "")) return `<figure class="ranked-rip"><img src="${esc(avatar)}" alt="Seller profile photo" loading="lazy" decoding="async"><figcaption>Seller profile<br>Sold card unknown</figcaption></figure>`;
+      return '<small class="unidentified-card">Sold card unknown</small>';
     }
     const id = art.url.match(/^https:\/\/trix-are-for-kids\.atl1\.cdn\.digitaloceanspaces\.com\/trix\/generated\/([\da-f-]{36})\/original\.(?:jpg|png)$/)?.[1];
     const preview = rankedPreviews.has(id) ? `/pack-art/ranked/${id}.webp` : art.url;
     const details = [art.tier, art.rarity].filter(Boolean).join(" · ");
     const description = `@${name}’s ranked rip: ${details} ${art.symbol || ""}. Sold card unverified.`;
-    return `<figure class="ranked-rip" title="${esc(description)}"><a href="${esc(art.url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(`View artwork: ${description}`)}"><img src="${esc(preview)}" alt="${esc(description)}" decoding="async"></a><figcaption><strong>${esc(art.symbol || "TRIX")}</strong>${esc(details)}</figcaption></figure>`;
+    return `<figure class="ranked-rip" title="${esc(description)}"><a href="${esc(art.url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(`View artwork: ${description}`)}"><img src="${esc(preview)}" alt="${esc(description)}" decoding="async"></a><figcaption><strong>${esc(art.symbol || "TRIX")}</strong>Seller’s ranked rip</figcaption></figure>`;
   }
   function participant(wallet) {
     if (!wallet) return "unavailable";
@@ -54,7 +52,7 @@ export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
   const payoutRows = (flow.payouts || []).filter(p => Date.parse(p.at) >= now - EVIDENCE_WINDOW && Date.parse(p.at) <= now &&
     Number.isSafeInteger(p.lamports) && p.lamports > 0 && /^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(p.signature));
   for (const p of payoutRows) {
-    tiles.push({ at: p.at, sol: p.lamports / 1e9, id: `${p.signature}:${Number(p.index)}`, style: "shop-payout", body: `${sellerArtwork(p.seller, p.signature)}<span><b>${link(`https://solscan.io/tx/${p.signature}`, `${(p.lamports / 1e9).toFixed(3)} SOL`)}</b><small>Shop paid ${participant(p.seller)}</small><small>${esc(new Date(p.at).toISOString().slice(11,19))} UTC</small></span>` });
+    tiles.push({ at: p.at, sol: p.lamports / 1e9, id: `${p.signature}:${Number(p.index)}`, style: "shop-payout", body: `${sellerArtwork(p.seller)}<span><b>${link(`https://solscan.io/tx/${p.signature}`, `${(p.lamports / 1e9).toFixed(3)} SOL`)}</b><small>Shop paid ${participant(p.seller)}</small><small>${esc(new Date(p.at).toISOString().slice(11,19))} UTC</small></span>` });
   }
   for (const r of packAvailable ? flow.records || [] : []) {
     const time = Date.parse(r?.at);
