@@ -1,6 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderOverview, renderPackActivity, compactChange } from "../public/overview.js";
+import { renderOverview, renderPackActivity, compactChange, packSalesFeed } from "../public/overview.js";
+
+test("one receipt circuit keeps small sales and spaces labeled repeats for larger amounts", () => {
+  const at = new Date().toISOString();
+  const signatures = ["A","B","C"].map(c => c.repeat(88));
+  const payouts = [0.1, 1, 10].map((sol, i) => ({ at, signature: signatures[i], index: 0, seller: "seller", lamports: sol * 1e9 }));
+  const html = packSalesFeed({ ok: true, checkedAt: at, records: [], payouts });
+  for (const [i, signature] of signatures.entries()) {
+    assert.equal(html.split(`data-receipt="${signature}:0:`).length - 1, i + 1);
+  }
+  assert.equal(html.split('class="receipt-replay"').length - 1, 3);
+  assert.match(html, /\/pack-art\/ranked\//);
+  assert.match(html, /Sold card unknown/);
+});
 
 test("overview rejects legacy peak-held supply and separates NFT supply from Solana tokens", () => {
   const original = globalThis.document;
