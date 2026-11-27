@@ -3440,6 +3440,26 @@ function decodeBase58(value) {
   return Buffer.from(`${prefix}${hex}`, "hex");
 }
 
+async function sniffTrixPackSales(previous) {
+  const flow = await collectPackFlow(solanaRpc, previous);
+  const profiles = {};
+  const wallets = [...new Set([...(flow.payouts || []).slice(0, 20).map(r => r.seller),
+    ...(flow.records || []).slice(0, 20).map(r => r.buyer)])].filter(w => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w));
+  const pending = [];
+  for (const wallet of wallets) {
+    const cached = previous?.profiles?.[wallet];
+    if (cached) profiles[wallet] = cached;
+    if (!cached || Date.now() - cached.checked > (cached.username ? 3600000 : 300000)) pending.push(wallet);
+  }
+  if (flow.ok) await Promise.allSettled(pending.slice(0, 5).map(async wallet => {
+    const res = await fetchJson(`${TRIX_BASE_URL}/api/profile/${wallet}`, { timeoutMs: TRIX_TIMEOUT_MS });
+    const username = res.ok && res.json?.walletAddress === wallet && typeof res.json.username === "string"
+      ? res.json.username.replace(/^@+/, "").trim() : null;
+    profiles[wallet] = { checked: Date.now(), username: username || null };
+  }));
+  return { ...flow, profiles };
+}
+
 export function parseTrixPackPurchase(transaction, levels = []) {
   if (!transaction?.meta || transaction.meta.err) return null;
   if (!(transaction.meta.logMessages || []).some((line) => line.includes("Instruction: BuyPack"))) {
@@ -3894,6 +3914,7 @@ export async function sniffTrixMarket({ previous = null } = {}) {
           ? `${TRIX_BASE_URL}${item.imageUrl}`
           : item.imageUrl,
         userId: full?.userId ?? null,
+        creatorUsername: full?.creator?.username ?? null,
         mintAddress: full?.mintAddress ?? null,
         status: full?.status ?? null,
         website: full?.website ?? null,
@@ -6027,7 +6048,7 @@ function trixAttempts(previous) {
     ["trix.boxes", sniffTrixBoxes()],
     ["trix.boxboard", sniffTrixBoxBoard({ previous: previous?.sources?.["trix.boxboard"] || null })],
     ["trix.boxchain", sniffTrixBoxChain()],
-    ["trix.packflow", collectPackFlow(solanaRpc, previous?.sources?.["trix.packflow"] || null)],
+    ["trix.packflow", sniffTrixPackSales(previous?.sources?.["trix.packflow"])],
     ["trix.packcensus", collectPackCensus(solanaRpc, previous?.sources?.["trix.packcensus"] || null)],
     ["trix.packmints", sniffPackMints()],
     ["trix.cardlistings", sniffCardListings(previous?.sources?.["trix.cardlistings"])],

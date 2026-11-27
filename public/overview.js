@@ -22,14 +22,19 @@ const mysteryArt = '<img src="/pack-art/trix-mystery.webp" alt="TRIX mystery art
 export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
   if (!["CURRENT", "DELAYED"].includes(evidenceState(flow, now)) || !Array.isArray(flow.records)) return "Pack sales feed unavailable.";
   const tiles = [];
+  function participant(wallet) {
+    if (!wallet) return "unavailable";
+    const name = flow.profiles?.[wallet]?.username;
+    if (!name) return esc(`${wallet.slice(0, 5)}…${wallet.slice(-4)}`);
+    return link(`https://www.trix.market/profile/${encodeURIComponent(name)}`, `@${name}`);
+  }
   const payoutRows = (flow.payouts || []).filter(p => Date.parse(p.at) >= now - EVIDENCE_WINDOW && Date.parse(p.at) <= now &&
     Number.isSafeInteger(p.lamports) && p.lamports > 0 && /^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(p.signature));
   const reported = payoutRows.filter(p => p.seller === baho);
   const totalPaid = reported.reduce((sum, p) => sum + p.lamports, 0);
-  const spotlight = reported.length ? `<div class="payout-spotlight">${mysteryArt}<small>Shop → Baho · observed payouts</small><b>${(totalPaid / 1e9).toFixed(3)} SOL</b><span>${reported.map(p => link(`https://solscan.io/tx/${p.signature}`, `${(p.lamports / 1e9).toFixed(3)}`)).join(" + ")}</span></div>` : "";
+  const spotlight = reported.length ? `<div class="payout-spotlight">${mysteryArt}<small>Shop → ${participant(baho)} · observed payouts</small><b>${(totalPaid / 1e9).toFixed(3)} SOL</b><span>${reported.map(p => link(`https://solscan.io/tx/${p.signature}`, `${(p.lamports / 1e9).toFixed(3)}`)).join(" + ")}</span></div>` : "";
   for (const p of payoutRows.slice(0, 20)) {
-    const seller = p.seller === baho ? "Baho" : `${String(p.seller).slice(0, 5)}…${String(p.seller).slice(-4)}`;
-    tiles.push({ at: p.at, html: `<a class="shop-payout" href="https://solscan.io/tx/${p.signature}" target="_blank" rel="noopener noreferrer" title="Shop buyback · ${esc(p.at)} · card artwork unverified"><i>${mysteryArt}</i><span><b>${(p.lamports / 1e9).toFixed(3)} SOL</b><small>Shop paid ${esc(seller)}</small></span></a>` });
+    tiles.push({ at: p.at, html: `<div class="sale-tile shop-payout"><i>${mysteryArt}</i><span><b>${link(`https://solscan.io/tx/${p.signature}`, `${(p.lamports / 1e9).toFixed(3)} SOL`)}</b><small>Shop paid ${participant(p.seller)}</small></span></div>` });
   }
   let purchases = 0;
   for (const r of flow.records) {
@@ -46,7 +51,7 @@ export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
       const url = /^https:\/\//.test(remote || "") && !remote.endsWith("/" + knownImage) ? remote : localPackArt[t];
       return `<img src="${esc(url)}" alt="${t} pack" decoding="async">`;
     }).join("");
-    tiles.push({ at: r.at, html: `<a href="https://solscan.io/tx/${r.signature}" target="_blank" rel="noopener noreferrer" title="${esc(`${r.packs} pack(s) · ${r.at} · ${buyer || "buyer unavailable"}`)}"><i>${art || mysteryArt}</i><span><b>${sol < 0.001 ? "&lt;0.001" : sol.toFixed(3)} SOL</b><small>Buyer ${buyer ? `${buyer.slice(0, 5)}…${buyer.slice(-4)}` : "unavailable"}</small></span></a>` });
+    tiles.push({ at: r.at, html: `<div class="sale-tile" title="${esc(`${r.packs} pack(s) · ${r.at} · ${buyer || "buyer unavailable"}`)}"><i>${art || mysteryArt}</i><span><b>${link(`https://solscan.io/tx/${r.signature}`, `${sol < 0.001 ? "<0.001" : sol.toFixed(3)} SOL`)}</b><small>Buyer ${participant(buyer)}</small></span></div>` });
     if (++purchases === 20) break;
   }
   return spotlight + tiles.sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).map(t => t.html).join("") || "No purchases or shop buybacks observed in the current sample.";

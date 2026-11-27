@@ -21,7 +21,8 @@ body { background:#080808; color:#eeeee8; }
 .pack-sales-wire h2 { display:inline; margin:0 .65rem 0 0; color:var(--accent); font-size:.9rem; }
 .pack-sales-wire small, #packSalesRail time { color:var(--muted); font-size:.7rem; }
 #packSalesRail { display:flex; gap:.5rem; overflow-x:auto; padding:.45rem 0 .2rem; scrollbar-width:thin; }
-#packSalesRail a { display:flex; align-items:center; flex:none; gap:.65rem; padding:.3rem .8rem .3rem .3rem; border:1px solid #49452e; border-radius:.5rem; background:linear-gradient(115deg,#302d1e,#141512 75%); color:inherit; text-decoration:none; }
+#packSalesRail .sale-tile { display:flex; align-items:center; flex:none; gap:.65rem; padding:.3rem .8rem .3rem .3rem; border:1px solid #49452e; border-radius:.5rem; background:linear-gradient(115deg,#302d1e,#141512 75%); color:inherit; }
+#packSalesRail .sale-tile a { color:inherit; text-underline-offset:.15rem; }
 #packSalesRail a:is(:hover,:focus-visible) { border-color:var(--accent); }
 #packSalesRail i { display:flex; align-items:center; justify-content:center; min-width:3rem; min-height:3.5rem; color:var(--accent); font:700 .75rem monospace; }
 #packSalesRail img { width:3rem; height:3.5rem; object-fit:contain; }
