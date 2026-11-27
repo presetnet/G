@@ -11,9 +11,25 @@ export function compactChange(value) {
 }
 const groups = [["Geoff","geoff.","https://www.geoff.ai/"],["StackNet","stacknet.","https://stacknet.magma-rpc.com/health"],["TRIX","trix.","https://trix.market/"],["DIBZI","dibzi.","https://dibzi.ai/"],["SIM","sim.","https://sim.tech/"],["AZY","azy.","https://azy.life/"],["MAGMA","magma.","https://opensea.io/collection/the-simulation-958481099"]];
 const link = (url, label) => `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`;
+const localPackArt = {
+  base: "/pack-art/base-68ba406bb54c0152caed.webp",
+  hype: "/pack-art/hype-5d856152021f89a3cded.webp",
+  viral: "/pack-art/viral-835f33d9aa6157cfb7dc.webp",
+};
+const baho = "FaAtvEXHrvUbpD7FZCPm3n8vhsvRM2f4DDe2PJFaGMhJ";
 export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
   if (!["CURRENT", "DELAYED"].includes(evidenceState(flow, now)) || !Array.isArray(flow.records)) return "Pack sales feed unavailable.";
   const tiles = [];
+  const payoutRows = (flow.payouts || []).filter(p => Date.parse(p.at) >= now - EVIDENCE_WINDOW && Date.parse(p.at) <= now &&
+    Number.isSafeInteger(p.lamports) && p.lamports > 0 && /^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(p.signature));
+  const reported = payoutRows.filter(p => p.seller === baho);
+  const totalPaid = reported.reduce((sum, p) => sum + p.lamports, 0);
+  const spotlight = reported.length ? `<div class="payout-spotlight"><small>Shop → Baho · observed payouts</small><b>${(totalPaid / 1e9).toFixed(3)} SOL</b><span>${reported.map(p => link(`https://solscan.io/tx/${p.signature}`, `${(p.lamports / 1e9).toFixed(3)}`)).join(" + ")}</span></div>` : "";
+  for (const p of payoutRows.slice(0, 20)) {
+    const seller = p.seller === baho ? "Baho" : `${String(p.seller).slice(0, 5)}…${String(p.seller).slice(-4)}`;
+    tiles.push({ at: p.at, html: `<a class="shop-payout" href="https://solscan.io/tx/${p.signature}" target="_blank" rel="noopener noreferrer" title="Shop buyback · ${esc(p.at)} · card artwork unverified"><i>SHOP</i><span><b>${(p.lamports / 1e9).toFixed(3)} SOL</b><small>Shop paid ${esc(seller)}</small></span></a>` });
+  }
+  let purchases = 0;
   for (const r of flow.records) {
     const time = Date.parse(r?.at);
     if (!(time <= now && time >= now - EVIDENCE_WINDOW) || !Number.isSafeInteger(r.packs) || r.packs < 1 ||
@@ -22,11 +38,16 @@ export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
     const sol = (r.lamports[0] + r.lamports[1]) / 1e9;
     const buyer = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(r.buyer || "") ? r.buyer : null;
     const tiers = (r.tiers || []).filter(t => ["base", "hype", "viral"].includes(t));
-    const art = tiers.filter(t => /^https:\/\//.test(packArt[t] || "")).map(t => `<img src="${esc(packArt[t])}" alt="${t} pack" loading="lazy">`).join("");
-    tiles.push(`<a href="https://solscan.io/tx/${r.signature}" target="_blank" rel="noopener noreferrer" title="${esc(`${r.packs} pack(s) · ${r.at} · ${buyer || "buyer unavailable"}`)}"><i>${art || "TRIX"}</i><span><b>${sol < 0.001 ? "&lt;0.001" : sol.toFixed(3)} SOL</b><small>Buyer ${buyer ? `${buyer.slice(0, 5)}…${buyer.slice(-4)}` : "unavailable"}</small></span></a>`);
-    if (tiles.length === 20) break;
+    const art = tiers.map(t => {
+      const remote = packArt[t];
+      const knownImage = localPackArt[t].split("-").pop().replace(".webp", ".png");
+      const url = /^https:\/\//.test(remote || "") && !remote.endsWith("/" + knownImage) ? remote : localPackArt[t];
+      return `<img src="${esc(url)}" alt="${t} pack" decoding="async">`;
+    }).join("");
+    tiles.push({ at: r.at, html: `<a href="https://solscan.io/tx/${r.signature}" target="_blank" rel="noopener noreferrer" title="${esc(`${r.packs} pack(s) · ${r.at} · ${buyer || "buyer unavailable"}`)}"><i>${art || "PACK"}</i><span><b>${sol < 0.001 ? "&lt;0.001" : sol.toFixed(3)} SOL</b><small>Buyer ${buyer ? `${buyer.slice(0, 5)}…${buyer.slice(-4)}` : "unavailable"}</small></span></a>` });
+    if (++purchases === 20) break;
   }
-  return tiles.join("") || "No pack purchases observed in the current sample.";
+  return spotlight + tiles.sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).map(t => t.html).join("") || "No purchases or shop buybacks observed in the current sample.";
 }
 let lastPackSales = "";
 const age = (at) => {

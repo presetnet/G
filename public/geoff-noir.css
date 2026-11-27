@@ -29,6 +29,10 @@ body { background:#080808; color:#eeeee8; }
 #packSalesRail b,#packSalesRail small { display:block; }
 #packSalesRail b { color:#ffe69a; font:600 .95rem var(--font-mono,monospace); }
 #packSalesRail small { margin-top:.25rem; }
+#packSalesRail .shop-payout { border-color:#305547; background:linear-gradient(115deg,#16312a,#121916); }
+#packSalesRail .shop-payout i { color:#aee8bf; }
+.payout-spotlight { display:grid; flex:none; align-content:center; gap:.12rem; padding:.35rem .75rem; border-left:2px solid #91cba4; }
+#packSalesRail .payout-spotlight a { display:inline; border:0; padding:0; background:none; font-size:.7rem; color:#b5d9bf; }
 .desk-intro { padding:1.6rem 0; }
 .desk-intro h2 { font-size:clamp(1.8rem,3vw,2.8rem); letter-spacing:-.055em; }
 #workspaceNav { padding:7px; gap:4px; background:#101010; border-color:#2c2c28; border-radius:9px; }

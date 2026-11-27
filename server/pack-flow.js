@@ -2,6 +2,12 @@ import { createHash } from "node:crypto";
 export const PACK_PROGRAM = "HTrrq6C6j9NYySUrpSLn9nDjFbKNBD6pS3xBuLppfW4F";
 const DESTINATIONS = ["D8LYYHufXvEVAfMKfmv9amKLJjdJejpXAwsM5Wqp3iQe", "78zsqg7rhoBGMra57Nq1kiLGM8KxFBYefoKZDXDRFhHb"];
 const DAY = 86400000;
+// Publicly identified receipts predate the rolling discovery window. Fetch and
+// validate them exactly like sampled signatures, and expire them after 24h.
+const REPORTED_PAYOUTS = [
+  { signature: "2SJASsGgg91BCuHxmJfgs1Lk1zephbiqkFsUiRFndtEfXTwJ5FeADGKatiHVh28TTVmdjARNDdAEgHfokH2YNP81", at: Date.parse("2026-11-27T00:39:04Z") },
+  { signature: "3TUU911h7VuoQoZHtA362cYrrmqp48HTFYnj7RpCmjTMPQTLMfKE7DgH5gA84cFUGojaLzvAwr7YTrJH56EJHYjy", at: Date.parse("2026-11-27T00:43:42Z") },
+];
 const CENSUS_INTERVAL = 15 * 60000;
 
 // Receipt discriminator and byte 104 mapping are empirically cross-checked
@@ -74,6 +80,29 @@ export function parsePackFlow(tx) {
   return packs && signature ? { signature, at: new Date(tx.blockTime * 1000).toISOString(), buyer: payer, tiers: [...tiers], packs, lamports: amounts } : null;
 }
 
+export function parseShopPayouts(tx) {
+  const signature = tx?.transaction?.signatures?.[0];
+  if (!signature || !tx.meta || tx.meta.err || !Number.isFinite(tx.blockTime) ||
+      !tx.meta.logMessages?.includes("Program log: Instruction: ShopBuyShared")) return [];
+  const payouts = [];
+  for (const group of tx.meta.innerInstructions || []) {
+    const ix = tx.transaction.message.instructions[group.index];
+    // ShopBuyShared discriminator, vault and recipient account positions from
+    // the confirmed program receipts. Ignore rent refunds on sibling instructions.
+    if (ix?.programId !== PACK_PROGRAM || ix.data !== "aqyWW67znve" || ix.accounts?.[3] !== DESTINATIONS[0]) continue;
+    const seller = ix.accounts[8];
+    let lamports = 0;
+    for (const inner of group.instructions || []) {
+      const info = inner.parsed?.info;
+      if (inner.program === "system" && inner.parsed?.type === "transfer" &&
+          info?.source === DESTINATIONS[0] && info.destination === seller &&
+          Number.isSafeInteger(info.lamports) && info.lamports > 0) lamports += info.lamports;
+    }
+    if (lamports > 0) payouts.push({ signature, index: group.index, seller, lamports, at: new Date(tx.blockTime * 1000).toISOString() });
+  }
+  return payouts;
+}
+
 export async function collectPackFlow(rpc, previous = null, now = Date.now()) {
   const checkedAt = new Date(now).toISOString();
   try {
@@ -82,6 +111,12 @@ export async function collectPackFlow(rpc, previous = null, now = Date.now()) {
     const scanned = new Set(previous?.scanned || []);
     const candidates = signatures.filter((x) => x.signature && !x.err && !scanned.has(x.signature));
     const selected = candidates.slice(0, 5);
+    const payouts = new Map((previous?.payouts || []).filter(p => Date.parse(p.at) >= now - DAY)
+      .map(p => [`${p.signature}:${p.index}`, p]));
+    for (const seed of REPORTED_PAYOUTS) {
+      if (seed.at <= now && seed.at >= now - DAY && ![...payouts.values()].some(p => p.signature === seed.signature) &&
+          !selected.some(s => s.signature === seed.signature)) selected.push(seed);
+    }
     // Upgrade one retained sale per scan when an older snapshot lacks the buyer.
     const legacy = previous?.records?.find(r => !r.buyer && Date.parse(r.at) >= now - DAY);
     if (legacy && !selected.some(s => s.signature === legacy.signature)) selected.push(legacy);
@@ -95,10 +130,14 @@ export async function collectPackFlow(rpc, previous = null, now = Date.now()) {
       scanned.add(selected[i].signature);
       const record = parsePackFlow(result.value);
       if (record && Date.parse(record.at) >= now - DAY && Date.parse(record.at) <= now) records.set(record.signature, record);
+      for (const p of parseShopPayouts(result.value)) {
+        if (p.signature === selected[i].signature && Date.parse(p.at) >= now - DAY && Date.parse(p.at) <= now) payouts.set(`${p.signature}:${p.index}`, p);
+      }
     }
     if (selected.length && !resolved) throw Error("Could not resolve sampled transactions");
     const retained = [...records.values()].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 1000);
     return { source: "trix.packflow", ok: true, checkedAt, sourceUrl: `https://solscan.io/account/${PACK_PROGRAM}`, records: retained,
+      payouts: [...payouts.values()].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 1000),
       scanned: [...scanned].slice(-1000), packs24h: retained.reduce((sum, r) => sum + r.packs, 0),
       depositsLamports24h: DESTINATIONS.map((_, i) => retained.reduce((sum, r) => sum + r.lamports[i], 0)),
       destinations: DESTINATIONS, firstObservedAt: previous?.firstObservedAt || checkedAt,
@@ -106,6 +145,6 @@ export async function collectPackFlow(rpc, previous = null, now = Date.now()) {
       note: "Observed minimum from a bounded rolling scan, not complete 24-hour activity. Counts matching outer BuyPack instructions and the two observed deposit legs; history before monitoring and transactions outside the scan can be missed." };
   } catch (error) {
     return { source: "trix.packflow", ok: false, stale: true, checkedAt: previous?.checkedAt || checkedAt, lastAttemptAt: checkedAt,
-      records: previous?.records || [], scanned: previous?.scanned || [], firstObservedAt: previous?.firstObservedAt || null, reason: error.message };
+      records: previous?.records || [], payouts: previous?.payouts || [], scanned: previous?.scanned || [], firstObservedAt: previous?.firstObservedAt || null, reason: error.message };
   }
 }

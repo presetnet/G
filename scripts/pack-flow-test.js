@@ -1,9 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PACK_PROGRAM, parsePackFlow, collectPackFlow, collectPackCensus } from "../server/pack-flow.js";
+import { PACK_PROGRAM, parsePackFlow, parseShopPayouts, collectPackFlow, collectPackCensus } from "../server/pack-flow.js";
 
 const payer = "payer";
 const destinations = ["D8LYYHufXvEVAfMKfmv9amKLJjdJejpXAwsM5Wqp3iQe", "78zsqg7rhoBGMra57Nq1kiLGM8KxFBYefoKZDXDRFhHb"];
+test("shop payouts require a successful ShopBuyShared transfer from its vault to its recipient", () => {
+  const accounts = Array(10).fill("");
+  accounts[3] = destinations[0];
+  accounts[8] = payer;
+  const tx = transaction(Date.now());
+  tx.transaction.message.instructions[1] = { programId: PACK_PROGRAM, accounts, data: "aqyWW67znve" };
+  tx.meta.logMessages.push("Program log: Instruction: ShopBuyShared");
+  const info = { source: destinations[0], destination: payer, lamports: 54917167224 };
+  tx.meta.innerInstructions[1].instructions = [{ program: "system", parsed: { type: "transfer", info } }];
+  assert.deepEqual(parseShopPayouts(tx).map(p => [p.seller, p.lamports]), [[payer, 54917167224]]);
+  info.destination = "other";
+  assert.deepEqual(parseShopPayouts(tx), []);
+});
 const transfer = (i, source = payer) => ({ program: "system", parsed: { type: "transfer", info: { source, destination: destinations[i], lamports: [1530195867, 170021763][i] } } });
 function transaction(now, signature = "sig") {
   return { blockTime: Math.floor(now / 1000), transaction: { signatures: [signature], message: { accountKeys: [{ signer: true, pubkey: payer }], instructions: [
