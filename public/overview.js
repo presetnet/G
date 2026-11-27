@@ -15,34 +15,10 @@ const localPackArt = {
   hype: "/pack-art/hype-5d856152021f89a3cded.webp",
   viral: "/pack-art/viral-835f33d9aa6157cfb7dc.webp",
 };
-// Official generic image from TRIX collection metadata, not the revealed card.
-const mysteryArt = '<img src="/pack-art/trix-mystery.webp" alt="TRIX mystery artwork; exact art unknown" title="TRIX mystery artwork · exact art unknown">';
-// Bundled WebP previews, keyed by original TRIX image identity (not player).
-const rankedPreviews = new Set([
-  "2b2947aa-b6ec-4d4a-ab2d-4c6303b62bb6", "7abdeabb-34ea-46d3-b511-05c07a90f8c5",
-  "d82b00d7-ad14-4781-911d-e4bc7105947c", "8644163c-862e-49df-b825-b67d629913a5",
-  "a1731b8d-be83-4e8e-9b29-ac9d7e3e68bd", "e156d958-1de6-41b6-bc01-39140c192d74",
-  "d5addfb0-5aad-4161-8b9f-37cf14a2c30a", "d14a76ca-63f8-477a-b483-45892c209553",
-  "18849d9c-d3a7-4f1e-a6dd-e2f801091ca2", "f2816b75-beb3-42bd-a921-a4d42caa566a",
-]);
 export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
   const packAvailable = ["CURRENT", "DELAYED"].includes(evidenceState(flow, now));
   if (!flow || (!packAvailable && !flow.payouts?.length && !flow.sellbackScan?.ok)) return "Sales feed unavailable.";
   const tiles = [];
-  function sellerArtwork(wallet) {
-    const name = flow.profiles?.[wallet]?.username;
-    const art = name && flow.playerArt?.[name];
-    if (!art || !/^https:\/\//i.test(art.url)) {
-      const avatar = flow.profiles?.[wallet]?.avatar;
-      if (/^https:\/\//i.test(avatar || "")) return `<figure class="ranked-rip"><img src="${esc(avatar)}" alt="Seller profile photo" loading="lazy" decoding="async"><figcaption>Seller profile<br>Sold card unknown</figcaption></figure>`;
-      return '<small class="unidentified-card">Sold card unknown</small>';
-    }
-    const id = art.url.match(/^https:\/\/trix-are-for-kids\.atl1\.cdn\.digitaloceanspaces\.com\/trix\/generated\/([\da-f-]{36})\/original\.(?:jpg|png)$/)?.[1];
-    const preview = rankedPreviews.has(id) ? `/pack-art/ranked/${id}.webp` : art.url;
-    const details = [art.tier, art.rarity].filter(Boolean).join(" · ");
-    const description = `@${name}’s ranked rip: ${details} ${art.symbol || ""}. Sold card unverified.`;
-    return `<figure class="ranked-rip" title="${esc(description)}"><a href="${esc(art.url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(`View artwork: ${description}`)}"><img src="${esc(preview)}" alt="${esc(description)}" decoding="async"></a><figcaption><strong>${esc(art.symbol || "TRIX")}</strong>Seller’s ranked rip</figcaption></figure>`;
-  }
   function participant(wallet) {
     if (!wallet) return "unavailable";
     const name = flow.profiles?.[wallet]?.username;
@@ -52,7 +28,8 @@ export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
   const payoutRows = (flow.payouts || []).filter(p => Date.parse(p.at) >= now - EVIDENCE_WINDOW && Date.parse(p.at) <= now &&
     Number.isSafeInteger(p.lamports) && p.lamports > 0 && /^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(p.signature));
   for (const p of payoutRows) {
-    tiles.push({ at: p.at, sol: p.lamports / 1e9, id: `${p.signature}:${Number(p.index)}`, style: "shop-payout", body: `${sellerArtwork(p.seller)}<span><b>${link(`https://solscan.io/tx/${p.signature}`, `${(p.lamports / 1e9).toFixed(3)} SOL`)}</b><small>Shop paid ${participant(p.seller)}</small><small>${esc(new Date(p.at).toISOString().slice(11,19))} UTC</small></span>` });
+    const amount = p.lamports < 1000000 ? "<0.001" : (p.lamports / 1e9).toFixed(3);
+    tiles.push({ at: p.at, sol: p.lamports / 1e9, id: `${p.signature}:${Number(p.index)}`, style: "shop-payout", body: `<span><small>SHOP BUYBACK · ${esc(new Date(p.at).toISOString().slice(11,19))} UTC</small><b title="${p.lamports} lamports">${link(`https://solscan.io/tx/${p.signature}`, `${amount} SOL`)}</b><small>Paid ${participant(p.seller)}</small><small title="The payout identifies the recipient and amount, not a verified card mint or rip ID.">Sold card unknown · no art match</small></span>` });
   }
   for (const r of packAvailable ? flow.records || [] : []) {
     const time = Date.parse(r?.at);
@@ -68,7 +45,7 @@ export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
       const url = /^https:\/\//.test(remote || "") && !remote.endsWith("/" + knownImage) ? remote : localPackArt[t];
       return `<img src="${esc(url)}" alt="${t} pack" decoding="async">`;
     }).join("");
-    tiles.push({ at: r.at, sol, id: `${r.signature}:pack`, style: "pack-purchase", body: `<i>${art || mysteryArt}</i><span><b>${link(`https://solscan.io/tx/${r.signature}`, `${sol < 0.001 ? "<0.001" : sol.toFixed(3)} SOL`)}</b><small>Buyer ${participant(buyer)}</small><small>${r.packs} pack${r.packs === 1 ? "" : "s"}</small></span>` });
+    tiles.push({ at: r.at, sol, id: `${r.signature}:pack`, style: "pack-purchase", body: `${art ? `<i>${art}</i>` : ""}<span><b>${link(`https://solscan.io/tx/${r.signature}`, `${sol < 0.001 ? "<0.001" : sol.toFixed(3)} SOL`)}</b><small>Buyer ${participant(buyer)}</small><small>${r.packs} pack${r.packs === 1 ? "" : "s"}</small></span>` });
   }
   tiles.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   // Spread replays around one circuit. Originals retain their chronological order.
@@ -125,11 +102,7 @@ export function initOverview() {
   if (rail && loop) {
     rail.addEventListener("error", e => {
       const img = e.target;
-      if (img.tagName !== "IMG" || img.getAttribute("src") === "/pack-art/trix-mystery.webp") return;
-      img.src = "/pack-art/trix-mystery.webp";
-      img.alt = "TRIX mystery artwork; preview unavailable";
-      const caption = img.closest("figure")?.querySelector("figcaption");
-      if (caption) caption.textContent = "Preview unavailable";
+      if (img.tagName === "IMG") img.replaceWith(document.createTextNode(img.alt));
     }, true);
     let paused = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const label = () => { loop.textContent = paused ? "Play loop" : "Pause loop"; };

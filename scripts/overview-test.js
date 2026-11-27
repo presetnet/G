@@ -15,15 +15,16 @@ test("one receipt circuit keeps small sales and spaces labeled repeats for large
   assert.match(html, /Sold card unknown/);
 });
 
-test("Baho's ranked artwork is never substituted for another seller's missing image", () => {
+test("even the same seller's ranked artwork and avatar do not identify the sold card", () => {
   const at = new Date().toISOString();
   const artwork = "https://example.org/baho-art.png";
   const html = packSalesFeed({ ok: true, checkedAt: at, playerArt: { Baho: { url: artwork } },
-    profiles: { first: { username: "Baho" }, second: { username: "Other" } },
+    profiles: { first: { username: "Baho", avatar: "https://example.org/avatar.png" }, second: { username: "Other" } },
     payouts: ["first", "second"].map((seller, i) => ({ seller, at, signature: ["A", "B"][i].repeat(88), index: 0, lamports: 100000000 })),
   });
-  assert.match(html, /baho-art\.png/);
-  assert.doesNotMatch(html.slice(html.indexOf(`data-receipt="${"B".repeat(88)}`)), /<img/);
+  assert.match(html, /@Baho/);
+  assert.match(html, /solscan\.io\/tx\//);
+  assert.doesNotMatch(html, /<img|baho-art\.png|avatar\.png/);
 });
 
 test("overview rejects legacy peak-held supply and separates NFT supply from Solana tokens", () => {
