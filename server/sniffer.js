@@ -3441,7 +3441,10 @@ function decodeBase58(value) {
 }
 
 async function sniffTrixPackSales(previous) {
-  const flow = await collectPackFlow(solanaRpc, previous);
+  const [flow, best] = await Promise.all([
+    collectPackFlow(solanaRpc, previous),
+    fetchJson(`${TRIX_BASE_URL}/api/mkt/rips/best`, { timeoutMs: TRIX_TIMEOUT_MS }).catch(() => null),
+  ]);
   const profiles = {};
   const wallets = [...new Set([...(flow.payouts || []).map(r => r.seller),
     ...(flow.records || []).slice(0, 20).map(r => r.buyer)])].filter(w => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w));
@@ -3458,7 +3461,12 @@ async function sniffTrixPackSales(previous) {
     if (!res.ok && res.status !== 404 && profiles[wallet]?.username) return;
     profiles[wallet] = { checked: Date.now(), username: username || null };
   }));
-  return { ...flow, profiles };
+  const rankedPulls = best?.ok && Array.isArray(best.json?.rips) ? {
+    checkedAt: new Date().toISOString(), round: best.json.round, showValue: best.json.showValue === true,
+    rows: best.json.rips.slice(0, 10).map(({ rank, player, coinSymbol, packLevel, rarity, imageUrl, valueSol }) =>
+      ({ rank, player, coinSymbol, packLevel, rarity, imageUrl, valueSol: best.json.showValue === true ? valueSol : null })),
+  } : null;
+  return { ...flow, profiles, rankedPulls };
 }
 
 export function parseTrixPackPurchase(transaction, levels = []) {

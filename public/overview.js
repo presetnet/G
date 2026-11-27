@@ -61,6 +61,19 @@ export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
     .join("") || "No purchases or shop buybacks observed in the current sample.";
 }
 let lastPackSales = "";
+let lastPullBoard = "";
+export function renderRankedPulls(board, now = Date.now()) {
+  const elapsed = now - Date.parse(board?.checkedAt);
+  if (!(elapsed >= 0 && elapsed <= 15 * 60000) || !Array.isArray(board?.rows)) return "Current TRIX rankings unavailable.";
+  const rows = board.rows.filter(r => Number.isInteger(r?.rank) && r.rank >= 1 && r.rank <= 10).sort((a,b) => a.rank - b.rank);
+  return rows.map(r => {
+    const symbol = r.coinSymbol ? `$${r.coinSymbol}` : "Ranked pull";
+    const player = /^[\w-]+$/.test(r.player || "") ? link(`https://www.trix.market/profile/${encodeURIComponent(r.player)}`, `@${r.player}`) : esc(r.player);
+    const image = /^https:\/\//i.test(r.imageUrl || "") ? `<a href="${esc(r.imageUrl)}" target="_blank" rel="noopener noreferrer"><img src="${esc(r.imageUrl)}" alt="${esc(symbol)} ranked pull" loading="lazy" decoding="async"></a>` : "";
+    const value = board.showValue && Number.isFinite(r.valueSol) && r.valueSol >= 0 ? `<b>${r.valueSol > 0 && r.valueSol < .001 ? "&lt;0.001" : r.valueSol.toFixed(3)} SOL</b>` : "";
+    return `<article>${image}<div><strong>#${r.rank} ${esc(symbol)}</strong><small>${player}</small><small>${esc([r.rarity, r.packLevel, board.round != null && `Round ${board.round}`].filter(Boolean).join(" · "))}</small>${value}</div></article>`;
+  }).join("") || "No ranked pulls reported.";
+}
 let feedSources;
 function updateSalesRail() {
   const rail = document.getElementById("packSalesRail");
@@ -130,6 +143,11 @@ export function initOverview() {
 }
 export function renderOverview(latest, events = []) {
   const sources = latest?.sources || {};
+  const board = document.getElementById("rankedPulls");
+  if (board) {
+    const html = renderRankedPulls(sources["trix.packflow"]?.rankedPulls);
+    if (html !== lastPullBoard) { board.innerHTML = html; lastPullBoard = html; }
+  }
   feedSources = sources;
   updateSalesRail();
   document.getElementById("sourceStrip").innerHTML = groups.map(([title,prefix,url]) => {
