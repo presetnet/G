@@ -103,7 +103,52 @@ export function parseShopPayouts(tx) {
   return payouts;
 }
 
+// Freeze the finalized slot range while paging. Only advance past the upper
+// bound after the provider exhausts it, even when one minute spans many pages.
+export async function scanLiveSellbacks(rpc, previous, now = Date.now()) {
+  let scan = { ...previous, ok: false };
+  const payouts = [];
+  try {
+    if (!scan.end) {
+      const head = await rpc("getSlot", [{ commitment: "finalized" }]);
+      if (!Number.isSafeInteger(head) || head < 1) throw Error("Finalized slot unavailable");
+      const start = scan.through ? scan.through + 1 : Math.max(1, head - 300);
+      if (head < start) return { scan: { ...scan, ok: true }, payouts };
+      scan = { ...scan, since: scan.since || start, start, end: head, cursor: null };
+    }
+    for (let page = 0; page < 3; page++) {
+      const result = await rpc("getTransactionsForAddress", [DESTINATIONS[0], {
+        transactionDetails: "full", sortOrder: "asc", commitment: "finalized", limit: 100,
+        encoding: "jsonParsed", maxSupportedTransactionVersion: 0,
+        filters: { slot: { gte: scan.start, lte: scan.end }, status: "succeeded" },
+        ...(scan.cursor ? { paginationToken: scan.cursor } : {}),
+      }], { timeoutMs: 8000 });
+      if (!Array.isArray(result?.data) || result.data.some(t => !t?.meta || !t.transaction?.message ||
+          !(t.slot >= scan.start && t.slot <= scan.end))) throw Error("Incomplete sellback page");
+      for (const tx of result.data) payouts.push(...parseShopPayouts(tx));
+      if (!result.paginationToken) {
+        scan = { since: scan.since, through: scan.end, checkedAt: new Date(now).toISOString(), ok: true };
+        break;
+      }
+      if (result.paginationToken === scan.cursor) throw Error("Sellback cursor did not advance");
+      scan = { ...scan, cursor: result.paginationToken, ok: true };
+    }
+  } catch { scan.ok = false; }
+  return { scan, payouts };
+}
+
 export async function collectPackFlow(rpc, previous = null, now = Date.now()) {
+  const [flow, live] = await Promise.all([
+    collectSampledPackFlow(rpc, previous, now), scanLiveSellbacks(rpc, previous?.sellbackScan, now),
+  ]);
+  const receipts = new Map();
+  for (const p of [...(previous?.payouts || []), ...(flow.payouts || []), ...live.payouts]) {
+    if (Date.parse(p.at) >= now - DAY && Date.parse(p.at) <= now) receipts.set(`${p.signature}:${p.index}`, p);
+  }
+  return { ...flow, sellbackScan: live.scan, payouts: [...receipts.values()].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)) };
+}
+
+async function collectSampledPackFlow(rpc, previous, now) {
   const checkedAt = new Date(now).toISOString();
   try {
     const signatures = await rpc("getSignaturesForAddress", [PACK_PROGRAM, { limit: 25, commitment: "confirmed" }]);

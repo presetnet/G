@@ -1,8 +1,29 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PACK_PROGRAM, parsePackFlow, parseShopPayouts, collectPackFlow, collectPackCensus } from "../server/pack-flow.js";
+import { PACK_PROGRAM, parsePackFlow, parseShopPayouts, collectPackFlow, collectPackCensus, scanLiveSellbacks } from "../server/pack-flow.js";
 
 const payer = "payer";
+test("sellback scan resumes its exact page after failure before moving to newer slots", async () => {
+  let calls = 0;
+  const first = await scanLiveSellbacks(async method => {
+    if (method === "getSlot") return 800;
+    if (calls++) throw Error("timeout");
+    return { data: [], paginationToken: "page-two" };
+  });
+  assert.equal(first.scan.ok, false);
+  const second = await scanLiveSellbacks(async (method, [, options]) => {
+    assert.equal(method, "getTransactionsForAddress");
+    assert.deepEqual(options.filters.slot, { gte: 500, lte: 800 });
+    assert.equal(options.paginationToken, "page-two");
+    return { data: [], paginationToken: null };
+  }, first.scan);
+  assert.equal(second.scan.through, 800);
+  await scanLiveSellbacks(async (method, params) => {
+    if (method === "getSlot") return 900;
+    assert.deepEqual(params[1].filters.slot, { gte: 801, lte: 900 });
+    return { data: [] };
+  }, second.scan);
+});
 const destinations = ["D8LYYHufXvEVAfMKfmv9amKLJjdJejpXAwsM5Wqp3iQe", "78zsqg7rhoBGMra57Nq1kiLGM8KxFBYefoKZDXDRFhHb"];
 test("shop payouts require a successful ShopBuyShared transfer from its vault to its recipient", () => {
   const accounts = Array(10).fill("");

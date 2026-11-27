@@ -93,7 +93,10 @@
     <main class="shell">
       <section class="pack-sales-wire" aria-labelledby="packSalesTitle">
         <h2 id="packSalesTitle">TRIX pack sales &amp; shop buybacks</h2>
-        <small>On-chain receipts · last 24h · partial scan. Buyback art shows the seller’s ranked rip when available; the sold card is unverified.</small>
+        <select id="salesView" aria-label="Receipt feed"><option value="sellbacks">Live sellbacks</option><option value="all">Pack sales &amp; buybacks</option></select>
+        <button type="button" id="salesLoop">Pause loop</button>
+        <small id="sellbackCoverage">Loading sellback coverage…</small>
+        <small>Newest first · last 24h. Buyback art shows the seller’s ranked rip when available; the sold card is unverified.</small>
         <div id="packSalesRail" tabindex="0" role="region" aria-label="Featured payouts and latest pack sales">Loading receipts…</div>
       </section>
       <section class="desk-intro" aria-label="Dashboard overview">

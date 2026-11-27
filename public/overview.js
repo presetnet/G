@@ -19,8 +19,9 @@ const localPackArt = {
 const baho = "FaAtvEXHrvUbpD7FZCPm3n8vhsvRM2f4DDe2PJFaGMhJ";
 // Official generic image from TRIX collection metadata, not the revealed card.
 const mysteryArt = '<img src="/pack-art/trix-mystery.webp" alt="TRIX mystery artwork; exact art unknown" title="TRIX mystery artwork · exact art unknown">';
-export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
-  if (!["CURRENT", "DELAYED"].includes(evidenceState(flow, now)) || !Array.isArray(flow.records)) return "Pack sales feed unavailable.";
+export function packSalesFeed(flow, packArt = {}, now = Date.now(), view = "all") {
+  const packAvailable = ["CURRENT", "DELAYED"].includes(evidenceState(flow, now));
+  if (!flow || (!packAvailable && !flow.payouts?.length && !flow.sellbackScan?.ok)) return "Sales feed unavailable.";
   const tiles = [];
   function sellerArtwork(wallet) {
     const name = flow.profiles?.[wallet]?.username;
@@ -42,10 +43,11 @@ export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
   const totalPaid = reported.reduce((sum, p) => sum + p.lamports, 0);
   const spotlight = reported.length ? `<div class="payout-spotlight">${sellerArtwork(baho)}<small>Shop → ${participant(baho)} · observed payouts</small><b>${(totalPaid / 1e9).toFixed(3)} SOL</b><span>${reported.map(p => link(`https://solscan.io/tx/${p.signature}`, `${(p.lamports / 1e9).toFixed(3)}`)).join(" + ")}</span></div>` : "";
   for (const p of payoutRows) {
-    tiles.push({ at: p.at, html: `<div class="sale-tile shop-payout">${sellerArtwork(p.seller)}<span><b>${link(`https://solscan.io/tx/${p.signature}`, `${(p.lamports / 1e9).toFixed(3)} SOL`)}</b><small>Shop paid ${participant(p.seller)}</small></span></div>` });
+    tiles.push({ at: p.at, html: `<div class="sale-tile shop-payout" data-receipt="${p.signature}:${Number(p.index)}">${sellerArtwork(p.seller)}<span><b>${link(`https://solscan.io/tx/${p.signature}`, `${(p.lamports / 1e9).toFixed(3)} SOL`)}</b><small>Shop paid ${participant(p.seller)}</small><small>${esc(new Date(p.at).toISOString().slice(11,19))} UTC</small></span></div>` });
   }
+  if (view === "sellbacks") return tiles.sort((a,b) => Date.parse(b.at) - Date.parse(a.at)).map(t => t.html).join("") || "No sellbacks observed in this window.";
   let purchases = 0;
-  for (const r of flow.records) {
+  for (const r of packAvailable ? flow.records || [] : []) {
     const time = Date.parse(r?.at);
     if (!(time <= now && time >= now - EVIDENCE_WINDOW) || !Number.isSafeInteger(r.packs) || r.packs < 1 ||
         !/^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(r.signature) || !Array.isArray(r.lamports) || r.lamports.length !== 2 ||
@@ -65,11 +67,47 @@ export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
   return spotlight + tiles.sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).map(t => t.html).join("") || "No purchases or shop buybacks observed in the current sample.";
 }
 let lastPackSales = "";
+let feedSources;
+function updateSalesRail() {
+  const rail = document.getElementById("packSalesRail");
+  if (!rail || !feedSources) return;
+  const flow = feedSources["trix.packflow"];
+  const scan = flow?.sellbackScan;
+  const coverage = document.getElementById("sellbackCoverage");
+  if (coverage) coverage.textContent = !scan?.ok ? "Live scan unavailable · observed receipts only." :
+    scan.end ? "Catching up on finalized receipts." : `Live scan through slot ${scan.through} · earlier history sampled.`;
+  const html = packSalesFeed(flow, feedSources["trix.packmints"]?.packArt, Date.now(), document.getElementById("salesView")?.value);
+  if (html === lastPackSales) return;
+  const left = rail.getBoundingClientRect().left;
+  const anchor = rail.scrollLeft > 1 && [...rail.children].find(el => el.getBoundingClientRect().right > left)?.dataset.receipt;
+  rail.innerHTML = html;
+  if (anchor) {
+    const el = [...rail.children].find(el => el.dataset.receipt === anchor);
+    if (el) rail.scrollLeft += el.getBoundingClientRect().left - left;
+  }
+  lastPackSales = html;
+}
 const age = (at) => {
   const minutes = (Date.now() - Date.parse(at)) / 60000;
   return !Number.isFinite(minutes) || minutes < 0 ? "age unknown" : minutes < 1 ? "just checked" : minutes < 60 ? `${Math.floor(minutes)}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ago` : `${Math.floor(minutes / 1440)}d ago`;
 };
 export function initOverview() {
+  const rail = document.getElementById("packSalesRail");
+  const loop = document.getElementById("salesLoop");
+  if (rail && loop) {
+    let paused = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const label = () => { loop.textContent = paused ? "Play loop" : "Pause loop"; };
+    label();
+    loop.onclick = () => { paused = !paused; label(); };
+    document.getElementById("salesView").onchange = () => { rail.scrollLeft = 0; updateSalesRail(); };
+    window.setInterval(() => {
+      if (paused || document.hidden || rail.matches(":hover, :focus-within") || rail.scrollWidth <= rail.clientWidth) return;
+      const left = rail.getBoundingClientRect().left;
+      const next = [...rail.children].find(el => el.getBoundingClientRect().left > left + 2);
+      if (!next || rail.scrollLeft + rail.clientWidth >= rail.scrollWidth - 1) rail.scrollLeft = 0;
+      else rail.scrollBy({ left: next.getBoundingClientRect().left - left, behavior: "smooth" });
+    }, 3000);
+  }
   document.querySelector(".desk-intro").insertAdjacentHTML("afterend", '<section id="glance" aria-label="Public visibility overview"><div id="sourceStrip" class="source-strip"></div><div id="latestSignal" class="latest-signal"></div><div class="glance-heading"><div><p class="eyebrow">THE LIVE DESK / OVERVIEW</p><h2>Signals at a glance<span>.</span></h2></div><a href="#diagnosticsWorkspace">Source health ↗</a></div><div id="quickFacts" class="quick-facts"></div><div id="packActivity" class="pack-activity"></div><details class="data-disclosure"><summary>TRIX winner routes · access check, Nov 17</summary><p>The client routes <a href="https://www.trix.market/cards/winners" target="_blank" rel="noopener noreferrer">winners</a>, <a href="https://www.trix.market/cards/winners/above-%241k" target="_blank" rel="noopener noreferrer">above $1k</a> and <a href="https://www.trix.market/cards/winners/above-%2410k" target="_blank" rel="noopener noreferrer">above $10k</a> map to an admin sign-in component. No winner data or payout amounts were publicly verified. Route names are not proof of winners or a release date.</p></details><div class="glance-heading changes-heading"><div><p class="eyebrow">THE LATEST / PUBLIC SOURCES</p><h2>What changed<span>.</span></h2></div><span>LAST 24 HOURS</span></div><div id="quickChanges"></div></section>');
   const briefing = document.querySelector(".stacknet-brief");
   if (briefing) { const fold = document.createElement("details"); fold.className = "briefing-fold"; fold.innerHTML = "<summary>Research archive · Stacknet calculator</summary>"; briefing.before(fold); fold.append(briefing); }
@@ -84,11 +122,8 @@ export function initOverview() {
 }
 export function renderOverview(latest, events = []) {
   const sources = latest?.sources || {};
-  const rail = document.getElementById("packSalesRail");
-  if (rail) {
-    const html = packSalesFeed(sources["trix.packflow"], sources["trix.packmints"]?.packArt);
-    if (html !== lastPackSales) { rail.innerHTML = html; lastPackSales = html; }
-  }
+  feedSources = sources;
+  updateSalesRail();
   document.getElementById("sourceStrip").innerHTML = groups.map(([title,prefix,url]) => {
     const rows = Object.entries(sources).filter(([id]) => id.startsWith(prefix));
     const current = rows.filter(([,s]) => evidenceState(s) === "CURRENT").length;
