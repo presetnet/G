@@ -3443,7 +3443,7 @@ function decodeBase58(value) {
 async function sniffTrixPackSales(previous) {
   const flow = await collectPackFlow(solanaRpc, previous);
   const profiles = {};
-  const wallets = [...new Set([...(flow.payouts || []).slice(0, 20).map(r => r.seller),
+  const wallets = [...new Set([...(flow.payouts || []).map(r => r.seller),
     ...(flow.records || []).slice(0, 20).map(r => r.buyer)])].filter(w => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w));
   const pending = [];
   for (const wallet of wallets) {
@@ -3451,13 +3451,25 @@ async function sniffTrixPackSales(previous) {
     if (cached) profiles[wallet] = cached;
     if (!cached || Date.now() - cached.checked > (cached.username ? 3600000 : 300000)) pending.push(wallet);
   }
+  const artRequest = flow.ok && flow.payouts?.length
+    ? fetchJson(`${TRIX_BASE_URL}/api/mkt/rips/best`, { timeoutMs: TRIX_TIMEOUT_MS }).catch(() => null)
+    : null;
   if (flow.ok) await Promise.allSettled(pending.slice(0, 5).map(async wallet => {
     const res = await fetchJson(`${TRIX_BASE_URL}/api/profile/${wallet}`, { timeoutMs: TRIX_TIMEOUT_MS });
     const username = res.ok && res.json?.walletAddress === wallet && typeof res.json.username === "string"
       ? res.json.username.replace(/^@+/, "").trim() : null;
     profiles[wallet] = { checked: Date.now(), username: username || null };
   }));
-  return { ...flow, profiles };
+  const best = await artRequest;
+  const playerArt = Object.create(null);
+  if (best?.ok && Array.isArray(best.json?.rips)) {
+    const sellers = new Set((flow.payouts || []).map(p => profiles[p.seller]?.username).filter(Boolean));
+    for (const rip of best.json.rips) {
+      if (!sellers.has(rip?.player) || playerArt[rip.player] || !/^https:\/\//i.test(rip.imageUrl)) continue;
+      playerArt[rip.player] = { url: rip.imageUrl, symbol: rip.coinSymbol, rarity: rip.rarity, tier: rip.packLevel };
+    }
+  }
+  return { ...flow, profiles, playerArt };
 }
 
 export function parseTrixPackPurchase(transaction, levels = []) {

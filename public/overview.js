@@ -22,6 +22,14 @@ const mysteryArt = '<img src="/pack-art/trix-mystery.webp" alt="TRIX mystery art
 export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
   if (!["CURRENT", "DELAYED"].includes(evidenceState(flow, now)) || !Array.isArray(flow.records)) return "Pack sales feed unavailable.";
   const tiles = [];
+  function sellerArtwork(wallet) {
+    const name = flow.profiles?.[wallet]?.username;
+    const art = name && flow.playerArt?.[name];
+    if (!art || !/^https:\/\//i.test(art.url)) return `<figure class="ranked-rip">${mysteryArt}<figcaption>Card unknown</figcaption></figure>`;
+    const details = [art.tier, art.rarity].filter(Boolean).join(" · ");
+    const description = `@${name}’s ranked rip: ${details} ${art.symbol || ""}. Sold card unverified.`;
+    return `<figure class="ranked-rip" title="${esc(description)}"><a href="${esc(art.url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(`View artwork: ${description}`)}"><img src="${esc(art.url)}" alt="${esc(description)}" loading="lazy" decoding="async"></a><figcaption><strong>${esc(art.symbol || "TRIX")}</strong>${esc(details)}</figcaption></figure>`;
+  }
   function participant(wallet) {
     if (!wallet) return "unavailable";
     const name = flow.profiles?.[wallet]?.username;
@@ -32,9 +40,9 @@ export function packSalesFeed(flow, packArt = {}, now = Date.now()) {
     Number.isSafeInteger(p.lamports) && p.lamports > 0 && /^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(p.signature));
   const reported = payoutRows.filter(p => p.seller === baho);
   const totalPaid = reported.reduce((sum, p) => sum + p.lamports, 0);
-  const spotlight = reported.length ? `<div class="payout-spotlight">${mysteryArt}<small>Shop → ${participant(baho)} · observed payouts</small><b>${(totalPaid / 1e9).toFixed(3)} SOL</b><span>${reported.map(p => link(`https://solscan.io/tx/${p.signature}`, `${(p.lamports / 1e9).toFixed(3)}`)).join(" + ")}</span></div>` : "";
-  for (const p of payoutRows.slice(0, 20)) {
-    tiles.push({ at: p.at, html: `<div class="sale-tile shop-payout"><i>${mysteryArt}</i><span><b>${link(`https://solscan.io/tx/${p.signature}`, `${(p.lamports / 1e9).toFixed(3)} SOL`)}</b><small>Shop paid ${participant(p.seller)}</small></span></div>` });
+  const spotlight = reported.length ? `<div class="payout-spotlight">${sellerArtwork(baho)}<small>Shop → ${participant(baho)} · observed payouts</small><b>${(totalPaid / 1e9).toFixed(3)} SOL</b><span>${reported.map(p => link(`https://solscan.io/tx/${p.signature}`, `${(p.lamports / 1e9).toFixed(3)}`)).join(" + ")}</span></div>` : "";
+  for (const p of payoutRows) {
+    tiles.push({ at: p.at, html: `<div class="sale-tile shop-payout">${sellerArtwork(p.seller)}<span><b>${link(`https://solscan.io/tx/${p.signature}`, `${(p.lamports / 1e9).toFixed(3)} SOL`)}</b><small>Shop paid ${participant(p.seller)}</small></span></div>` });
   }
   let purchases = 0;
   for (const r of flow.records) {
