@@ -269,6 +269,8 @@ const dependencies = {
   "trix-voids.js": trixVoids,
   "pack-pace.js": packPace,
   "pack-flow.js": packFlow,
+  "trix-holdings.js": { collectVoidHoldings: async () => ({ ok: false }) },
+  "trix-card-inventory.js": { readCardInventory: async () => ({}) },
   "config.js": { config },
   "store.js": {
     loadMiningSurfaceCache: async () => null, saveMiningSurfaceCache: noWrite,
@@ -888,8 +890,8 @@ failures.clear();
 
 // Full/minute summaries use the same source contract, including coverage.
 const coldMinute = await api.runMinuteSniff();
-assert.equal(Object.keys(coldMinute.sources).length, 30);
-assert.equal(coldMinute.summary.totalSources, 30);
+assert.equal(Object.keys(coldMinute.sources).length, 33);
+assert.equal(coldMinute.summary.totalSources, 33);
 assert.equal(coldMinute.sources["trix.boxes"].status, 404);
 assert.equal(coldMinute.sources["trix.preorder"].ok, true);
 assert.equal(coldMinute.sources["trix.preorder"].walletAnswerAvailable, false);
@@ -903,7 +905,7 @@ assert.equal(coldMinute.sources["pond0x.geoff"].paired, false);
 assert.equal(coldMinute.sources["pond0x.geoff"].chatEmbedded, true);
 assert.equal(coldMinute.sources["pond0x.geoff"].providerEmbedded, true);
 const full = service.preserveTrixHistory(null, await api.runSniff());
-assert.equal(Object.keys(full.sources).length, 57);
+assert.equal(Object.keys(full.sources).length, 60);
 assert.equal(full.sources["trix.preorder"].saleVerdict, "open to reserve");
 assert.equal(full.sources["trix.boxes"].status, 404);
 assert.equal(full.summary.trixBoxesOk, false);
@@ -1063,7 +1065,10 @@ for (let step = 0; step < 100 && !slowMinute; step += 1) {
 }
 await slowPending;
 for (const [name, source] of Object.entries(slowMinute.sources)) {
-  if (name.startsWith("trix.") && name !== "trix.boxes") assert.equal(source.ok, true, name);
+  if (name.startsWith("trix.")) {
+    const unavailable = ["trix.boxes", "trix.packmints", "trix.cardlistings", "trix.holdings"];
+    assert.equal(source.ok, !unavailable.includes(name), name);
+  }
 }
 assert.equal(slowMinute.sources["trix.boxes"].status, 404);
 assert.equal(slowMinute.sources["stacknet.health"].ok, true);

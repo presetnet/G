@@ -263,8 +263,16 @@ export function renderCardListings(src) {
   const heading = '<h4 class="board-subhead"><a href="https://www.trix.market/shop/market" target="_blank" rel="noopener noreferrer">Card marketplace ↗</a></h4>';
   if (!good(src)) return heading + empty("Public card listings unavailable.");
   const body = rows(src.listings).map(r => `<tr><td>${link("https://www.trix.market/shop/c/", r.ripId, r.name)}</td><td>${esc(r.rarity)}</td><td>${fmt(r.ask, 3)} SOL</td></tr>`).join("");
+  const counts = src.inventory?.counts;
+  const inventory = counts ? `<h4 class="board-subhead">Known card inventory by pack</h4>` +
+    table("Distinct card mints by originating pack and listing status", [["Pack"], ["Known"], ["Listed"], ["Absent from feed"]],
+      ["base", "hype", "viral", "unknown"].map(tier => {
+        const row = counts[tier];
+        return `<tr><th scope="row">${tier === "unknown" ? "Tier unknown" : tier.toUpperCase()}</th><td>${fmt(row.known, 0)}</td><td>${fmt(row.listed, 0)}</td><td>${fmt(row.known - row.listed, 0)}</td></tr>`;
+      }).join("")) +
+    `<p class="desk-context">Observed mints, not total supply. Pack tiers come from matching TRIX card records and persist after delisting. ${link("https://solscan.io/token/", src.inventory.collection, "Solana collection")} discovery ${src.inventory.indexAvailable ? "in progress" : "unavailable"}. Absent means missing from this listing feed; it does not prove a sale.</p>` : "";
   return heading + `<p class="desk-context">${fmt(src.count, 0)} card listings returned · ${clock(src.checkedAt, "Listing feed")}. Lowest asks shown; these are listings, not sales or shop buybacks.</p>` +
-    (body ? table("Lowest reported card asks", [["Card"], ["Rarity"], ["Asking price"]], body) : "");
+    inventory + (body ? table("Lowest reported card asks", [["Card"], ["Rarity"], ["Asking price"]], body) : "");
 }
 
 function renderActivity(money, geoff) {
