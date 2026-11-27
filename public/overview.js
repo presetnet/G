@@ -1,5 +1,4 @@
 import { evidenceState, EVIDENCE_WINDOW } from "./evidence.js";
-import { packPace } from "./pack-pace.js";
 const esc = (v) => String(v ?? "—").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 export function compactChange(value) {
   return String(value ?? "").replace(/(?<![\w.])-?\d+\.\d{4,}(?![\w.])/g, (raw) => {
@@ -141,7 +140,7 @@ export function renderOverview(latest, events = []) {
     return n.toLocaleString("en-US", { maximumFractionDigits: precision });
   };
   const current = (s) => ["CURRENT", "DELAYED"].includes(evidenceState(s));
-  const docs = sources["geoff.docs.surface"], boxes = sources["trix.boxboard"], mining = sources["surface.mining"], azy = sources["azy.chain"];
+  const docs = sources["geoff.docs.surface"], mining = sources["surface.mining"], azy = sources["azy.chain"];
   const gate = sources["trix.preorder"];
   const shop = current(gate) ? gate.shop : null;
   const packs = Array.isArray(shop?.levels) ? shop.levels : [];
@@ -152,28 +151,45 @@ export function renderOverview(latest, events = []) {
     return (p.priceLamports / 1e9).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
   };
   const exactPrice = (p) => Number.isSafeInteger(p?.priceLamports) && p.priceLamports >= 0 ? `${(p.priceLamports / 1e9).toFixed(9)} SOL` : "not reported";
-  const pace = current(boxes) ? packPace(boxes.chain, boxes.pace?.samples || []) : null;
   const flow = sources["trix.packflow"];
   const census = sources["trix.packcensus"];
   const treasury = sources["trix.holdings"];
   const listings = sources["trix.cardlistings"];
   const deposited = Array.isArray(flow?.depositsLamports24h) && flow.depositsLamports24h.length === 2 && flow.depositsLamports24h.every(Number.isSafeInteger)
     ? flow.depositsLamports24h.reduce((a, b) => a + b, 0) / 1e9 : null;
-  const card = (title, value, note, src, target, action, exact = "") => `<article><h3>${esc(title)}</h3><p class="glance-value"${exact ? ` title="${esc(exact)}" aria-label="${esc(exact)}"` : ""}>${esc(value)}</p><small>${esc(note)}</small><small>${evidenceState(src)} · ${age(src?.dataUpdatedAt || src?.checkedAt)}</small><a class="glance-drill" href="#${target}">${action} ↓</a></article>`;
+  const card = (title, value, note, src, target, action, exact = "") => `<article><h3><a href="#${target}" title="${esc(action)}">${esc(title)} ↗</a></h3><p class="glance-value"${exact ? ` title="${esc(exact)}" aria-label="${esc(exact)}"` : ""}>${esc(value)}</p><small>${esc(note)}</small><small class="fact-age">${esc(age(src?.dataUpdatedAt || src?.checkedAt))}</small></article>`;
+  const now = Date.now();
+  function paceCard(title, records, quantity) {
+    if (!current(flow) || !Array.isArray(records)) return "";
+    let hour = 0, quarter = 0;
+    for (const r of records) {
+      const elapsed = now - Date.parse(r?.at);
+      if (!(elapsed >= 0 && elapsed < 3600000)) continue;
+      const n = quantity(r);
+      if (!Number.isSafeInteger(n) || n < 1) continue;
+      hour += n;
+      if (elapsed < 900000) quarter += n;
+    }
+    return card(title, `${fmt(hour)} observed / 60m`, `${fmt(quarter)} in last 15m · partial coverage`, flow, "packSalesTitle", "View receipts");
+  }
   document.getElementById("quickFacts").innerHTML = [
-    card("TRIX void treasury", current(treasury) && Number.isFinite(treasury.pricedValue) ? `≈ ${fmt(treasury.pricedValue)} USDC` : "Valuation unavailable", current(treasury) ? `${fmt(treasury.nativeSol, 3)} native SOL separately · ${fmt(treasury.priced)} / ${fmt(treasury.total)} mints priced` : "Token values exclude native SOL", treasury, "trixDesk", "Inspect treasury holdings"),
-    card("Card marketplace", current(listings) ? `${fmt(listings.count)} card listings` : "Listings unavailable", current(listings) && listings.lowest != null ? `Lowest reported ask ${fmt(listings.lowest, 3)} SOL` : "Public asks · not completed sales", listings, "trixDesk", "Inspect marketplace"),
-    card("TRIX pack shop", shop ? shop.open === true ? "Open" : shop.open === false ? "Closed" : "Status unknown" : "Shop unavailable", `Opening ${gate?.globalState?.canOpen === true ? "enabled" : gate?.globalState?.canOpen === false ? "disabled" : "unknown"} · global gate`, gate, "trixDesk", "Inspect pack shop"),
-    card("Packs · last 24h", current(flow) && Number.isSafeInteger(flow?.packs24h) ? `At least ${fmt(flow.packs24h)} observed` : "Awaiting scan", current(flow) && deposited !== null ? `${fmt(deposited, 4)} SOL matched · partial scan` : "Partial deposit scan · not total sales", flow, "trixDesk", "Inspect activity"),
-    card("Pack receipts by tier", current(census) && census.counts ? `${fmt(census.counts.base)} / ${fmt(census.counts.hype)} / ${fmt(census.counts.viral)}` : "Census unavailable", current(census) && census.counts ? `Base / Hype / Viral · ${fmt(census.total)} accounts${census.counts.unknown ? ` · ${fmt(census.counts.unknown)} unknown tier` : ""} · empirical mapping` : "Current receipt accounts · tier mapping is empirical", census, "trixDesk", "Inspect packs"),
-    card("Hype / Viral", shop ? `≈ ${price(hype)} / ${price(viral)} SOL` : "Prices unavailable", "Rounded · mint fee reported separately", gate, "trixDesk", "Exact prices & fees", shop ? `Exact Hype price ${exactPrice(hype)}; exact Viral price ${exactPrice(viral)}` : ""),
-    card("TRIX pack pace", pace?.perHour != null ? `${fmt(pace.perHour, 1)} packs/hour` : "Pace unavailable", pace?.perHour != null ? `Estimated census growth · ${fmt(pace.minutes, 1)}m window` : pace?.reason || "Awaiting fresh receipt census", boxes, "trixDesk", "Inspect pack activity"),
-    card("Geoff documentation", current(docs) ? `${docs.scraped}/${docs.total} pages responding` : "Snapshot unavailable", "Tracked sample · fingerprints, not release confirmations", docs, "docsDesk", "Inspect docs & changes"),
-    card("The Simulation · NFTs", nftUsable ? `Outstanding supply ${fmt(nft.magmaSupply)}` : "Awaiting corrected supply", nftUsable ? `${fmt(Math.max(0, nft.magmaSupply - 4500))} to 4,500 · Ethereum NFTs` : "Old peak-held counts withheld · direct chain reads in the panel", nft, "simCollapse", "Inspect supply & sales"),
-    card("DIBZI auctions", usable ? `${fmt(d.openAuctionsTotal)} open · ${fmt(d.namesReported)} reported names` : "Snapshot unavailable", "Full-response count · auctions, not settled sales", d, "dibziDesk", "Inspect auctions"),
-    card("Mining payouts", current(mining) ? `${fmt(mining.miners60m)} paid recipients / 60m` : "Payout read unavailable", current(mining) ? `Latest payout ${age(mining.payoutLatestAt)} · not active rig count` : "Prepaid entitlement and productive mining require separate evidence", mining, "miningWorkspace", "Inspect payout evidence"),
-    card("AZY activity", current(azy) ? `${fmt(azy.azySolDepositsSol, 4)} SOL observed` : "Intake unavailable", "Campaign-only intake · not a separate Geoff node-key revenue stream", azy, "simDesk", "Inspect campaign records"),
-  ].join("");
+    paceCard("Sellback pace", flow?.payouts, r => Number.isSafeInteger(r.lamports) && r.lamports > 0 ? 1 : 0),
+    paceCard("Pack purchase pace", flow?.records, r => r.packs),
+    current(treasury) && Number.isFinite(treasury.pricedValue) && card("TRIX void treasury", `≈ ${fmt(treasury.pricedValue)} USDC`, [
+      Number.isFinite(treasury.nativeSol) && `${fmt(treasury.nativeSol, 3)} SOL separately`,
+      [treasury.priced, treasury.total].every(Number.isFinite) && `${fmt(treasury.priced)}/${fmt(treasury.total)} priced`,
+    ].filter(Boolean).join(" · "), treasury, "trixDesk", "Inspect holdings"),
+    current(listings) && Number.isSafeInteger(listings.count) && card("Card marketplace", `${fmt(listings.count)} listings`, Number.isFinite(listings.lowest) ? `Lowest ask ${fmt(listings.lowest, 3)} SOL` : "Public asks", listings, "trixDesk", "Inspect marketplace"),
+    typeof shop?.open === "boolean" && card("TRIX pack shop", shop.open ? "Open" : "Closed", typeof gate.globalState?.canOpen === "boolean" ? `Opening ${gate.globalState.canOpen ? "enabled" : "disabled"}` : "Global shop gate", gate, "trixDesk", "Inspect shop"),
+    current(flow) && Number.isSafeInteger(flow.packs24h) && card("Packs · last 24h", `${fmt(flow.packs24h)} observed`, deposited !== null ? `${fmt(deposited, 3)} SOL · partial scan` : "Partial scan", flow, "packActivity", "Inspect activity"),
+    current(census) && ["base","hype","viral"].every(t => Number.isSafeInteger(census.counts?.[t])) && card("Pack receipts by tier", ["base","hype","viral"].map(t => fmt(census.counts[t])).join(" / "), `Base / Hype / Viral${census.counts.unknown ? ` · ${fmt(census.counts.unknown)} unclassified` : ""}`, census, "packActivity", "Inspect receipts"),
+    [hype, viral].every(p => Number.isSafeInteger(p?.priceLamports) && p.priceLamports >= 0) && card("Hype / Viral", `≈ ${price(hype)} / ${price(viral)} SOL`, "Mint fee separate", gate, "trixDesk", "Exact prices & fees", `Exact Hype price ${exactPrice(hype)}; exact Viral price ${exactPrice(viral)}`),
+    current(docs) && [docs.scraped, docs.total].every(Number.isSafeInteger) && card("Geoff documentation", `${docs.scraped}/${docs.total} responding`, "Tracked pages", docs, "docsDesk", "Inspect docs"),
+    nftUsable && Number.isSafeInteger(nft.magmaSupply) && card("The Simulation · NFTs", `Outstanding supply ${fmt(nft.magmaSupply)}`, `${fmt(Math.max(0, nft.magmaSupply - 4500))} to 4,500`, nft, "simCollapse", "Inspect supply"),
+    usable && Number.isSafeInteger(d.openAuctionsTotal) && card("DIBZI auctions", `${fmt(d.openAuctionsTotal)} open`, Number.isSafeInteger(d.namesReported) ? `${fmt(d.namesReported)} reported names` : "Auction feed", d, "dibziDesk", "Inspect auctions"),
+    current(mining) && Number.isSafeInteger(mining.miners60m) && card("Mining payouts", `${fmt(mining.miners60m)} recipients / 60m`, mining.payoutLatestAt ? `Last payout ${age(mining.payoutLatestAt)}` : "Paid recipients", mining, "miningWorkspace", "Inspect payouts"),
+    current(azy) && Number.isFinite(azy.azySolDepositsSol) && card("AZY activity", `${fmt(azy.azySolDepositsSol, 3)} SOL`, "Observed campaign intake", azy, "simDesk", "Inspect intake"),
+  ].filter(Boolean).join("") || '<small>No current readings. <a href="#diagnosticsWorkspace">Source health ↗</a></small>';
   const activity = document.getElementById("packActivity");
   if (activity) activity.innerHTML = renderPackGaps(sources["trix.packmints"], census) + renderPackActivity(current(flow) ? flow : null);
   const seen = new Set();
