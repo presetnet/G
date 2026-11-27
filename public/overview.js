@@ -153,6 +153,16 @@ export function initOverview() {
 }
 export function renderOverview(latest, events = []) {
   const sources = latest?.sources || {};
+  const stateLine = document.getElementById("trixRoundState");
+  if (stateLine) {
+    const m = sources["trix.packmints"], ranking = sources["trix.packflow"]?.rankedPulls;
+    const ageMs = Date.now() - Date.parse(m?.dataUpdatedAt);
+    if (m?.ok && !m.stale && ageMs >= 0 && ageMs <= 15 * 60000 && Number.isInteger(m.round)) {
+      const offers = (m.offers || []).map(p => `${p.tier}: ${Number.isFinite(p.priceSol) ? `${p.priceSol.toFixed(3)} SOL` : "price pending"}${Number.isInteger(p.available) ? ` (${p.available} available)` : ""}`);
+      stateLine.textContent = [`Shop round ${m.round} · ${m.roundStatus || "status pending"}`,
+        ranking?.round != null && `Rankings: round ${ranking.round}`, ...offers].filter(Boolean).join(" | ");
+    } else stateLine.textContent = "Current shop round not confirmed.";
+  }
   const board = document.getElementById("rankedPulls");
   if (board) {
     const html = renderRankedPulls(sources["trix.packflow"]?.rankedPulls);
@@ -252,6 +262,8 @@ export function renderPackGaps(mints, census, now = Date.now()) {
   });
   if (!fresh || !mints?.ok || !census?.ok || census.stale || mints.stale || census.counts?.unknown !== 0) return missing;
   const tiers = ["base", "hype", "viral"];
+  if (mints.counts?.grail > 0 && !Number.isSafeInteger(census.counts?.grail)) return `${heading}<p class="activity-footnote">Total withheld: Grail receipts have no verified on-chain tier mapping yet.</p>`;
+  if (Number.isSafeInteger(census.counts?.grail) && Number.isSafeInteger(mints.counts?.grail)) tiers.push("grail");
   const fmt = (value) => value.toLocaleString("en-US");
   let total = 0, receipts = 0;
   const rows = [];

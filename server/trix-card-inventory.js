@@ -1,6 +1,6 @@
 const collection = "AtepVKUtuS7ecWr4GLqGJEzJmBZMFXihqjpoSSfABxTJ";
 const mintPattern = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-const tiers = ["base", "hype", "viral"];
+const tiers = ["base", "hype", "viral", "grail"];
 
 // The ledger records observed cards, not guaranteed outstanding supply. A
 // missing listing is not a sale, burn, or change of ownership.

@@ -266,7 +266,7 @@ export function renderCardListings(src) {
   const counts = src.inventory?.counts;
   const inventory = counts ? `<h4 class="board-subhead">Known card inventory by pack</h4>` +
     table("Distinct card mints by originating pack and listing status", [["Pack"], ["Known"], ["Listed"], ["Absent from feed"]],
-      ["base", "hype", "viral", "unknown"].map(tier => {
+      ["base", "hype", "viral", "grail", "unknown"].filter(tier => counts[tier]).map(tier => {
         const row = counts[tier];
         return `<tr><th scope="row">${tier === "unknown" ? "Tier unknown" : tier.toUpperCase()}</th><td>${fmt(row.known, 0)}</td><td>${fmt(row.listed, 0)}</td><td>${fmt(row.known - row.listed, 0)}</td></tr>`;
       }).join("")) +

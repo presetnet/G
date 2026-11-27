@@ -4208,15 +4208,20 @@ async function sniffPackMints() {
     const levels = state.levels;
     const counts = {};
     const packArt = {};
-    for (const tier of ["base", "hype", "viral"]) {
+    const offers = [];
+    const tiers = ["base", "hype", "viral"];
+    if (levels.some(level => level.id === "grail")) tiers.push("grail");
+    for (const tier of tiers) {
       const rows = levels.filter((level) => level.id === tier);
       if (rows.length !== 1 || !Number.isSafeInteger(rows[0].minted) || rows[0].minted < 0) throw Error(`Invalid ${tier} mint count`);
       counts[tier] = rows[0].minted;
+      offers.push({ tier, priceSol: rows[0].priceSol, available: rows[0].available });
       if (typeof rows[0].artUrl === "string" && /^\/atomic\/[\w.-]+$/.test(rows[0].artUrl)) {
         packArt[tier] = new URL(rows[0].artUrl, TRIX_BASE_URL).href;
       }
     }
-    return { ...source, ok: true, dataUpdatedAt: state.snapshot.generatedAt, counts, packArt };
+    return { ...source, ok: true, dataUpdatedAt: state.snapshot.generatedAt, round: state.round,
+      roundStatus: state.roundStatus, offers, counts, packArt };
   } catch (error) {
     return { ...source, ok: false, reason: error.message };
   }
