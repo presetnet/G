@@ -5,6 +5,7 @@ const DAY = 86400000;
 // Publicly identified receipts predate the rolling discovery window. Fetch and
 // validate them exactly like sampled signatures, and expire them after 24h.
 const REPORTED_PAYOUTS = [
+  { signature: "3Rf3ruWw2ajqfutqiDHZRnuetBr6QRdmJyyUcZeZh6xHYHWUAvgyRburzFTLm6N6QjkhW2feZCnu1FgfZ9ANF1yv", at: Date.parse("2026-11-26T18:35:44Z") },
   { signature: "2SJASsGgg91BCuHxmJfgs1Lk1zephbiqkFsUiRFndtEfXTwJ5FeADGKatiHVh28TTVmdjARNDdAEgHfokH2YNP81", at: Date.parse("2026-11-27T00:39:04Z") },
   { signature: "3TUU911h7VuoQoZHtA362cYrrmqp48HTFYnj7RpCmjTMPQTLMfKE7DgH5gA84cFUGojaLzvAwr7YTrJH56EJHYjy", at: Date.parse("2026-11-27T00:43:42Z") },
 ];
