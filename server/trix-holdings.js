@@ -57,7 +57,10 @@ export async function collectVoidHoldings(rpc, market, previous) {
       } catch { dexFailed = true; break; }
     }
     priced.sort((a, b) => b.value - a.value || a.mint.localeCompare(b.mint));
-    return { ...source, ok: true, total: tokens.length, priced: priced.length, dexFailed, top: priced.slice(0, 20) };
+    const balance = await rpc("getBalance", [VOID_TREASURY, { commitment: "confirmed" }]).catch(() => null);
+    return { ...source, ok: true, total: tokens.length, priced: priced.length, dexFailed, top: priced.slice(0, 20),
+      pricedValue: priced.length ? priced.reduce((sum, row) => sum + row.value, 0) : null,
+      nativeSol: Number.isSafeInteger(balance?.value) ? balance.value / 1e9 : null };
   } catch (error) {
     return { ...source, ok: false, reason: error.message };
   }

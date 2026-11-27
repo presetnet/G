@@ -4159,6 +4159,23 @@ async function sniffPackMints() {
   }
 }
 
+async function sniffCardListings() {
+  const sourceUrl = `${TRIX_BASE_URL}/api/market`;
+  const source = { source: "trix.cardlistings", sourceUrl, checkedAt: new Date().toISOString() };
+  try {
+    const res = await fetchJson(sourceUrl, { timeoutMs: TRIX_TIMEOUT_MS });
+    if (!res.ok || !Array.isArray(res.json)) throw Error("Public listing feed unavailable");
+    const cards = res.json.filter(row => row?.kind === "card").map(row => ({
+      name: row.title || row.coin?.symbol || "Card", ripId: row.ripId, rarity: row.rarity,
+      ask: typeof row.priceSol === "number" && row.priceSol >= 0 ? row.priceSol : null,
+    }));
+    const priced = cards.filter(row => row.ask !== null).sort((a, b) => a.ask - b.ask);
+    return { ...source, ok: true, count: cards.length, lowest: priced[0]?.ask ?? null, listings: priced.slice(0, 5) };
+  } catch (error) {
+    return { ...source, ok: false, reason: error.message };
+  }
+}
+
 /** Optional official box leaderboard. A missing endpoint is not an empty ranking. */
 export async function sniffTrixBoxes({ previous = null } = {}) {
   const started = Date.now();
@@ -6004,6 +6021,7 @@ function trixAttempts(previous) {
     ["trix.packflow", collectPackFlow(solanaRpc, previous?.sources?.["trix.packflow"] || null)],
     ["trix.packcensus", collectPackCensus(solanaRpc, previous?.sources?.["trix.packcensus"] || null)],
     ["trix.packmints", sniffPackMints()],
+    ["trix.cardlistings", sniffCardListings()],
     ["trix.preorder", sniffTrixPreorder({ previous: previous?.sources?.["trix.preorder"] || null })],
     ["trix.meme.market", memeMarket],
     ["trix.holdings", memeMarket.then(market => collectVoidHoldings(solanaRpc, market, previous?.sources?.["trix.holdings"]))],

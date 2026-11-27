@@ -253,9 +253,18 @@ export function renderTreasuryHoldings(src) {
   if (!src?.ok || src.stale) return title + empty("Treasury holdings unavailable.");
   const body = rows(src.top).map((r, i) => `<tr><td>${i + 1}</td><td><b>${esc(r.symbol || "Token")}</b> ${link("https://solscan.io/token/", r.mint, short(r.mint))}</td>
     <td class="desk-number">${fmt(r.balance, 3)}</td><td class="desk-number">${fmt(r.value, 3)}</td><td>${esc(r.via)} · ${clock(r.priceAt, "Price observation")}</td></tr>`).join("");
-  return title + `<p class="desk-context">${fmt(src.priced, 0)} of ${fmt(src.total, 0)} held mints priced · ${fmt(src.total - src.priced, 0)} unpriced · ${clock(src.checkedAt, "Balance scan")}${src.dexFailed ? " · DEX lookup incomplete" : ""}.</p>` +
+  const leader = src.top?.[0];
+  return title + `<p class="desk-context"><b>${fmt(src.nativeSol, 3)} native SOL</b> · priced tokens ≈ <b>${fmt(src.pricedValue, 3)} USDC</b>${leader && src.pricedValue > 0 ? ` · ${esc(leader.symbol)} accounts for ${fmt(100 * leader.value / src.pricedValue, 3)}% of priced value` : ""}.</p><p class="desk-context">${fmt(src.priced, 0)} of ${fmt(src.total, 0)} held mints priced · ${fmt(src.total - src.priced, 0)} unpriced · ${clock(src.checkedAt, "Balance scan")}${src.dexFailed ? " · DEX lookup incomplete" : ""}.</p>` +
     (body ? table("Highest valued token balances held by the void treasury", [["#"], ["Token / mint"], ["Units held"], ["Est. USDC"], ["Price source"]], body) : empty("No priced balances.")) +
     '<p class="desk-context">Current Solana token balances, excluding native SOL. TRIX market cap × share of mint supply, or DEX Screener price × units held. Assumes $1 per USDC; these are not liquidation quotes.</p>';
+}
+
+export function renderCardListings(src) {
+  const heading = '<h4 class="board-subhead"><a href="https://www.trix.market/shop/market" target="_blank" rel="noopener noreferrer">Card marketplace ↗</a></h4>';
+  if (!good(src)) return heading + empty("Public card listings unavailable.");
+  const body = rows(src.listings).map(r => `<tr><td>${link("https://www.trix.market/shop/c/", r.ripId, r.name)}</td><td>${esc(r.rarity)}</td><td>${fmt(r.ask, 3)} SOL</td></tr>`).join("");
+  return heading + `<p class="desk-context">${fmt(src.count, 0)} card listings returned · ${clock(src.checkedAt, "Listing feed")}. Lowest asks shown; these are listings, not sales or shop buybacks.</p>` +
+    (body ? table("Lowest reported card asks", [["Card"], ["Rarity"], ["Asking price"]], body) : "");
 }
 
 function renderActivity(money, geoff) {
@@ -394,7 +403,7 @@ export function renderTrixDesk(value) {
   const sources = latest?.sources || {};
   renderCoins(sources["trix.meme.market"], sources["trix.frontpage"]);
     renderBoxes(sources["trix.boxes"], sources["trix.boxboard"], sources["trix.boxchain"], sources["trix.preorder"]);
-    setHTML("packVoidHoldings", renderTreasuryHoldings(sources["trix.holdings"]));
+  setHTML("packVoidHoldings", renderCardListings(sources["trix.cardlistings"]) + renderTreasuryHoldings(sources["trix.holdings"]));
   const generations = renderActivity(sources["trix.money"], sources["trix.geoff"]);
   renderPoints(sources["trix.market"], sources["trix.tiers"]);
   renderArt(sources["trix.market"]);
