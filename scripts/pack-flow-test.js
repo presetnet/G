@@ -15,6 +15,8 @@ function transaction(now, signature = "sig") {
 test("counts multiple instructions in one transaction and rejects unmatched or failed deposits", () => {
   const tx = transaction(Date.now());
   assert.equal(parsePackFlow(tx).packs, 2);
+  assert.equal(parsePackFlow(tx).buyer, payer);
+  assert.deepEqual(parsePackFlow(tx).tiers, ["viral"]);
   assert.deepEqual(parsePackFlow(tx).lamports, [3060391734, 340043526]);
   tx.meta.innerInstructions[0].instructions[0] = transfer(0, "someone else");
   assert.equal(parsePackFlow(tx).packs, 1);

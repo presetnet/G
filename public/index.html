@@ -91,12 +91,10 @@
     </header>
 
     <main class="shell">
-      <section class="art-wire" aria-label="TRIX artwork feed">
-        <div class="art-wire-head"><h2>TRIX art feed</h2><span>Listed cards &amp; recent artwork</span>
-          <button type="button" id="artPrev" aria-label="Scroll artwork left" aria-controls="artRail">←</button>
-          <button type="button" id="artNext" aria-label="Scroll artwork right" aria-controls="artRail">→</button>
-        </div>
-        <div class="art-rail" id="artRail" tabindex="0" aria-label="Browse artwork">Waiting for artwork…</div>
+      <section class="pack-sales-wire" aria-labelledby="packSalesTitle">
+        <h2 id="packSalesTitle">TRIX pack sales</h2>
+        <small>Confirmed BuyPack transactions · last 24h · partial scan</small>
+        <div id="packSalesRail" tabindex="0" role="region" aria-label="Recent pack purchases, newest first">Loading pack sales…</div>
       </section>
       <section class="desk-intro" aria-label="Dashboard overview">
         <div><p class="eyebrow">INDEPENDENT INTELLIGENCE / PUBLIC SOURCES</p><h2>Your ecosystem, at a glance.</h2></div>

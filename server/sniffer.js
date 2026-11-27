@@ -4149,12 +4149,16 @@ async function sniffPackMints() {
     }
     const levels = state.levels;
     const counts = {};
+    const packArt = {};
     for (const tier of ["base", "hype", "viral"]) {
       const rows = levels.filter((level) => level.id === tier);
       if (rows.length !== 1 || !Number.isSafeInteger(rows[0].minted) || rows[0].minted < 0) throw Error(`Invalid ${tier} mint count`);
       counts[tier] = rows[0].minted;
+      if (typeof rows[0].artUrl === "string" && /^\/atomic\/[\w.-]+$/.test(rows[0].artUrl)) {
+        packArt[tier] = new URL(rows[0].artUrl, TRIX_BASE_URL).href;
+      }
     }
-    return { ...source, ok: true, dataUpdatedAt: state.snapshot.generatedAt, counts };
+    return { ...source, ok: true, dataUpdatedAt: state.snapshot.generatedAt, counts, packArt };
   } catch (error) {
     return { ...source, ok: false, reason: error.message };
   }
@@ -4175,11 +4179,7 @@ async function sniffCardListings(previous) {
       const res = await fetchJson(`${TRIX_BASE_URL}/api/mkt/rips/${encodeURIComponent(id)}`, { timeoutMs: TRIX_TIMEOUT_MS });
       return res.ok ? res.json : null;
     }, solanaRpc);
-    const art = res.json.filter(row => row?.kind === "card" && row.ripId && row.imageUrl && Number.isFinite(Date.parse(row.createdAt)))
-      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 8)
-      .map(row => ({ ripId: row.ripId, name: row.title || row.coin?.symbol || "TRIX card", imageUrl: row.imageUrl,
-        rarity: row.rarity, createdAt: row.createdAt }));
-    return { ...source, ok: true, inventory, art, count: cards.length, lowest: priced[0]?.ask ?? null, listings: priced.slice(0, 5) };
+    return { ...source, ok: true, inventory, count: cards.length, lowest: priced[0]?.ask ?? null, listings: priced.slice(0, 5) };
   } catch (error) {
     return { ...source, ok: false, inventory: previous?.inventory, reason: error.message };
   }

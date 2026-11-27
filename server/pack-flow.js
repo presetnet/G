@@ -35,15 +35,16 @@ export async function collectPackCensus(rpc, previous = null, now = Date.now()) 
   }
 }
 const BUY_PACK = createHash("sha256").update("global:buy_pack").digest().subarray(0, 8);
-function isBuyPack(data) {
-  if (typeof data !== "string" || !data) return false;
+function buyPackTier(data) {
+  if (typeof data !== "string" || !data) return null;
   const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
   let value = 0n;
-  for (const ch of data) { const digit = alphabet.indexOf(ch); if (digit < 0) return false; value = value * 58n + BigInt(digit); }
+  for (const ch of data) { const digit = alphabet.indexOf(ch); if (digit < 0) return null; value = value * 58n + BigInt(digit); }
   let hex = value.toString(16); if (hex.length % 2) hex = `0${hex}`;
   const prefix = data.match(/^1*/)[0].length;
   const bytes = Buffer.concat([Buffer.alloc(prefix), Buffer.from(hex, "hex")]);
-  return bytes.length >= 8 && bytes.subarray(0, 8).equals(BUY_PACK);
+  if (!bytes.subarray(0, 8).equals(BUY_PACK)) return null;
+  return ["base", "hype", "viral"][bytes[8]] || "unknown";
 }
 
 // Attribute only inner transfers belonging to the specific outer program
@@ -54,19 +55,23 @@ export function parsePackFlow(tx) {
   const outer = tx.transaction?.message?.instructions || [];
   const groups = tx.meta.innerInstructions || [];
   const amounts = [0, 0];
+  const tiers = new Set();
   let packs = 0;
   for (const group of groups) {
-    if (outer[group.index]?.programId !== PACK_PROGRAM || !isBuyPack(outer[group.index]?.data)) continue;
+    const ix = outer[group.index];
+    if (ix?.programId !== PACK_PROGRAM) continue;
+    const tier = buyPackTier(ix.data);
+    if (!tier) continue;
     const matched = [0, 0];
     for (const instruction of group.instructions || []) {
       const info = instruction.parsed?.info;
       const index = DESTINATIONS.indexOf(info?.destination);
       if (instruction.program === "system" && instruction.parsed?.type === "transfer" && info?.source === payer && index >= 0 && Number.isSafeInteger(info.lamports) && info.lamports > 0) matched[index] += info.lamports;
     }
-    if (matched.every((v) => v > 0)) { packs++; amounts[0] += matched[0]; amounts[1] += matched[1]; }
+    if (matched.every((v) => v > 0)) { tiers.add(tier); packs++; amounts[0] += matched[0]; amounts[1] += matched[1]; }
   }
   const signature = tx.transaction?.signatures?.[0];
-  return packs && signature ? { signature, at: new Date(tx.blockTime * 1000).toISOString(), packs, lamports: amounts } : null;
+  return packs && signature ? { signature, at: new Date(tx.blockTime * 1000).toISOString(), buyer: payer, tiers: [...tiers], packs, lamports: amounts } : null;
 }
 
 export async function collectPackFlow(rpc, previous = null, now = Date.now()) {
@@ -77,6 +82,9 @@ export async function collectPackFlow(rpc, previous = null, now = Date.now()) {
     const scanned = new Set(previous?.scanned || []);
     const candidates = signatures.filter((x) => x.signature && !x.err && !scanned.has(x.signature));
     const selected = candidates.slice(0, 5);
+    // Upgrade one retained sale per scan when an older snapshot lacks the buyer.
+    const legacy = previous?.records?.find(r => !r.buyer && Date.parse(r.at) >= now - DAY);
+    if (legacy && !selected.some(s => s.signature === legacy.signature)) selected.push(legacy);
     const results = await Promise.allSettled(selected.map((s) => rpc("getTransaction", [s.signature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0, commitment: "confirmed" }])));
     const records = new Map((previous?.records || []).filter((r) => Date.parse(r.at) >= now - DAY && Date.parse(r.at) <= now).map((r) => [r.signature, r]));
     let resolved = 0;
