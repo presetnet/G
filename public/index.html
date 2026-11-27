@@ -91,6 +91,13 @@
     </header>
 
     <main class="shell">
+      <section class="art-wire" aria-label="TRIX artwork feed">
+        <div class="art-wire-head"><h2>TRIX art feed</h2><span>Listed cards &amp; recent artwork</span>
+          <button type="button" id="artPrev" aria-label="Scroll artwork left" aria-controls="artRail">←</button>
+          <button type="button" id="artNext" aria-label="Scroll artwork right" aria-controls="artRail">→</button>
+        </div>
+        <div class="art-rail" id="artRail" tabindex="0" aria-label="Browse artwork">Waiting for artwork…</div>
+      </section>
       <section class="desk-intro" aria-label="Dashboard overview">
         <div><p class="eyebrow">INDEPENDENT INTELLIGENCE / PUBLIC SOURCES</p><h2>Your ecosystem, at a glance.</h2></div>
         <div class="sync-readout" role="status" aria-live="polite"><span id="syncStatus">Connecting</span><small id="syncMeta">Checking the shared desk</small></div>

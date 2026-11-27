@@ -4175,7 +4175,11 @@ async function sniffCardListings(previous) {
       const res = await fetchJson(`${TRIX_BASE_URL}/api/mkt/rips/${encodeURIComponent(id)}`, { timeoutMs: TRIX_TIMEOUT_MS });
       return res.ok ? res.json : null;
     }, solanaRpc);
-    return { ...source, ok: true, inventory, count: cards.length, lowest: priced[0]?.ask ?? null, listings: priced.slice(0, 5) };
+    const art = res.json.filter(row => row?.kind === "card" && row.ripId && row.imageUrl && Number.isFinite(Date.parse(row.createdAt)))
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 8)
+      .map(row => ({ ripId: row.ripId, name: row.title || row.coin?.symbol || "TRIX card", imageUrl: row.imageUrl,
+        rarity: row.rarity, createdAt: row.createdAt }));
+    return { ...source, ok: true, inventory, art, count: cards.length, lowest: priced[0]?.ask ?? null, listings: priced.slice(0, 5) };
   } catch (error) {
     return { ...source, ok: false, inventory: previous?.inventory, reason: error.message };
   }

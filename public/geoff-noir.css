@@ -17,6 +17,18 @@ body { background:#080808; color:#eeeee8; }
 .topbar h1 { letter-spacing:-.045em; }
 .topbar .tag { color:#92928b; letter-spacing:.14em; }
 .shell { max-width:1480px; padding:1.7rem 1.6rem 4rem; }
+.art-wire { min-width:0; max-width:100%; padding:.6rem; border:1px solid var(--line); background:var(--panel); border-radius:8px; }
+.art-wire-head,.art-rail,.art-rail a { display:flex; align-items:center; gap:.6rem; }
+.art-wire-head h2 { margin:0; color:var(--accent); font-size:.9rem; }
+.art-wire-head span { flex:1; font-size:.7rem; color:var(--muted); }
+.art-wire-head button { background:#222; border:1px solid #444; border-radius:4px; color:#fff; cursor:pointer; padding:.25rem .55rem; }
+.art-rail { overflow-x:auto; padding:.45rem 0 .2rem; scrollbar-width:thin; }
+.art-rail a { flex:0 0 12rem; min-width:0; background:#191916; border-radius:5px; text-decoration:none; color:inherit; }
+.art-rail img { width:3.75rem; height:3.75rem; object-fit:cover; border-radius:5px; background:#282820; }
+.art-rail span { min-width:0; }
+.art-rail small,.art-rail b { display:block; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
+.art-rail small { color:var(--muted); font-size:.65rem; }
+.art-rail b { font-size:.85rem; }
 .desk-intro { padding:1.6rem 0; }
 .desk-intro h2 { font-size:clamp(1.8rem,3vw,2.8rem); letter-spacing:-.055em; }
 #workspaceNav { padding:7px; gap:4px; background:#101010; border-color:#2c2c28; border-radius:9px; }

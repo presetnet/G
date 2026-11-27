@@ -11,11 +11,37 @@ export function compactChange(value) {
 }
 const groups = [["Geoff","geoff.","https://www.geoff.ai/"],["StackNet","stacknet.","https://stacknet.magma-rpc.com/health"],["TRIX","trix.","https://trix.market/"],["DIBZI","dibzi.","https://dibzi.ai/"],["SIM","sim.","https://sim.tech/"],["AZY","azy.","https://azy.life/"],["MAGMA","magma.","https://opensea.io/collection/the-simulation-958481099"]];
 const link = (url, label) => `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`;
+export function artworkFeed(sources) {
+  const listings = sources["trix.cardlistings"];
+  const market = sources["trix.market"];
+  const usable = source => ["CURRENT", "DELAYED"].includes(evidenceState(source));
+  const cards = usable(listings) ? listings.art || [] : [];
+  const works = market?.endpoints?.recentMints?.ok && usable(market.endpoints.recentMints) ? market.recentMints || [] : [];
+  const tiles = [];
+  const seen = new Set();
+  function tile(row, href, label) {
+    if (!row || !/^https:\/\//i.test(row.imageUrl || "") || seen.has(href)) return;
+    seen.add(href);
+    tiles.push(`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer"><img src="${esc(row.imageUrl)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt=""><span><small>${esc(label)}</small><b>${esc(row.name || "Untitled")}</b></span></a>`);
+  }
+  for (let i = 0; i < 8; i++) {
+    if (cards[i]?.ripId) tile(cards[i], `https://www.trix.market/shop/c/${encodeURIComponent(cards[i].ripId)}`, `Listed card · ${cards[i].rarity || "rarity unknown"}`);
+    if (works[i]?.mintAddress) tile(works[i], `https://solscan.io/token/${encodeURIComponent(works[i].mintAddress)}`, "Minted artwork");
+  }
+  return tiles.join("") || "No recent artwork available.";
+}
+let lastArt = "";
 const age = (at) => {
   const minutes = (Date.now() - Date.parse(at)) / 60000;
   return !Number.isFinite(minutes) || minutes < 0 ? "age unknown" : minutes < 1 ? "just checked" : minutes < 60 ? `${Math.floor(minutes)}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ago` : `${Math.floor(minutes / 1440)}d ago`;
 };
 export function initOverview() {
+  for (const [id, direction] of [["artPrev", -1], ["artNext", 1]]) {
+    document.getElementById(id)?.addEventListener("click", () => {
+      const rail = document.getElementById("artRail");
+      rail.scrollBy({ left: direction * rail.clientWidth * 0.8 });
+    });
+  }
   document.querySelector(".desk-intro").insertAdjacentHTML("afterend", '<section id="glance" aria-label="Public visibility overview"><div id="sourceStrip" class="source-strip"></div><div id="latestSignal" class="latest-signal"></div><div class="glance-heading"><div><p class="eyebrow">THE LIVE DESK / OVERVIEW</p><h2>Signals at a glance<span>.</span></h2></div><a href="#diagnosticsWorkspace">Source health ↗</a></div><div id="quickFacts" class="quick-facts"></div><div id="packActivity" class="pack-activity"></div><details class="data-disclosure"><summary>TRIX winner routes · access check, Nov 17</summary><p>The client routes <a href="https://www.trix.market/cards/winners" target="_blank" rel="noopener noreferrer">winners</a>, <a href="https://www.trix.market/cards/winners/above-%241k" target="_blank" rel="noopener noreferrer">above $1k</a> and <a href="https://www.trix.market/cards/winners/above-%2410k" target="_blank" rel="noopener noreferrer">above $10k</a> map to an admin sign-in component. No winner data or payout amounts were publicly verified. Route names are not proof of winners or a release date.</p></details><div class="glance-heading changes-heading"><div><p class="eyebrow">THE LATEST / PUBLIC SOURCES</p><h2>What changed<span>.</span></h2></div><span>LAST 24 HOURS</span></div><div id="quickChanges"></div></section>');
   const briefing = document.querySelector(".stacknet-brief");
   if (briefing) { const fold = document.createElement("details"); fold.className = "briefing-fold"; fold.innerHTML = "<summary>Research archive · Stacknet calculator</summary>"; briefing.before(fold); fold.append(briefing); }
@@ -30,6 +56,11 @@ export function initOverview() {
 }
 export function renderOverview(latest, events = []) {
   const sources = latest?.sources || {};
+  const rail = document.getElementById("artRail");
+  if (rail) {
+    const html = artworkFeed(sources);
+    if (html !== lastArt) { rail.innerHTML = html; lastArt = html; }
+  }
   document.getElementById("sourceStrip").innerHTML = groups.map(([title,prefix,url]) => {
     const rows = Object.entries(sources).filter(([id]) => id.startsWith(prefix));
     const current = rows.filter(([,s]) => evidenceState(s) === "CURRENT").length;
