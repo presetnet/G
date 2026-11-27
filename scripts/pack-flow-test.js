@@ -67,11 +67,11 @@ test("receipt census counts tier bytes, reports unknown tiers, and caches the sc
     calls++;
     assert.equal(method, "getProgramAccounts");
     assert.deepEqual(params[1].dataSlice, { offset: 104, length: 1 });
-    return { context: { slot: 123 }, value: [0, 0, 1, 2, 9].map((n) => ({ account: { data: [Buffer.from([n]).toString("base64"), "base64"] } })) };
+    return { context: { slot: 123 }, value: [0, 0, 1, 2, 3, 9].map((n) => ({ account: { data: [Buffer.from([n]).toString("base64"), "base64"] } })) };
   };
   const census = await collectPackCensus(rpc, null, now);
-  assert.deepEqual(census.counts, { base: 2, hype: 1, viral: 1, unknown: 1 });
-  assert.equal(census.total, 5);
+  assert.deepEqual(census.counts, { base: 2, hype: 1, viral: 1, grail: 1, unknown: 1 });
+  assert.equal(census.total, 6);
   assert.equal(census.slot, 123);
   assert.equal(await collectPackCensus(rpc, census, now + 60000), census);
   assert.equal(calls, 1);

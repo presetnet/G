@@ -11,6 +11,7 @@ export function compactChange(value) {
 const groups = [["Geoff","geoff.","https://www.geoff.ai/"],["StackNet","stacknet.","https://stacknet.magma-rpc.com/health"],["TRIX","trix.","https://trix.market/"],["DIBZI","dibzi.","https://dibzi.ai/"],["SIM","sim.","https://sim.tech/"],["AZY","azy.","https://azy.life/"],["MAGMA","magma.","https://opensea.io/collection/the-simulation-958481099"]];
 const link = (url, label) => `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`;
 const localPackArt = {
+  grail: "/pack-art/grail-fae8f0b590bc6f73cc1f.webp",
   base: "/pack-art/base-68ba406bb54c0152caed.webp",
   hype: "/pack-art/hype-5d856152021f89a3cded.webp",
   viral: "/pack-art/viral-835f33d9aa6157cfb7dc.webp",
@@ -47,7 +48,7 @@ export function packSalesFeed(flow, packArt = {}, now = Date.now(), coinBuys = [
         !r.lamports.every(n => Number.isSafeInteger(n) && n > 0)) continue;
     const sol = (r.lamports[0] + r.lamports[1]) / 1e9;
     const buyer = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(r.buyer || "") ? r.buyer : null;
-    const tiers = (r.tiers || []).filter(t => ["base", "hype", "viral"].includes(t));
+    const tiers = (r.tiers || []).filter(t => Object.hasOwn(localPackArt, t));
     const art = tiers.map(t => {
       const remote = packArt[t];
       const knownImage = localPackArt[t].split("-").pop().replace(".webp", ".png");
@@ -200,6 +201,9 @@ export function renderOverview(latest, events = []) {
   const exactPrice = (p) => Number.isSafeInteger(p?.priceLamports) && p.priceLamports >= 0 ? `${(p.priceLamports / 1e9).toFixed(9)} SOL` : "not reported";
   const flow = sources["trix.packflow"];
   const census = sources["trix.packcensus"];
+  const receiptTiers = ["base", "hype", "viral"];
+  if (Number.isSafeInteger(census?.counts?.grail)) receiptTiers.push("grail");
+  const mints = sources["trix.packmints"];
   const treasury = sources["trix.holdings"];
   const listings = sources["trix.cardlistings"];
   const deposited = Array.isArray(flow?.depositsLamports24h) && flow.depositsLamports24h.length === 2 && flow.depositsLamports24h.every(Number.isSafeInteger)
@@ -221,6 +225,9 @@ export function renderOverview(latest, events = []) {
   }
   document.getElementById("quickFacts").innerHTML = [
     paceCard("Sellback pace", flow?.payouts, r => Number.isSafeInteger(r.lamports) && r.lamports > 0 ? 1 : 0),
+    current(mints) && Number.isSafeInteger(mints.counts?.grail) && card("Grail packs", `${fmt(mints.counts.grail)} minted`,
+      current(census) && Number.isSafeInteger(census.counts?.grail) ? `${fmt(census.counts.grail)} current on-chain receipts` : "TRIX shop mint counter",
+      mints, "packActivity", "Inspect Grail activity"),
     paceCard("Pack purchase pace", flow?.records, r => r.packs),
     current(treasury) && Number.isFinite(treasury.pricedValue) && card("TRIX void treasury", `≈ ${fmt(treasury.pricedValue)} USDC`, [
       Number.isFinite(treasury.nativeSol) && `${fmt(treasury.nativeSol, 3)} SOL separately`,
@@ -229,7 +236,7 @@ export function renderOverview(latest, events = []) {
     current(listings) && Number.isSafeInteger(listings.count) && card("Card marketplace", `${fmt(listings.count)} listings`, Number.isFinite(listings.lowest) ? `Lowest ask ${fmt(listings.lowest, 3)} SOL` : "Public asks", listings, "trixDesk", "Inspect marketplace"),
     typeof shop?.open === "boolean" && card("TRIX pack shop", shop.open ? "Open" : "Closed", typeof gate.globalState?.canOpen === "boolean" ? `Opening ${gate.globalState.canOpen ? "enabled" : "disabled"}` : "Global shop gate", gate, "trixDesk", "Inspect shop"),
     current(flow) && Number.isSafeInteger(flow.packs24h) && card("Packs · last 24h", `${fmt(flow.packs24h)} observed`, deposited !== null ? `${fmt(deposited, 3)} SOL · partial scan` : "Partial scan", flow, "packActivity", "Inspect activity"),
-    current(census) && ["base","hype","viral"].every(t => Number.isSafeInteger(census.counts?.[t])) && card("Pack receipts by tier", ["base","hype","viral"].map(t => fmt(census.counts[t])).join(" / "), `Base / Hype / Viral${census.counts.unknown ? ` · ${fmt(census.counts.unknown)} unclassified` : ""}`, census, "packActivity", "Inspect receipts"),
+    current(census) && receiptTiers.every(t => Number.isSafeInteger(census.counts?.[t])) && card("Pack receipts by tier", receiptTiers.map(t => fmt(census.counts[t])).join(" / "), `${receiptTiers.map(t => t[0].toUpperCase() + t.slice(1)).join(" / ")}${census.counts.unknown ? ` · ${fmt(census.counts.unknown)} unclassified` : ""}`, census, "packActivity", "Inspect receipts"),
     [hype, viral].every(p => Number.isSafeInteger(p?.priceLamports) && p.priceLamports >= 0) && card("Hype / Viral", `≈ ${price(hype)} / ${price(viral)} SOL`, "Mint fee separate", gate, "trixDesk", "Exact prices & fees", `Exact Hype price ${exactPrice(hype)}; exact Viral price ${exactPrice(viral)}`),
     current(docs) && [docs.scraped, docs.total].every(Number.isSafeInteger) && card("Geoff documentation", `${docs.scraped}/${docs.total} responding`, "Tracked pages", docs, "docsDesk", "Inspect docs"),
     nftUsable && Number.isSafeInteger(nft.magmaSupply) && card("The Simulation · NFTs", `Outstanding supply ${fmt(nft.magmaSupply)}`, `${fmt(Math.max(0, nft.magmaSupply - 4500))} to 4,500`, nft, "simCollapse", "Inspect supply"),

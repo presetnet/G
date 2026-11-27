@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 export const PACK_PROGRAM = "HTrrq6C6j9NYySUrpSLn9nDjFbKNBD6pS3xBuLppfW4F";
 const DESTINATIONS = ["D8LYYHufXvEVAfMKfmv9amKLJjdJejpXAwsM5Wqp3iQe", "78zsqg7rhoBGMra57Nq1kiLGM8KxFBYefoKZDXDRFhHb"];
 const DAY = 86400000;
+// Grail: instruction level and receipt byte both 3 in jb5Yo2k6...BbNJBzWr,
+// a single BuyPack for exactly the published Grail quote (3,536,452,670 lamports).
+const PACK_TIERS = ["base", "hype", "viral", "grail"];
 // Publicly identified receipts predate the rolling discovery window. Fetch and
 // validate them exactly like sampled signatures, and expire them after 24h.
 const REPORTED_PAYOUTS = [
@@ -24,13 +27,13 @@ export async function collectPackCensus(rpc, previous = null, now = Date.now()) 
       dataSlice: { offset: 104, length: 1 },
     }], { timeoutMs: 15000 });
     if (!result || !Array.isArray(result.value) || !Number.isSafeInteger(result.context?.slot)) throw Error("Invalid receipt census response");
-    const counts = { base: 0, hype: 0, viral: 0, unknown: 0 };
+    const counts = { base: 0, hype: 0, viral: 0, grail: 0, unknown: 0 };
     for (const row of result.value) {
       const data = row?.account?.data;
       if (!Array.isArray(data) || data[1] !== "base64" || typeof data[0] !== "string") throw Error("Invalid receipt data");
       const bytes = Buffer.from(data[0], "base64");
       if (bytes.length !== 1) throw Error("Incomplete receipt data");
-      const tier = ["base", "hype", "viral"][bytes[0]] || "unknown";
+      const tier = PACK_TIERS[bytes[0]] || "unknown";
       counts[tier]++;
     }
     return { source: "trix.packcensus", ok: true, checkedAt: at, lastAttemptAt: at, slot: result.context.slot,
@@ -51,7 +54,7 @@ function buyPackTier(data) {
   const prefix = data.match(/^1*/)[0].length;
   const bytes = Buffer.concat([Buffer.alloc(prefix), Buffer.from(hex, "hex")]);
   if (!bytes.subarray(0, 8).equals(BUY_PACK)) return null;
-  return ["base", "hype", "viral"][bytes[8]] || "unknown";
+  return PACK_TIERS[bytes[8]] || "unknown";
 }
 
 // Attribute only inner transfers belonging to the specific outer program
@@ -163,8 +166,8 @@ async function collectSampledPackFlow(rpc, previous, now) {
       if (seed.at <= now && seed.at >= now - DAY && ![...payouts.values()].some(p => p.signature === seed.signature) &&
           !selected.some(s => s.signature === seed.signature)) selected.push(seed);
     }
-    // Upgrade one retained sale per scan when an older snapshot lacks the buyer.
-    const legacy = previous?.records?.find(r => !r.buyer && Date.parse(r.at) >= now - DAY);
+    // Re-read one legacy record per scan; never label old unknowns from price alone.
+    const legacy = previous?.records?.find(r => (!r.buyer || (r.tiers?.includes("unknown") && !r.grailChecked)) && Date.parse(r.at) >= now - DAY);
     if (legacy && !selected.some(s => s.signature === legacy.signature)) selected.push(legacy);
     const results = await Promise.allSettled(selected.map((s) => rpc("getTransaction", [s.signature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0, commitment: "confirmed" }])));
     const records = new Map((previous?.records || []).filter((r) => Date.parse(r.at) >= now - DAY && Date.parse(r.at) <= now).map((r) => [r.signature, r]));
@@ -175,7 +178,10 @@ async function collectSampledPackFlow(rpc, previous, now) {
       resolved++;
       scanned.add(selected[i].signature);
       const record = parsePackFlow(result.value);
-      if (record && Date.parse(record.at) >= now - DAY && Date.parse(record.at) <= now) records.set(record.signature, record);
+      if (record && Date.parse(record.at) >= now - DAY && Date.parse(record.at) <= now) {
+        if (record.tiers.includes("unknown")) record.grailChecked = true;
+        records.set(record.signature, record);
+      }
       for (const p of parseShopPayouts(result.value)) {
         if (p.signature === selected[i].signature && Date.parse(p.at) >= now - DAY && Date.parse(p.at) <= now) payouts.set(`${p.signature}:${p.index}`, p);
       }
