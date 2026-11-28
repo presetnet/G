@@ -1,6 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderOverview, renderPackActivity, compactChange, packSalesFeed, generationWatch } from "../public/overview.js";
+import { renderOverview, renderPackActivity, renderPackCounters, compactChange, packSalesFeed, generationWatch } from "../public/overview.js";
+
+test("asynchronous Grail counters never become reported openings", () => {
+  const now = Date.parse("2026-11-28T01:00:00Z");
+  const html = renderPackCounters({ ok: true, dataUpdatedAt: "2026-11-28T00:59:59Z", counts: { grail: 68 } },
+    { ok: true, checkedAt: "2026-11-28T00:47:09Z", counts: { grail: 66 } }, now);
+  assert.match(html, /68<\/td>/);
+  assert.match(html, /66<\/td>/);
+  assert.doesNotMatch(html, /Estimated pack rips|Gap|>2</i);
+});
 
 test("generation watch separates payment candidates and counts only generation times inside the window", () => {
   const now = Date.now();
